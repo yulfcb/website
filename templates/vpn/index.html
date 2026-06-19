@@ -1,0 +1,48 @@
+{% extends "vpn/base.html" %}
+{% block title %}代理 概览{% endblock %}
+{% block page_title %}代理 概览{% endblock %}
+{% block vpn_content %}
+<div class="vpn-stats-grid">
+  <div class="stat-card">
+    <h3>总用户数</h3>
+    <p>{{ stats.total_users }}</p>
+  </div>
+  <div class="stat-card">
+    <h3>已启用</h3>
+    <p>{{ stats.enabled_users }}</p>
+  </div>
+  <div class="stat-card">
+    <h3>累计上行</h3>
+    <p>{{ stats.total_up | filesize }}</p>
+  </div>
+  <div class="stat-card">
+    <h3>累计下行</h3>
+    <p>{{ stats.total_dn | filesize }}</p>
+  </div>
+  <div class="stat-card">
+    <h3>5 分钟内活跃</h3>
+    <p>{{ active_count }}</p>
+  </div>
+</div>
+
+<div class="vpn-card">
+  <h2>Xray 通道状态</h2>
+  <p>
+    {% if xray_ok %}
+      <span class="badge badge-ok">● 已连接</span>
+      <code style="margin-left:0.5rem;">{{ xray_addr }}</code>
+    {% else %}
+      <span class="badge badge-warn">● 不可达</span>
+      <code style="margin-left:0.5rem;">{{ xray_addr }}</code>
+    {% endif %}
+  </p>
+</div>
+
+<div class="vpn-card">
+  <h2>快捷操作</h2>
+  <div class="vpn-form-actions">
+    <a href="{{ url_for('vpn_users') }}" class="btn btn-primary">管理用户</a>
+    <a href="{{ url_for('vpn_traffic') }}" class="btn btn-secondary">流量详情</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "vpn/base.html" %}
+{% block title %}在线终端{% endblock %}
+{% block page_title %}在线终端{% endblock %}
+{% block vpn_content %}
+
+<div class="vpn-card">
+  <h2>在线终端（近 5 分钟有流量）</h2>
+  <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+    xray 不暴露实时连接列表，本页通过流量增量推断：每个用户首次出现流量视为新会话起点，
+    离线超过 5 分钟后再出现则重置起点。IP + 地理位置来自 xray access log + ip-api.com
+    （geo-sync daemon 定期刷新，IP 缓存上限由 VPN_IP_GEO_CACHE_MAX 控制）。
+    "设备"列暂不可用——VLESS 协议不传 User-Agent，待订阅端主动上报或抓包实现。
+  </p>
+  {% if conns %}
+  <div style="overflow-x:auto;">
+    <table class="vpn-table">
+      <thead>
+        <tr>
+          <th>用户</th>
+          <th>UUID</th>
+          <th>接入时间</th>
+          <th>已连接</th>
+          <th>当前会话 ↑</th>
+          <th>当前会话 ↓</th>
+          <th>累计 ↑</th>
+          <th>累计 ↓</th>
+          <th>最近接入 IP</th>
+          <th>地理位置</th>
+          <th>设备</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in conns %}
+          <tr>
+            <td><b>{{ c.username }}</b></td>
+            <td><code>{{ c.uuid[:8] }}…</code></td>
+            <td>{{ c.session_start | ts }}</td>
+            <td>{{ c.session_duration_sec | duration }}</td>
+            <td>{{ c.session_up | filesize }}</td>
+            <td>{{ c.session_dn | filesize }}</td>
+            <td>{{ c.total_up | filesize }}</td>
+            <td>{{ c.total_dn | filesize }}</td>
+            <td>
+              {% if c.last_ip %}
+                <code style="font-size:0.85em;">{{ c.last_ip }}</code>
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.geo %}
+                {{ c.geo.country }}{% if c.geo.city and c.geo.city != '未知' %} · {{ c.geo.city }}{% endif %}
+                {% if c.geo.isp and c.geo.isp not in ('未知', c.geo.country, c.geo.city) %}
+                  <br><span style="color:var(--text-secondary);font-size:0.8em;">{{ c.geo.isp }}</span>
+                {% endif %}
+              {% elif c.last_ip %}
+                <span style="color:var(--text-secondary);">查询中…</span>
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td><span style="color:var(--text-secondary);">—</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="vpn-empty">暂无在线终端（最近 5 分钟无流量）</p>
+  {% endif %}
+</div>
+{% endblock %}

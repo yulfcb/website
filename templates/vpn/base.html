@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}代理 管理 - 个人空间{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+      .vpn-subnav {
+        display: flex;
+        gap: 0.5rem;
+        margin: 1rem 0 1.5rem;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+      }
+      .vpn-subnav a {
+        padding: 0.4rem 0.9rem;
+        border-radius: 6px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.92rem;
+        transition: all 0.2s;
+      }
+      .vpn-subnav a:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+      .vpn-subnav a.active {
+        background: var(--accent);
+        color: #fff;
+      }
+      .vpn-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 2px 8px var(--shadow);
+      }
+      .vpn-card h2 {
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+      }
+      .vpn-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+      }
+      .vpn-table th, .vpn-table td {
+        padding: 0.6rem 0.8rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      .vpn-table th {
+        color: var(--text-secondary);
+        font-weight: 500;
+        background: var(--bg-tertiary);
+      }
+      .vpn-table code {
+        background: var(--bg-tertiary);
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.85em;
+        color: var(--text-secondary);
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.15rem 0.55rem;
+        border-radius: 4px;
+        font-size: 0.78rem;
+        font-weight: 500;
+      }
+      .badge-on { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+      .badge-off { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+      .badge-admin { background: rgba(108, 99, 255, 0.18); color: #8b83ff; }
+      .badge-ok { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+      .badge-warn { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+      .vpn-form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.8rem;
+        margin-bottom: 1rem;
+      }
+      .vpn-form-grid label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.3rem;
+      }
+      .vpn-form-grid input {
+        width: 100%;
+        padding: 0.5rem 0.7rem;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      .vpn-form-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .vpn-actions {
+        display: flex;
+        gap: 0.3rem;
+        flex-wrap: wrap;
+      }
+      .vpn-actions form { display: inline; }
+      .vpn-actions .btn { padding: 0.25rem 0.6rem; font-size: 0.82rem; }
+      .vpn-flash {
+        padding: 0.6rem 0.9rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+      }
+      .vpn-flash.success { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+      .vpn-flash.error { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+      .vpn-empty {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-secondary);
+      }
+      .vpn-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .vpn-stats-grid .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+      }
+      .vpn-stats-grid .stat-card h3 {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+      }
+      .vpn-stats-grid .stat-card p {
+        color: var(--text-primary);
+        font-size: 1.4rem;
+        font-weight: 600;
+      }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar (与 admin.html 保持一致) -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/vpn/" class="{% if request.endpoint and request.endpoint.startswith('vpn_') %}active{% endif %}">代理</a></li>
+                <li><a href="/admin" class="{% if request.endpoint and request.endpoint.startswith('admin_') %}active{% endif %}">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+            <button id="logoutBtn" class="btn btn-sm btn-secondary">退出登录</button>
+        </div>
+    </nav>
+
+    <section class="admin-dashboard">
+      <div class="container">
+        <h1 class="page-title">{% block page_title %}代理 管理{% endblock %}</h1>
+
+        <nav class="vpn-subnav">
+          <a href="{{ url_for('vpn_index') }}" class="{% if request.endpoint == 'vpn_index' %}active{% endif %}">概览</a>
+          <a href="{{ url_for('vpn_users') }}" class="{% if request.endpoint in ('vpn_users', 'vpn_users_add', 'vpn_users_toggle', 'vpn_users_delete', 'vpn_users_reset', 'vpn_users_limit') %}active{% endif %}">用户</a>
+          <a href="{{ url_for('vpn_subscriptions') }}" class="{% if request.endpoint == 'vpn_subscriptions' %}active{% endif %}">订阅链接</a>
+          <a href="{{ url_for('vpn_traffic') }}" class="{% if request.endpoint == 'vpn_traffic' %}active{% endif %}">流量统计</a>
+          <a href="{{ url_for('vpn_connections') }}" class="{% if request.endpoint == 'vpn_connections' %}active{% endif %}">在线终端</a>
+          <a href="{{ url_for('vpn_session_history') }}" class="{% if request.endpoint == 'vpn_session_history' %}active{% endif %}">历史终端</a>
+        </nav>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in messages %}
+            <div class="vpn-flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+
+        {% block vpn_content %}{% endblock %}
+      </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

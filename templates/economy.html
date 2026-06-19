@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>经济频道 - 个人网站</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .economy-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .economy-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .economy-header h1 {
+            font-size: 2.5em;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .economy-header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        .chart-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .chart-title {
+            font-size: 1.8em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chart-icon {
+            font-size: 1.2em;
+        }
+        .current-price {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .price-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .price-value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        .price-date {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 1.2em;
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .note {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy" class="active">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="economy-container">
+        <div class="economy-header">
+            <h1>📊 经济频道</h1>
+            <p>实时汇率与黄金价格监控</p>
+        </div>
+
+        <!-- 美元汇率 -->
+        <div class="chart-section">
+            <div class="chart-title">
+                <span class="chart-icon">💱</span>
+                美元兑人民币汇率
+            </div>
+            <div id="exchange-rate-content">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 黄金价格 -->
+        <div class="chart-section">
+            <div class="chart-title">
+                <span class="chart-icon">🥇</span>
+                国际黄金价格
+            </div>
+            <div id="gold-price-content">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let exchangeChart = null;
+        let goldChart = null;
+
+        // 加载汇率数据
+        async function loadExchangeRate() {
+            const container = document.getElementById('exchange-rate-content');
+            try {
+                const res = await fetch('/api/exchange-rate');
+                const data = await res.json();
+
+                if (data.error) {
+                    container.innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="current-price">
+                        <div>
+                            <div class="price-label">当前汇率</div>
+                            <div class="price-value">${data.current_rate.toFixed(4)}</div>
+                        </div>
+                        <div class="price-date">更新日期：${data.date}</div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="exchangeChart"></canvas>
+                    </div>
+                `;
+
+                // 创建走势图
+                const ctx = document.getElementById('exchangeChart').getContext('2d');
+                if (exchangeChart) exchangeChart.destroy();
+
+                exchangeChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.history.map(h => h.date),
+                        datasets: [{
+                            label: 'USD/CNY',
+                            data: data.history.map(h => h.rate),
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: '日期'
+                                }
+                            },
+                            y: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: '汇率 (CNY)'
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                container.innerHTML = '<div class="error">加载汇率数据失败</div>';
+                console.error(e);
+            }
+        }
+
+        // 加载黄金价格
+        async function loadGoldPrice() {
+            const container = document.getElementById('gold-price-content');
+            try {
+                const res = await fetch('/api/gold-price');
+                const data = await res.json();
+
+                if (data.error) {
+                    container.innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="current-price">
+                        <div>
+                            <div class="price-label">黄金价格（人民币/克）</div>
+                            <div class="price-value">¥${data.current_price}</div>
+                        </div>
+                        <div class="price-date">
+                            <div>国际金价：$${data.price_usd_oz}/盎司</div>
+                            <div class="price-date">更新日期：${data.date}</div>
+                        </div>
+                    </div>
+                    <div class="note">
+                        ${data.note}
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="goldChart"></canvas>
+                    </div>
+                `;
+
+                // 创建走势图（使用真实历史数据）
+                const ctx = document.getElementById('goldChart').getContext('2d');
+                if (goldChart) goldChart.destroy();
+
+                goldChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.history.map(h => h.date),
+                        datasets: [{
+                            label: '黄金价格 (CNY/克)',
+                            data: data.history.map(h => h.price_cny),
+                            borderColor: '#f39c12',
+                            backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: '日期'
+                                },
+                                ticks: {
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    callback: function(value, index) {
+                                        // 只显示月/日，每隔几天显示一个避免拥挤
+                                        var label = this.getLabelForValue(value);
+                                        if (index % 5 === 0 || index === data.history.length - 1) {
+                                            return label.substring(5); // MM-DD
+                                        }
+                                        return '';
+                                    }
+                                }
+                            },
+                            y: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: '价格 (CNY/克)'
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                container.innerHTML = '<div class="error">加载黄金价格失败</div>';
+                console.error(e);
+            }
+        }
+
+        // 生成模拟黄金历史数据（仅用于展示）
+        function generateMockGoldHistory(currentPrice) {
+            const history = [];
+            const today = new Date();
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                // 模拟价格波动（±2%）
+                const fluctuation = (Math.random() - 0.5) * 0.04;
+                const price = currentPrice * (1 + fluctuation);
+                history.push({
+                    date: date.toISOString().split('T')[0],
+                    price: parseFloat(price.toFixed(2))
+                });
+            }
+            // 确保最后一天的价格是当前价格
+            history[history.length - 1].price = currentPrice;
+            return history;
+        }
+
+        // 页面加载时获取数据
+        window.addEventListener('DOMContentLoaded', () => {
+            loadExchangeRate();
+            loadGoldPrice();
+        });
+
+        // 每5分钟自动刷新
+        setInterval(() => {
+            loadExchangeRate();
+            loadGoldPrice();
+        }, 5 * 60 * 1000);
+    </script>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

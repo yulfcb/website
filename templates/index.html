@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人空间</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/" class="active">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content fade-in">
+                <h1 class="hero-title">你好，欢迎来到我的个人空间</h1>
+                <p class="hero-subtitle">探索、创造、分享</p>
+                <p class="hero-description">
+                    这是一个极简主义的个人网站，在这里你可以了解我的项目、玩一些有趣的小游戏，或者只是静静地浏览。
+                </p>
+                <div class="hero-actions">
+                    <a href="/games" class="btn btn-primary">开始游戏</a>
+                    <a href="#about" class="btn btn-secondary">了解更多</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Site Stats Section -->
+    <section class="site-stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-label">总访问量</span>
+                    <span class="stat-value" id="totalVisits">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">今日访问量</span>
+                    <span class="stat-value" id="todayVisits">0</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about">
+        <div class="container">
+            <h2 class="section-title">关于我</h2>
+            <div class="about-content">
+                <p>
+                    我是一名热爱技术的开发者，喜欢探索新事物，构建有趣的项目。
+                    这个网站是我展示作品和分享想法的地方。
+                </p>
+                <p>
+                    在这里，你可以找到我开发的小游戏、技术文章和一些有趣的实验项目。
+                    欢迎随时联系我，一起交流和学习。
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

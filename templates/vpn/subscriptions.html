@@ -1,0 +1,155 @@
+{% extends "vpn/base.html" %}
+{% block title %}代理 订阅链接{% endblock %}
+{% block page_title %}代理 订阅链接管理{% endblock %}
+{% block vpn_content %}
+
+<style>
+  .sub-url {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.3rem;
+  }
+  .sub-url input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.35rem 0.6rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+  }
+  .sub-url .btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  .sub-thumb {
+    display: inline-block;
+    width: 96px;
+    height: 96px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    background: #fff;
+  }
+  .sub-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .sub-username {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .sub-remark {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+  .copy-ok {
+    background: rgba(74, 222, 128, 0.18) !important;
+    color: #4ade80 !important;
+    border-color: #4ade80 !important;
+  }
+</style>
+
+<div class="vpn-card">
+  <h2>说明</h2>
+  <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6;">
+    每个启用用户的完整订阅链接。复制后粘贴到 V2RayN / Clash / Shadowrocket 的「订阅地址」即可。
+    二维码可用客户端扫码导入。服务器地址：<code>{{ host }}</code>
+  </p>
+</div>
+
+{% if items %}
+  {% for u in items %}
+  <div class="vpn-card">
+    <h2>
+      <span class="sub-username">{{ u.username }}</span>
+      {% if u.remark %}<span class="sub-remark">— {{ u.remark }}</span>{% endif %}
+    </h2>
+    <div style="display:grid; grid-template-columns: 1fr auto; gap: 1.2rem; align-items: start;">
+      <div>
+        <div style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.2rem;">base64 订阅 (V2RayN / v2ray)</div>
+        <div class="sub-url">
+          <input type="text" readonly value="{{ u.base64_url }}" data-copy="{{ u.base64_url }}">
+          <button type="button" class="btn btn-secondary copy-btn">复制</button>
+          <a href="{{ u.base64_url }}" class="btn btn-secondary" target="_blank">打开</a>
+        </div>
+
+        <div style="font-size:0.78rem; color:var(--text-secondary); margin: 0.6rem 0 0.2rem;">Clash 订阅 (YAML)</div>
+        <div class="sub-url">
+          <input type="text" readonly value="{{ u.clash_url }}" data-copy="{{ u.clash_url }}">
+          <button type="button" class="btn btn-secondary copy-btn">复制</button>
+          <a href="{{ u.clash_url }}" class="btn btn-secondary" target="_blank">打开</a>
+        </div>
+
+        <div style="font-size:0.78rem; color:var(--text-secondary); margin: 0.6rem 0 0.2rem;">UUID</div>
+        <div class="sub-url">
+          <input type="text" readonly value="{{ u.uuid }}" data-copy="{{ u.uuid }}">
+          <button type="button" class="btn btn-secondary copy-btn">复制 UUID</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;">
+        <a href="{{ u.qr_url }}" target="_blank" title="点击查看大图">
+          <span class="sub-thumb"><img src="{{ u.qr_url }}" alt="QR"></span>
+        </a>
+        <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.3rem;">扫码导入</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="vpn-card">
+    <p class="vpn-empty">暂无启用的用户</p>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    function flash(btn, ok) {
+      var orig = btn.textContent;
+      btn.textContent = ok ? '已复制 ✓' : '复制失败';
+      btn.classList.add('copy-ok');
+      setTimeout(function () {
+        btn.textContent = orig;
+        btn.classList.remove('copy-ok');
+      }, 1200);
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('.copy-btn');
+      if (!btn) return;
+      var input = btn.parentElement.querySelector('input[data-copy]');
+      if (!input) return;
+      var text = input.getAttribute('data-copy') || input.value;
+      var done = function (ok) { flash(btn, ok); };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function () { done(true); },
+                                            function () { done(fallbackCopy(text)); });
+      } else {
+        done(fallbackCopy(text));
+      }
+    });
+  })();
+</script>
+{% endblock %}

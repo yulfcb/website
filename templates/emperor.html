@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>皇帝养成 - 个人网站</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #8B0000 0%, #DC143C 100%);
+            min-height: 100vh;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        .game-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .game-header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+        .game-header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .phase {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .phase-title {
+            font-size: 2em;
+            color: #8B0000;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        /* 抽卡阶段 */
+        .draw-area {
+            text-align: center;
+            padding: 40px;
+        }
+        .draw-btn {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: white;
+            border: none;
+            padding: 20px 50px;
+            font-size: 1.5em;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+        .draw-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        }
+        .card-reveal {
+            margin-top: 30px;
+            display: none;
+        }
+        .card-reveal.show {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        .dynasty-card {
+            background: linear-gradient(135deg, #8B4513 0%, #A0522D 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            border: 3px solid #FFD700;
+        }
+        .dynasty-name {
+            font-size: 3em;
+            margin-bottom: 20px;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .dynasty-info {
+            font-size: 1.2em;
+            line-height: 1.8;
+            margin-bottom: 30px;
+        }
+        .start-btn {
+            background: #228B22;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.3em;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        /* 游戏主界面 */
+        .game-main {
+            display: none;
+        }
+        .game-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        @media (max-width: 900px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+        .main-content {
+            min-width: 0;
+        }
+        .side-panel {
+            background: #FFF8DC;
+            border-radius: 10px;
+            border: 2px solid #8B4513;
+            padding: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .side-panel h3 {
+            color: #8B0000;
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+        }
+        .status-bar {
+            background: #FFF8DC;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #8B4513;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+        .status-item {
+            text-align: center;
+        }
+        .status-label {
+            color: #666;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        .status-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #8B0000;
+        }
+        .power-bar {
+            background: #eee;
+            border-radius: 5px;
+            height: 8px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+        .power-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s, background 0.5s;
+        }
+        .power-fill.green { background: linear-gradient(90deg, #4CAF50, #66BB6A); }
+        .power-fill.yellow { background: linear-gradient(90deg, #FFC107, #FFD54F); }
+        .power-fill.red { background: linear-gradient(90deg, #f44336, #ef5350); }
+
+        .action-panel {
+            background: #FFF8DC;
+            padding: 25px;
+            border-radius: 15px;
+            border: 2px solid #8B4513;
+            min-height: 400px;
+        }
+        .action-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #8B4513;
+            padding-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .tab-btn {
+            background: #8B4513;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            background: #DC143C;
+            transform: translateY(-3px);
+        }
+        .tab-content { display: none; animation: fadeIn 0.3s; }
+        .tab-content.active { display: block; }
+
+        .event-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 5px solid #8B0000;
+            position: relative;
+        }
+        .event-tag {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            color: white;
+            font-weight: bold;
+        }
+        .event-tag.main { background: #DC143C; }
+        .event-tag.crisis { background: #ff4444; }
+        .event-tag.opportunity { background: #4CAF50; }
+        .event-tag.annual { background: #FF9800; }
+        .event-tag.followup { background: #2196F3; }
+
+        .event-title {
+            font-size: 1.4em;
+            color: #8B0000;
+            margin-bottom: 15px;
+            padding-right: 80px;
+        }
+        .event-desc {
+            line-height: 1.8;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .choice-btn {
+            background: #8B4513;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin: 5px 5px 5px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95em;
+        }
+        .choice-btn:hover {
+            background: #DC143C;
+            transform: scale(1.03);
+        }
+        .choice-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-box {
+            background: linear-gradient(135deg, #FFF9C4, #FFF8E1);
+            border: 2px solid #FFD700;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 15px;
+            animation: slideUp 0.5s;
+        }
+        .result-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #8B0000;
+            margin-bottom: 10px;
+        }
+        .result-desc {
+            line-height: 1.6;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .result-effects {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .effect-item {
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .effect-pos { background: #C8E6C9; color: #2E7D32; }
+        .effect-neg { background: #FFCDD2; color: #C62828; }
+        .effect-neu { background: #E3F2FD; color: #1565C0; }
+
+        .concubine-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        .concubine-card {
+            background: linear-gradient(135deg, #FFB6C1 0%, #FFC0CB 100%);
+            padding: 18px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .concubine-card:hover {
+            transform: translateY(-5px);
+            border-color: #DC143C;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .concubine-card.selected {
+            border-color: #FFD700;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.5);
+        }
+        .concubine-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #8B0000;
+            margin-bottom: 5px;
+        }
+        .concubine-rank {
+            color: #666;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+        .concubine-favor {
+            font-size: 0.85em;
+            color: #8B4513;
+        }
+        .favor-bar {
+            background: #ddd;
+            border-radius: 4px;
+            height: 6px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        .favor-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #FF69B4, #FF1493);
+            border-radius: 4px;
+            transition: width 0.5s;
+        }
+
+        .message-box {
+            background: #FFF8DC;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #FFD700;
+            display: none;
+        }
+        .message-box.show {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        /* 年度总结 */
+        .annual-review {
+            background: linear-gradient(135deg, #FFF9C4, #FFF8E1);
+            border: 3px solid #FFD700;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 15px;
+            animation: fadeIn 0.5s;
+        }
+        .annual-review h3 {
+            color: #8B0000;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .review-item {
+            padding: 8px 0;
+            border-bottom: 1px dashed #ccc;
+        }
+        .review-item:last-child { border-bottom: none; }
+
+        /* 成就标签 */
+        .achievement-tag {
+            display: inline-block;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #8B0000;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin: 3px;
+        }
+        .achievement-tag.locked {
+            background: #ccc;
+            color: #999;
+        }
+
+        /* 事件历史 */
+        .history-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+        .history-year {
+            color: #8B0000;
+            font-weight: bold;
+        }
+        .history-choice {
+            color: #666;
+        }
+
+        /* 大臣卡片 */
+        .minister-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border: 2px solid #8B4513;
+            transition: all 0.3s;
+        }
+        .minister-card:hover {
+            border-color: #DC143C;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+        }
+        .minister-name {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #8B0000;
+        }
+        .minister-role {
+            color: #666;
+            font-size: 0.85em;
+        }
+        .minister-ability {
+            color: #8B4513;
+            font-size: 0.85em;
+            margin: 5px 0;
+        }
+        .minister-action {
+            background: #8B4513;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+        .minister-action:hover {
+            background: #DC143C;
+        }
+
+        /* Game over */
+        .game-over-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 999;
+            justify-content: center;
+            align-items: center;
+        }
+        .game-over-overlay.show {
+            display: flex;
+        }
+        .game-over-box {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            text-align: center;
+            animation: fadeIn 0.5s;
+        }
+        .game-over-title {
+            font-size: 2em;
+            color: #8B0000;
+            margin-bottom: 20px;
+        }
+        .game-over-legacy {
+            font-size: 1.2em;
+            margin: 15px 0;
+            line-height: 1.8;
+        }
+        .game-over-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .restart-btn {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        /* 动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .pulse { animation: pulse 0.5s; }
+
+        /* 标题称号 */
+        .emperor-title {
+            text-align: center;
+            color: #8B0000;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding: 8px 15px;
+            background: linear-gradient(135deg, #FFF9C4, #FFF8E1);
+            border-radius: 8px;
+            border: 1px solid #FFD700;
+        }
+
+        .action-btn {
+            background: #8B4513;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            margin: 5px 5px 5px 0;
+            transition: all 0.3s;
+        }
+        .action-btn:hover {
+            background: #DC143C;
+        }
+        .action-btn.primary {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            color: #8B0000;
+            font-weight: bold;
+        }
+
+        .next-year-btn {
+            background: linear-gradient(135deg, #4CAF50, #66BB6A);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-top: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        .next-year-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise" class="active">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="game-container">
+        <div class="game-header">
+            <h1>👑 皇帝养成</h1>
+            <p>穿越千年，执掌江山，成就一代帝王传奇</p>
+        </div>
+
+        <!-- 抽卡阶段 -->
+        <div class="phase" id="draw-phase">
+            <h2 class="phase-title">命运之轮 - 抽取你的朝代</h2>
+            <div class="draw-area">
+                <button class="draw-btn" onclick="drawDynasty()">🎴 开始抽卡</button>
+                <div class="card-reveal" id="card-reveal">
+                    <div class="dynasty-card">
+                        <div class="dynasty-name" id="dynasty-name"></div>
+                        <div class="dynasty-info" id="dynasty-info"></div>
+                        <button class="start-btn" onclick="startGame()">开始帝王生涯</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏主界面 -->
+        <div class="phase game-main" id="game-main">
+            <div class="status-bar">
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="status-label">🏛️ 朝代</div>
+                        <div class="status-value" id="current-dynasty"></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">💰 国库</div>
+                        <div class="status-value" id="treasury">1000万</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">❤️ 民心</div>
+                        <div class="status-value" id="popularity">70</div>
+                        <div class="power-bar"><div class="power-fill" id="popularity-bar"></div></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">⚔️ 军力</div>
+                        <div class="status-value" id="military">80</div>
+                        <div class="power-bar"><div class="power-fill" id="military-bar"></div></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">📚 文化</div>
+                        <div class="status-value" id="culture">50</div>
+                        <div class="power-bar"><div class="power-fill" id="culture-bar"></div></div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">📅 年份</div>
+                        <div class="status-value" id="year">元年</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="emperor-title" id="emperor-title">🌟 新皇登基</div>
+
+            <div class="game-layout">
+                <div class="main-content">
+                    <div class="action-panel">
+                        <div class="action-tabs">
+                            <button class="tab-btn active" onclick="switchTab(event, 'memorials')">📜 批阅奏折</button>
+                            <button class="tab-btn" onclick="switchTab(event, 'concubines')">🌸 后宫</button>
+                            <button class="tab-btn" onclick="switchTab(event, 'ministers')">👔 朝堂</button>
+                            <button class="tab-btn" onclick="switchTab(event, 'actions')">⚡ 国策</button>
+                        </div>
+
+                        <!-- 批阅奏折 -->
+                        <div class="tab-content active" id="memorials-tab">
+                            <div id="event-area"></div>
+                            <div id="result-area"></div>
+                            <div style="margin-top:15px; text-align:center;">
+                                <button class="next-year-btn" onclick="nextYear()">📅 进入下一年</button>
+                            </div>
+                        </div>
+
+                        <!-- 后宫 -->
+                        <div class="tab-content" id="concubines-tab">
+                            <h3 style="color: #8B0000; margin-bottom: 15px;">后宫佳丽</h3>
+                            <div class="concubine-grid" id="concubine-grid"></div>
+                            <div id="concubine-result"></div>
+                        </div>
+
+                        <!-- 朝堂 -->
+                        <div class="tab-content" id="ministers-tab">
+                            <h3 style="color: #8B0000; margin-bottom: 15px;">朝堂大臣</h3>
+                            <div id="minister-list"></div>
+                        </div>
+
+                        <!-- 国策 -->
+                        <div class="tab-content" id="actions-tab">
+                            <h3 style="color: #8B0000; margin-bottom: 15px;">国家决策</h3>
+                            <div id="policy-area"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="side-panel">
+                    <h3>🏆 成就</h3>
+                    <div id="achievements-list"></div>
+                    <h3 style="margin-top:20px;">📜 历史</h3>
+                    <div id="history-log"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over -->
+    <div class="game-over-overlay" id="game-over-overlay">
+        <div class="game-over-box">
+            <div class="game-over-title" id="go-title"></div>
+            <div class="game-over-legacy" id="go-legacy"></div>
+            <div class="game-over-stats" id="go-stats"></div>
+            <button class="restart-btn" onclick="location.reload()">🔄 重新开始</button>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <script>
+        // ============================================================
+        // 朝代数据
+        // ============================================================
+        const dynasties = [
+            {
+                name: '秦朝', emperor: '秦始皇', year: 221,
+                info: '刚刚统一六国，百废待兴。推行郡县制，统一度量衡、文字。但六国旧贵族蠢蠢欲动，匈奴在北方虎视眈眈。',
+                treasury: 800, popularity: 60, military: 90, culture: 30,
+                intro: '你站在那威严肃穆的咸阳宫前，百官朝拜。你，就是千古一帝——秦始皇！'
+            },
+            {
+                name: '汉朝', emperor: '汉武帝', year: 141,
+                info: '文景之治后国力鼎盛。北有匈奴威胁，南有百越未服。儒家思想逐渐兴起，需要决定国策方向。',
+                treasury: 1200, popularity: 75, military: 85, culture: 50,
+                intro: '你登上未央宫的高台，俯瞰大汉江山。文景之治打下了坚实基础，但北方的匈奴铁骑始终是心头大患。'
+            },
+            {
+                name: '唐朝', emperor: '唐太宗', year: 626,
+                info: '贞观之治开启，万国来朝。突厥已平，但吐蕃、高句丽仍有威胁。经济文化繁荣，需要处理民族关系。',
+                treasury: 1500, popularity: 85, military: 90, culture: 80,
+                intro: '你坐在太极宫的龙椅上，文武百官分列两旁。天下初定，万象更新，一个盛世正在你手中诞生。'
+            },
+            {
+                name: '宋朝', emperor: '宋太祖', year: 960,
+                info: '刚刚结束五代十国，推行文治。辽国、西夏在北方虎视眈眈。经济繁荣但军事薄弱，需要平衡文武。',
+                treasury: 1300, popularity: 75, military: 65, culture: 70,
+                intro: '陈桥兵变之后，你黄袍加身，建立了大宋。天下尚未统一，北方的辽国时刻威胁着中原。'
+            },
+            {
+                name: '明朝', emperor: '明成祖', year: 1402,
+                info: '靖难之役后登基，迁都北京。郑和下西洋展示国威，但倭寇侵扰沿海，蒙古在北方威胁。',
+                treasury: 1200, popularity: 70, military: 85, culture: 60,
+                intro: '经过四年的靖难之役，你终于登上了梦寐以求的皇位。但天下议论纷纷，你需要用功绩来证明自己是天命所归。'
+            },
+            {
+                name: '清朝', emperor: '康熙帝', year: 1661,
+                info: '刚刚平定三藩，收复台湾。但准噶尔叛乱，沙俄东扩。满汉矛盾依然存在，需要稳固统治。',
+                treasury: 1100, popularity: 68, military: 82, culture: 45,
+                intro: '你八岁登基，如今终于亲政。鳌拜已除，三藩已平，但更大的挑战才刚刚开始。'
+            }
+        ];
+
+        // ============================================================
+        // 事件系统 - 支持事件链
+        // ============================================================
+
+        // 所有事件池，每个事件可以有 followUp（后续事件链）
+        function getEventPool() {
+            // 根据国情动态生成可用事件
+            const pool = [];
+
+            // === 基础事件（始终可用） ===
+            pool.push({
+                id: 'famine',
+                tag: 'crisis',
+                title: '🌾 江南大旱',
+                desc: '江南一带数月未雨，稻田龟裂，颗粒无收。地方官连发三道急报，请求朝廷开仓放粮。灾民已开始向北方迁徙，若不及时赈济，恐生民变。',
+                choices: [
+                    { text: '🚒 开仓放粮，拨款救灾', effect: { treasury: -300, popularity: 20 }, result: '你下令打开各地粮仓，派遣钦差大臣前往灾区赈灾。灾民感激涕零，称颂皇上圣明。各地粮仓虽空，但民心大振。' },
+                    { text: '📋 减免赋税，鼓励自救', effect: { treasury: -100, popularity: 10 }, result: '你免除了灾区三年赋税，鼓励地方自筹资金救灾。虽然灾情得到缓解，但地方官怨声载道，说朝廷不作为。' },
+                    { text: '🤷 令地方自行解决', effect: { popularity: -15 }, result: '你将救灾重任推给了地方官。然而地方财力有限，灾民饿殍遍野，消息传到京城，百姓怨声载道。' }
+                ]
+            });
+
+            pool.push({
+                id: 'border_threat',
+                tag: 'crisis',
+                title: '⚔️ 边关急报',
+                desc: '北方游牧民族集结十万大军，在边境频频骚扰。边军请求增援，但国库开支巨大。大将军请命主动出击，一劳永逸。',
+                choices: [
+                    { text: '🗡️ 主动出击，歼灭敌军', effect: { treasury: -400, military: 20, popularity: -5 }, result: '你命大将军率精锐部队出塞，经过数月激战，大败敌军。此役威震塞外，边境安宁十余年。',
+                      followUp: { id: 'war_aftermath', delay: 1 }
+                    },
+                    { text: '🛡️ 加固防御，坚守不出', effect: { treasury: -200, military: 5, popularity: 5 }, result: '你下令加固城防，修筑堡垒。敌军见无机可乘，渐渐退去。虽然稳妥，但军中人言你过于保守。' },
+                    { text: '🤝 遣使议和，岁币安抚', effect: { treasury: -100, popularity: -10, military: -5 }, result: '你派遣使节前往敌营，以岁币换取和平。虽然避免了战争，但朝中主战派极为不满，认为有辱国体。' }
+                ]
+            });
+
+            pool.push({
+                id: 'corruption',
+                tag: 'crisis',
+                title: '🔍 贪腐案',
+                desc: '御史弹劾户部尚书贪污受贿，私吞国库银两达百万两。证据确凿，但此人势力庞大，门生故吏遍布朝野。若严惩，可能引发朝局动荡；若从轻，恐失朝廷威严。',
+                choices: [
+                    { text: '⚖️ 严惩不贷，抄没家产', effect: { treasury: 200, popularity: 20, military: -5 }, result: '你下令将户部尚书下狱，抄没其全部家产。朝野震动，百官人人自危，贪污之风大为收敛。但其门生暗中串联，对你心生怨恨。',
+                      followUp: { id: 'corruption_blowback', delay: 1 }
+                    },
+                    { text: '🤫 暗中处置，保全颜面', effect: { treasury: 100, popularity: 5 }, result: '你密令其自行了断，表面宣称暴病而亡。贪腐问题得到解决，但知情者心照不宣，朝中暗流涌动。' },
+                    { text: '😐 法外开恩，贬官了事', effect: { popularity: -15, treasury: 50 }, result: '你仅将户部尚书贬为庶民，家产未动。朝野哗然，御史联名上书抗议，说皇上徇私枉法。' }
+                ]
+            });
+
+            pool.push({
+                id: 'education',
+                tag: 'opportunity',
+                title: '📚 科举改革',
+                desc: '礼部尚书奏请改革科举制度，增加实用学科（水利、天文、兵法等），减少八股文章。保守派强烈反对，认为这有悖祖制。改革与否，关系到国家未来的人才培养方向。',
+                choices: [
+                    { text: '📖 推行改革，广纳贤才', effect: { culture: 20, popularity: 10, treasury: -100 }, result: '你力排众议，推行科举改革。新增的实用科目吸引了大批有一技之长的人才，朝廷耳目一新。但保守派暗地里叫你"离经叛道"。',
+                      followUp: { id: 'reform_result', delay: 1 }
+                    },
+                    { text: '📋 折中方案，部分改革', effect: { culture: 10, popularity: 5, treasury: -50 }, result: '你在传统科目外增设了杂科，算是折中。虽不彻底，但也吸引了部分实用人才。两派都不太满意，但也勉强接受。' },
+                    { text: '🚫 维持祖制', effect: { culture: -5, popularity: -5 }, result: '你宣布祖宗之法不可变。保守派山呼万岁，但有识之士暗自摇头，说朝廷正在失去未来。' }
+                ]
+            });
+
+            pool.push({
+                id: 'trade',
+                tag: 'opportunity',
+                title: '⛵ 海贸良机',
+                desc: '户部建议开放海禁，发展海上贸易。海外诸国商船络绎不绝，带来了香料、珠宝和奇珍异宝。但朝中大臣担心倭寇侵扰，且传统重农抑商思想根深蒂固。',
+                choices: [
+                    { text: '🌊 全面开放海禁', effect: { treasury: 600, culture: 10, popularity: -5 }, result: '你下令开放沿海港口，设市舶司管理贸易。海外商船蜂拥而至，国库充盈。但沿海渔民与外商摩擦不断，倭寇也开始频繁出没。',
+                      followUp: { id: 'trade_consequence', delay: 1 }
+                    },
+                    { text: '🚢 限定港口贸易', effect: { treasury: 300, culture: 5 }, result: '你指定三处港口开放贸易，既获得了丰厚税收，又控制了风险。朝中大臣对此表示认可。' },
+                    { text: '🔒 维持海禁', effect: { treasury: -100, popularity: 10 }, result: '你坚持重农抑商，关闭海贸。农民们松了口气，但沿海百姓生计困难，私盐走私泛滥。' }
+                ]
+            });
+
+            pool.push({
+                id: 'water_project',
+                tag: 'opportunity',
+                title: '🌊 水利工程',
+                desc: '工部奏请修建大型水利工程——开凿大运河支流，连接南北水系。预计耗资巨大、耗时数年，但能防洪抗旱、便利漕运，利在千秋。',
+                choices: [
+                    { text: '🔨 立即动工，造福千秋', effect: { treasury: -500, popularity: 15, culture: 5 }, result: '你下令征调民夫，开工修建运河。工程浩大，历时两年方成。运河贯通之日，南北漕运畅通，百姓无不称颂。',
+                      followUp: { id: 'canal_results', delay: 1 }
+                    },
+                    { text: '📐 分期修建，量力而行', effect: { treasury: -250, popularity: 10 }, result: '你将工程分为三期，每年农闲时动工。虽然耗时较长，但百姓负担不重，工程也稳步推进。' },
+                    { text: '⏳ 暂缓修建', effect: { popularity: -5 }, result: '你以国力不足为由暂缓工程。次年汛期，黄河决口，淹没了数个州县。朝野上下都埋怨你当初没有听取工部的建议。' }
+                ]
+            });
+
+            pool.push({
+                id: 'festival',
+                tag: 'annual',
+                title: '🎊 大典筹备',
+                desc: '恰逢登基周年，礼部建议举办大典庆祝。大典可以展示皇威，凝聚民心，但也需要大量花费。是隆重举办还是从简，需要你来定夺。',
+                choices: [
+                    { text: '🎉 隆重举办，万国来朝', effect: { treasury: -300, popularity: 20, culture: 10 }, result: '大典盛大举行，各地使节纷纷来贺。歌舞升平，万民欢庆，你的威望达到了新的高度。但国库也空了一大截。' },
+                    { text: '🎋 适度庆祝，与民同乐', effect: { treasury: -100, popularity: 10 }, result: '你下令举办了一场不铺张的大典，既展示了皇威，又体恤了民情。百官百姓都称赞你勤俭治国。' },
+                    { text: '📋 一切从简，免了罢', effect: { popularity: -5, treasury: 50 }, result: '你宣布大典从简。节俭是节俭了，但外邦使节觉得受到了冷落，回去后说你们朝廷日益衰败。' }
+                ]
+            });
+
+            // 根据军力动态事件
+            if (gameState && gameState.military < 40) {
+                pool.push({
+                    id: 'military_crisis',
+                    tag: 'crisis',
+                    title: '🏚️ 军备废弛',
+                    desc: '兵部急报：军队训练荒废，兵器生锈，战马不足。边防虚弱，若有战事恐怕不堪一击。将军们请求大量拨款整军，但这将极大消耗国库。',
+                    choices: [
+                        { text: '💪 大举整军，重建武备', effect: { treasury: -300, military: 25 }, result: '你拨款重修军械，招募新兵，整训部队。数月后军队面貌一新，将军们信心满满。' },
+                        { text: '🌾 屯田养兵，以战养战', effect: { military: 10, popularity: -5 }, result: '你令军队边耕种边训练。军粮自给自足，但百姓觉得军队扰民，怨声渐起。' },
+                        { text: '📋 维持现状', effect: { military: -10 }, result: '你没有大动作。军队状况持续恶化，边关守将连连上书，说再不管就要出大事了。' }
+                    ]
+                });
+            }
+
+            if (gameState && gameState.military > 80) {
+                pool.push({
+                    id: 'general_power',
+                    tag: 'crisis',
+                    title: '👤 将权过重',
+                    desc: '大将军在外征战连年得胜，军功赫赫，部下只知将军不知皇帝。朝中有人进言，说此人功高震主，恐有不臣之心。但此刻正值用人之际，动他恐寒了将士的心。',
+                    choices: [
+                        { text: '🏅 明升暗降，解除兵权', effect: { military: -15, popularity: 10 }, result: '你封大将军为王，调入京城。虽然兵权在握了，但前线将领人人自危，军心浮动。' },
+                        { text: '🤝 信任不疑，继续重用', effect: { military: 10, popularity: -5 }, result: '你赐大将军尚方宝剑，全权指挥。大将军感激涕零，更加卖力。但朝中开始有人议论皇上过于纵容武将。' },
+                        { text: '👁️ 暗中监视，以防万一', effect: { treasury: -50 }, result: '你派遣心腹太监担任监军，暗中观察大将军。大将军察觉后被激怒，君臣之间产生了微妙隔阂。' }
+                    ]
+                });
+            }
+
+            // 根据文化动态事件
+            if (gameState && gameState.culture > 70) {
+                pool.push({
+                    id: 'cultural_peak',
+                    tag: 'opportunity',
+                    title: '🎨 文化盛世',
+                    desc: '在你的治理下，文化空前繁荣。诗人墨客云集京城，书画名家辈出。有人建议编纂一部大型百科全书，汇集天下典籍。此举将流芳百世，但耗资巨大。',
+                    choices: [
+                        { text: '📚 编修大典，传世千秋', effect: { treasury: -200, culture: 25, popularity: 5 }, result: '你下令编纂大典，征召天下学者。历经数年，一部旷世巨著横空出世，你的文治被后人传颂。' },
+                        { text: '✍️ 鼓励创作，顺其自然', effect: { culture: 10 }, result: '你大力奖赏文艺创作，文人学士趋之若鹜。虽然没编大典，但文化繁荣不减。' }
+                    ]
+                });
+            }
+
+            // 国库充裕时的事件
+            if (gameState && gameState.treasury > 1000) {
+                pool.push({
+                    id: 'grand_vision',
+                    tag: 'opportunity',
+                    title: '🏗️ 大兴土木',
+                    desc: '国库充盈，有人建议大修宫殿以彰显国威。同时也有声音说应该修建书院、济贫院等利民设施。你的选择将影响国家的发展方向。',
+                    choices: [
+                        { text: '🏰 修建皇宫，彰显国威', effect: { treasury: -400, popularity: 10, culture: 10 }, result: '新皇宫富丽堂皇，规模宏大。使节来朝时无不惊叹。但民间也有人说你穷奢极欲。' },
+                        { text: '🏫 兴办学堂，惠及百姓', effect: { treasury: -200, culture: 20, popularity: 15 }, result: '你在各地兴建学堂，百姓子弟皆可入学。数年后人才辈出，天下称颂你仁政爱民。' },
+                        { text: '🏥 建济贫院，救济百姓', effect: { treasury: -150, popularity: 20 }, result: '你在各州县修建济贫院，收容孤寡老弱。百姓感恩戴德，称你是千古仁君。' }
+                    ]
+                });
+            }
+
+            // 民心过低时的事件
+            if (gameState && gameState.popularity < 30) {
+                pool.push({
+                    id: 'rebellion',
+                    tag: 'crisis',
+                    title: '🔥 民变四起',
+                    desc: '民怨已久的百姓终于爆发了！各地农民起义此起彼伏。虽然规模不大，但如果处理不当，恐酿成大祸。',
+                    choices: [
+                        { text: '🤝 招安安抚，减免赋税', effect: { treasury: -150, popularity: 20, military: -5 }, result: '你下罪己诏，减免赋税，派遣大臣安抚百姓。起义军见朝廷让步，纷纷解散。' },
+                        { text: '⚔️ 武力镇压，杀鸡儆猴', effect: { military: -10, popularity: -15, treasury: -200 }, result: '你派兵镇压，虽然很快平息了叛乱，但屠杀的消息传开后，更多的人加入起义。' }
+                    ]
+                });
+            }
+
+            // 随机特殊事件（每年有一定概率出现）
+            if (Math.random() < 0.3) {
+                const specialEvents = [
+                    {
+                        id: 'eclipse',
+                        tag: 'crisis',
+                        title: '🌑 日食异象',
+                        desc: '天降日食！在古代，日食被视为上天对皇帝的警告。朝野上下人心惶惶，纷纷猜测是不是你做错了什么。',
+                        choices: [
+                            { text: '🙏 下罪己诏，反省过失', effect: { popularity: 15, culture: 5 }, result: '你下诏反省自身，广开言路。百官纷纷进谏，朝廷气象一新。百姓觉得你是一个明君。' },
+                            { text: '🎭 祭祀祈福，化解灾厄', effect: { treasury: -100, popularity: 5 }, result: '你举行盛大祭祀，祈求上天宽恕。仪式庄重肃穆，人心渐渐安定。但有人私下说你不敢直面问题。' },
+                            { text: '😤 置之不理', effect: { popularity: -10 }, result: '你不以为意。但士大夫们议论纷纷，说你冥顽不化，天怒人怨指日可待。' }
+                        ]
+                    },
+                    {
+                        id: 'phoenix',
+                        tag: 'opportunity',
+                        title: '🦅 祥瑞降临',
+                        desc: '南方传来急报：有凤凰现世！百官纷纷上表称贺，说这是皇上圣明的天兆。虽然你知道多半是谣传，但可以利用这个机会提振民心。',
+                        choices: [
+                            { text: '🎊 借机大赦天下', effect: { popularity: 15, treasury: -50 }, result: '你借祥瑞之名大赦天下，百姓感恩戴德。虽然知道是假的，但效果出奇的好。' },
+                            { text: '📋 派人查证', effect: { culture: 5 }, result: '你派钦差前往查证。结果发现是有人用孔雀羽毛伪造的"凤凰"。你下令保密，以免扫了大家兴致。' }
+                        ]
+                    },
+                    {
+                        id: 'foreign_envoy',
+                        tag: 'opportunity',
+                        title: '🌏 外国使节',
+                        desc: '远方来了一位陌生国家的使节，带来了闻所未闻的奇珍异宝和书籍。他们希望与大康建立友好关系，互通有无。',
+                        choices: [
+                            { text: '🌍 热情接待，互通贸易', effect: { treasury: 150, culture: 15, popularity: 5 }, result: '你热情款待了使节，签订了贸易协议。外国商品和知识流入国内，让朝廷大开眼界。' },
+                            { text: '🤝 礼貌相待，保持距离', effect: { culture: 5 }, result: '你礼貌地接待了使节，但没有深入交往。外国使节带着一些礼物失望而归。' },
+                            { text: '🚫 拒之门外', effect: { popularity: -5, culture: -5 }, result: '你以天朝上国自居，拒绝接见。消息传回，外国人在海外说你傲慢无礼。' }
+                        ]
+                    }
+                ];
+                pool.push(specialEvents[Math.floor(Math.random() * specialEvents.length)]);
+            }
+
+            return pool;
+        }
+
+        // 事件链后续事件
+        const followUpEvents = {
+            war_aftermath: {
+                tag: 'followup',
+                title: '⚔️ 战后处置',
+                desc: '大军得胜归来，将士们等待封赏。但战后百废待兴：是论功行赏、安抚百姓，还是继续用兵扩大战果？',
+                choices: [
+                    { text: '🏅 重赏将士，休养生息', effect: { treasury: -200, military: 10, popularity: 10 }, result: '你重赏了三军，将士们欢天喜地。同时下令边境屯田，让士兵们耕种休整。军民皆大欢喜。' },
+                    { text: '🗺️ 乘胜追击，扩大战果', effect: { treasury: -300, military: 15, popularity: -10 }, result: '你不给军队休息，继续深入敌境。虽然拓土千里，但军民疲惫不堪，怨声渐起。' },
+                    { text: '💰 薄赏将士，节省开支', effect: { military: -15, popularity: 5 }, result: '你只给了象征性的封赏。将士们心寒了，军心浮动，不少人选择退役回家。' }
+                ]
+            },
+            corruption_blowback: {
+                tag: 'followup',
+                title: '👥 朝局动荡',
+                desc: '惩治贪官后，其门生故吏暗中串联，在朝中对你消极怠工。多项政策推行受阻，你需要想办法打破僵局。',
+                choices: [
+                    { text: '🔄 提拔新人，清洗朝堂', effect: { treasury: -100, popularity: 10, culture: 5 }, result: '你大胆提拔了一批年轻官员，朝堂焕然一新。新人充满活力，政策推行顺利。' },
+                    { text: '🤝 怀柔政策，争取人心', effect: { popularity: 5 }, result: '你主动召见那些有异议的大臣，耐心说服。虽然花了不少功夫，但渐渐地大家还是团结起来了。' },
+                    { text: '😐 顺其自然', effect: { popularity: -10 }, result: '你没有采取措施。朝堂上的对抗愈演愈烈，政令不出皇宫，你的统治力大幅下降。' }
+                ]
+            },
+            reform_result: {
+                tag: 'followup',
+                title: '📚 改革成效',
+                desc: '科举改革一年后，第一批实用学科的考生参加了考试。他们中有人精通水利，有人擅长兵法，有人通晓天文。朝廷需要决定如何安置这些新人。',
+                choices: [
+                    { text: '💼 委以重任，发挥专长', effect: { popularity: 10, culture: 10, military: 5 }, result: '你将新人安排在合适的岗位上。他们发挥所长，解决了多个难题。改革的价值开始显现。' },
+                    { text: '👀 先观察一段时间', effect: { culture: 5 }, result: '你把新人放在次要岗位上观察。虽然稳妥，但不少人觉得怀才不遇，渐渐消磨了热情。' }
+                ]
+            },
+            trade_consequence: {
+                tag: 'followup',
+                title: '🏴‍☠️ 倭寇来袭',
+                desc: '开放海禁后，倭寇趁机骚扰沿海。他们劫掠商船，袭击渔村，沿海百姓苦不堪言。水师将军请求出击剿灭倭寇。',
+                choices: [
+                    { text: '⚔️ 水师出击，剿灭倭寇', effect: { treasury: -200, military: 10, popularity: 15 }, result: '你命水师出洋剿匪。经过数场海战，倭寇被重创，沿海恢复安宁。商人们感激不尽，贸易更加繁荣。' },
+                    { text: '🛡️ 加固海防，以守为攻', effect: { treasury: -100, military: 5, popularity: 5 }, result: '你在沿海修筑炮台，增设水师。倭寇见无机可乘，渐渐转移到其他地方。虽然不够彻底，但沿海基本安宁。' },
+                    { text: '🔒 重新封禁海贸', effect: { treasury: -200, popularity: -15, culture: -10 }, result: '你因噎废食，重新关闭海贸。倭寇确实不来了，但贸易带来的财富也化为乌有。商人和百姓怨声载道。' }
+                ]
+            },
+            canal_results: {
+                tag: 'followup',
+                title: '🌊 运河功成',
+                desc: '大运河终于贯通了！南北水路连接，漕运效率大增。但Maintenance（维护）费用高昂，且每年需要征调民夫疏浚河道。',
+                choices: [
+                    { text: '📋 设专门机构管理', effect: { treasury: -100, popularity: 10, culture: 5 }, result: '你设立了河道总督专门管理运河。运河运转良好，每年为朝廷带来数十万两的漕运税收。投资终于得到了回报。' },
+                    { text: '👷 令沿岸百姓自发维护', effect: { popularity: -10 }, result: '你没有设专门管理机构，而是让沿岸百姓自行维护。结果河道年久失修，渐渐淤塞。' }
+                ]
+            }
+        };
+
+        // 年度总结事件
+        const annualEvents = {
+            harvest: [
+                { title: '🌾 丰收之年', desc: '今年风调雨顺，各地粮食丰收。百姓安居乐业，国库收入大增。', effect: { treasury: 200, popularity: 5 } },
+                { title: '🌧️ 涝灾之年', desc: '今年雨水过多，多地农田被淹。虽然不至于大饥荒，但收成大打折扣。', effect: { treasury: -100, popularity: -5 } },
+                { title: '🌤️ 平稳之年', desc: '今年农事平稳，不丰不歉。百姓日子过得去，不温不火。', effect: { treasury: 50 } }
+            ]
+        };
+
+        // 称号系统
+        const emperorTitles = [
+            { min: 0, title: '🌟 新皇登基', desc: '刚刚登基，百废待兴' },
+            { min: 5, title: '🌟 励精图治', desc: '勤政爱民，初见成效' },
+            { min: 10, title: '⭐ 一代明君', desc: '国泰民安，万民称颂' },
+            { min: 15, title: '⭐⭐ 盛世之君', desc: '盛世繁华，万国来朝' },
+            { min: 20, title: '🌟🌟🌟 千古一帝', desc: '功盖千秋，名垂青史' }
+        ];
+
+        // 成就系统
+        const achievements = [
+            { id: 'first_choice', name: '初出茅庐', desc: '做出第一个决策', icon: '🎯', check: (gs) => gs.decisionCount >= 1 },
+            { id: 'wealthy', name: '国库充盈', desc: '国库达到1500万', icon: '💰', check: (gs) => gs.treasury >= 1500 },
+            { id: 'loved', name: '万民爱戴', desc: '民心达到90', icon: '❤️', check: (gs) => gs.popularity >= 90 },
+            { id: 'warrior', name: '威武之师', desc: '军力达到95', icon: '⚔️', check: (gs) => gs.military >= 95 },
+            { id: 'culture_king', name: '文治巅峰', desc: '文化达到85', icon: '📚', check: (gs) => gs.culture >= 85 },
+            { id: 'survive5', name: '站稳脚跟', desc: '统治5年', icon: '📅', check: (gs) => gs.year >= 5 },
+            { id: 'survive10', name: '长治久安', desc: '统治10年', icon: '🏛️', check: (gs) => gs.year >= 10 },
+            { id: 'survive20', name: '世纪帝王', desc: '统治20年', icon: '👑', check: (gs) => gs.year >= 20 },
+            { id: 'balanced', name: '十全十美', desc: '所有属性达到70以上', icon: '🌟', check: (gs) => gs.popularity >= 70 && gs.military >= 70 && gs.culture >= 70 },
+            { id: 'heir', name: '后继有人', desc: '拥有皇嗣', icon: '👶', check: (gs) => gs.heirs >= 1 },
+        ];
+
+        // 嫔妃数据
+        let concubines = [
+            { name: '皇后', rank: '正宫', favor: 80, children: 0 },
+            { name: '贵妃', rank: '从一品', favor: 70, children: 0 },
+            { name: '淑妃', rank: '正二品', favor: 65, children: 0 },
+            { name: '德妃', rank: '正二品', favor: 60, children: 0 },
+            { name: '贤妃', rank: '正二品', favor: 55, children: 0 },
+            { name: '昭仪', rank: '正三品', favor: 50, children: 0 }
+        ];
+
+        // 大臣数据
+        let ministers = [
+            { name: '张丞相', role: '丞相', ability: '治理', abilityVal: 75, loyalty: 80, status: 'active' },
+            { name: '李将军', role: '大将军', ability: '军事', abilityVal: 82, loyalty: 75, status: 'active' },
+            { name: '王尚书', role: '户部尚书', ability: '财政', abilityVal: 68, loyalty: 60, status: 'active' },
+            { name: '赵学士', role: '礼部尚书', ability: '文化', abilityVal: 85, loyalty: 85, status: 'active' },
+            { name: '陈御史', role: '御史大夫', ability: '监察', abilityVal: 72, loyalty: 90, status: 'active' }
+        ];
+
+        // ============================================================
+        // 游戏状态
+        // ============================================================
+        let currentDynasty = null;
+        let gameState = {
+            treasury: 1000,
+            popularity: 70,
+            military: 80,
+            culture: 50,
+            year: 1,
+            heirs: 0,
+            decisionCount: 0,
+            totalEvents: 0,
+            unlockedAchievements: [],
+            history: [],
+            currentEvent: null,
+            pendingFollowUp: null
+        };
+
+        // ============================================================
+        // 核心功能
+        // ============================================================
+
+        function drawDynasty() {
+            const idx = Math.floor(Math.random() * dynasties.length);
+            currentDynasty = dynasties[idx];
+
+            document.getElementById('dynasty-name').textContent = currentDynasty.name;
+            document.getElementById('dynasty-info').innerHTML = `
+                <p><strong>身份：</strong>${currentDynasty.emperor}</p>
+                <p><strong>时间：</strong>${currentDynasty.year > 0 ? '公元前' : '公元'}${Math.abs(currentDynasty.year)}年</p>
+                <p><strong>国情：</strong>${currentDynasty.info}</p>
+                <p><strong>初始状态：</strong></p>
+                <ul style="text-align: left; margin-left: 30px;">
+                    <li>💰 国库：${currentDynasty.treasury}万两</li>
+                    <li>❤️ 民心：${currentDynasty.popularity}</li>
+                    <li>⚔️ 军力：${currentDynasty.military}</li>
+                    <li>📚 文化：${currentDynasty.culture}</li>
+                </ul>
+            `;
+            document.getElementById('card-reveal').classList.add('show');
+        }
+
+        function startGame() {
+            gameState.treasury = currentDynasty.treasury;
+            gameState.popularity = currentDynasty.popularity;
+            gameState.military = currentDynasty.military;
+            gameState.culture = currentDynasty.culture;
+
+            document.getElementById('draw-phase').style.display = 'none';
+            document.getElementById('game-main').style.display = 'block';
+
+            updateStatus();
+            updateTitle();
+            updateAchievements();
+            renderMinisters();
+            renderPolicies();
+            renderConcubines();
+            nextEvent();
+        }
+
+        function updateStatus() {
+            document.getElementById('current-dynasty').textContent = currentDynasty.name;
+            document.getElementById('treasury').textContent = gameState.treasury + '万';
+            document.getElementById('popularity').textContent = gameState.popularity;
+            document.getElementById('military').textContent = gameState.military;
+            document.getElementById('culture').textContent = gameState.culture;
+            document.getElementById('year').textContent = `第${gameState.year}年`;
+
+            // 更新进度条
+            updateBar('popularity-bar', gameState.popularity);
+            updateBar('military-bar', gameState.military);
+            updateBar('culture-bar', gameState.culture);
+        }
+
+        function updateBar(id, value) {
+            const bar = document.getElementById(id);
+            bar.style.width = Math.max(0, Math.min(100, value)) + '%';
+            bar.className = 'power-fill ' + (value >= 70 ? 'green' : value >= 40 ? 'yellow' : 'red');
+        }
+
+        function updateTitle() {
+            let title = emperorTitles[0];
+            for (const t of emperorTitles) {
+                if (gameState.year >= t.min) title = t;
+            }
+            document.getElementById('emperor-title').innerHTML = `${title.title} <span style="font-size:0.8em; color:#666;">— ${title.desc}</span>`;
+        }
+
+        // ============================================================
+        // 事件系统
+        // ============================================================
+
+        function nextEvent() {
+            // 先检查是否有待触发的后续事件
+            if (gameState.pendingFollowUp && gameState.pendingFollowUp.triggered) {
+                const event = followUpEvents[gameState.pendingFollowUp.id];
+                if (event) {
+                    showEvent({ ...event, isFollowUp: true });
+                    gameState.pendingFollowUp = null;
+                    return;
+                }
+            }
+
+            // 正常随机事件
+            const pool = getEventPool();
+            if (pool.length === 0) return;
+            const event = pool[Math.floor(Math.random() * pool.length)];
+            gameState.currentEvent = event;
+            showEvent(event);
+        }
+
+        function showEvent(event) {
+            gameState.totalEvents++;
+            const eventArea = document.getElementById('event-area');
+            const resultArea = document.getElementById('result-area');
+            resultArea.innerHTML = '';
+
+            const tagClass = event.tag || 'main';
+            const tagLabel = { main: '主线', crisis: '危机', opportunity: '机遇', annual: '年度', followup: '后续' }[event.tag] || '事件';
+
+            let choicesHtml = event.choices.map((c, i) =>
+                `<button class="choice-btn" onclick="makeChoice(${i})">${c.text}</button>`
+            ).join('');
+
+            eventArea.innerHTML = `
+                <div class="event-card">
+                    <span class="event-tag ${tagClass}">${tagLabel}</span>
+                    <div class="event-title">${event.title}</div>
+                    <div class="event-desc">${event.desc}</div>
+                    <div>${choicesHtml}</div>
+                </div>
+            `;
+
+            // 切换到奏折tab
+            switchTab({ target: document.querySelector('.tab-btn') }, 'memorials');
+        }
+
+        function makeChoice(idx) {
+            const event = gameState.currentEvent;
+            if (!event) return;
+            const choice = event.choices[idx];
+
+            // 应用效果
+            if (choice.effect.treasury) gameState.treasury += choice.effect.treasury;
+            if (choice.effect.popularity) gameState.popularity += choice.effect.popularity;
+            if (choice.effect.military) gameState.military += choice.effect.military;
+            if (choice.effect.culture) gameState.culture += choice.effect.culture;
+
+            // 限制范围
+            gameState.popularity = Math.max(0, Math.min(100, gameState.popularity));
+            gameState.military = Math.max(0, Math.min(100, gameState.military));
+            gameState.culture = Math.max(0, Math.min(100, gameState.culture));
+
+            // 记录
+            gameState.decisionCount++;
+
+            // 处理后续事件
+            if (choice.followUp) {
+                // 标记下一个事件周期触发
+                gameState.pendingFollowUp = { id: choice.followUp.id, triggered: true };
+            } else {
+                gameState.pendingFollowUp = null;
+            }
+
+            // 显示结果
+            const resultArea = document.getElementById('result-area');
+            let effectsHtml = '';
+            if (choice.effect) {
+                const effects = choice.effect;
+                const effectItems = [];
+                if (effects.treasury) effectItems.push(`<span class="effect-item ${effects.treasury >= 0 ? 'effect-pos' : 'effect-neg'}">💰 ${effects.treasury >= 0 ? '+' : ''}${effects.treasury}万</span>`);
+                if (effects.popularity) effectItems.push(`<span class="effect-item ${effects.popularity >= 0 ? 'effect-pos' : 'effect-neg'}">❤️ ${effects.popularity >= 0 ? '+' : ''}${effects.popularity}</span>`);
+                if (effects.military) effectItems.push(`<span class="effect-item ${effects.military >= 0 ? 'effect-pos' : 'effect-neg'}">⚔️ ${effects.military >= 0 ? '+' : ''}${effects.military}</span>`);
+                if (effects.culture) effectItems.push(`<span class="effect-item ${effects.culture >= 0 ? 'effect-pos' : 'effect-neg'}">📚 ${effects.culture >= 0 ? '+' : ''}${effects.culture}</span>`);
+                effectsHtml = `<div class="result-effects">${effectItems.join('')}</div>`;
+            }
+
+            resultArea.innerHTML = `
+                <div class="result-box">
+                    <div class="result-title">📢 决策结果</div>
+                    <div class="result-desc">${choice.result}</div>
+                    ${effectsHtml}
+                </div>
+            `;
+
+            // 记录历史
+            addHistory(event.title, choice.text);
+
+            // 更新UI
+            updateStatus();
+            updateTitle();
+            updateAchievements();
+            renderMinisters();
+
+            // 禁用选择按钮
+            document.querySelectorAll('.choice-btn').forEach(btn => { btn.disabled = true; btn.style.opacity = '0.4'; });
+
+            // 检查游戏结束
+            checkGameOver();
+        }
+
+        function addHistory(eventName, choice) {
+            gameState.history.unshift({ year: gameState.year, event: eventName, choice: choice });
+            if (gameState.history.length > 20) gameState.history.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const log = document.getElementById('history-log');
+            log.innerHTML = gameState.history.map(h =>
+                `<div class="history-entry"><span class="history-year">第${h.year}年</span> <span class="history-choice">${h.event} → ${h.choice}</span></div>`
+            ).join('');
+        }
+
+        // ============================================================
+        // 年度系统
+        // ============================================================
+
+        function nextYear() {
+            gameState.year++;
+
+            // 年度收入
+            const income = Math.floor(gameState.treasury * 0.05) + 100;
+            gameState.treasury += income;
+
+            // 随机年成
+            const harvests = annualEvents.harvest;
+            const harvest = harvests[Math.floor(Math.random() * harvests.length)];
+            if (harvest.effect.treasury) gameState.treasury += harvest.effect.treasury;
+            if (harvest.effect.popularity) gameState.popularity += harvest.effect.popularity;
+
+            // 限制范围
+            gameState.popularity = Math.max(0, Math.min(100, gameState.popularity));
+            gameState.military = Math.max(0, Math.min(100, gameState.military));
+            gameState.culture = Math.max(0, Math.min(100, gameState.culture));
+
+            // 自然衰减
+            if (gameState.popularity > 80) gameState.popularity -= 2; // 高处不胜寒
+            if (gameState.year % 3 === 0) gameState.military -= 3; // 久不练则废
+
+            updateStatus();
+            updateTitle();
+            updateAchievements();
+
+            // 年度总结
+            showAnnualReview(harvest, income);
+
+            // 显示新事件
+            setTimeout(() => nextEvent(), 500);
+        }
+
+        function showAnnualReview(harvest, income) {
+            const eventArea = document.getElementById('event-area');
+            eventArea.innerHTML += `
+                <div class="annual-review">
+                    <h3>📅 第${gameState.year}年 · 年度总结</h3>
+                    <div class="review-item">${harvest.title}：${harvest.desc}</div>
+                    <div class="review-item">💰 年度税收：<strong>+${income}万两</strong></div>
+                    <div class="review-item">📊 当前国力：<strong>${getPowerLevel()}</strong></div>
+                    <div class="review-item">👶 皇嗣：<strong>${gameState.heirs}人</strong></div>
+                </div>
+            `;
+        }
+
+        function getPowerLevel() {
+            const avg = (gameState.popularity + gameState.military + gameState.culture) / 3;
+            if (avg >= 90) return '🌟🌟🌟 国力强盛，天下无敌';
+            if (avg >= 70) return '⭐⭐ 国富民强，蒸蒸日上';
+            if (avg >= 50) return '⭐ 中规中矩，尚可维持';
+            if (avg >= 30) return '⚠️ 内忧外患，岌岌可危';
+            return '🔥 山河破碎，命悬一线';
+        }
+
+        // ============================================================
+        // 后宫系统
+        // ============================================================
+
+        let selectedConcubine = null;
+
+        function renderConcubines() {
+            const grid = document.getElementById('concubine-grid');
+            grid.innerHTML = concubines.map((c, i) => `
+                <div class="concubine-card ${selectedConcubine === i ? 'selected' : ''}" onclick="selectConcubineCard(${i})">
+                    <div class="concubine-name">${c.name}</div>
+                    <div class="concubine-rank">${c.rank}</div>
+                    <div class="concubine-favor">好感 ${c.favor}</div>
+                    <div class="favor-bar"><div class="favor-fill" style="width:${c.favor}%"></div></div>
+                    ${c.children > 0 ? `<div style="font-size:0.8em; color:#8B0000; margin-top:5px;">👶 子嗣：${c.children}人</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function selectConcubineCard(idx) {
+            selectedConcubine = idx;
+            renderConcubines();
+        }
+
+        // 后宫事件改为点击卡片直接触发
+        document.addEventListener('click', function(e) {
+            const card = e.target.closest('.concubine-card');
+            if (card && document.getElementById('concubines-tab').classList.contains('active')) {
+                // 已处理在 onclick 中
+            }
+        });
+
+        function visitConcubine(idx) {
+            const c = concubines[idx];
+            c.favor = Math.min(100, c.favor + 8);
+            gameState.popularity = Math.min(100, gameState.popularity + 2);
+
+            // 有概率生子
+            const haveChild = Math.random() < 0.2;
+            if (haveChild) {
+                c.children++;
+                gameState.heirs++;
+                const resultDiv = document.getElementById('concubine-result');
+                resultDiv.innerHTML = `
+                    <div class="result-box">
+                        <div class="result-title">🎊 喜得皇子/公主！</div>
+                        <div class="result-desc">${c.name}为你生下了一位皇子/公主！后宫上下欢天喜地，全国大赦三日。${c.name}好感大增。</div>
+                        <div class="result-effects">
+                            <span class="effect-item effect-pos">❤️ ${c.name}好感+8</span>
+                            <span class="effect-item effect-neu">👶 皇嗣+1</span>
+                            <span class="effect-item effect-pos">❤️ 民心+2</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const resultDiv = document.getElementById('concubine-result');
+                const phrases = [
+                    `${c.name}亲手为你斟茶，聊了些家常。你感到难得的心静。`,
+                    `今夜与${c.name}对弈几局，她棋艺精湛，让你赞不绝口。`,
+                    `${c.name}为你演奏了一曲，琴声悠扬，令人沉醉。`,
+                    `你与${c.name}在御花园散步，月光如水，岁月静好。`
+                ];
+                resultDiv.innerHTML = `
+                    <div class="result-box">
+                        <div class="result-title">🌸 宠幸${c.name}</div>
+                        <div class="result-desc">${phrases[Math.floor(Math.random() * phrases.length)]}</div>
+                        <div class="result-effects">
+                            <span class="effect-item effect-pos">❤️ ${c.name}好感+8</span>
+                            <span class="effect-item effect-pos">❤️ 民心+2</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            updateStatus();
+            renderConcubines();
+            updateAchievements();
+            addHistory('后宫', `宠幸${c.name}`);
+        }
+
+        // 修改卡片点击行为 - 在后宫tab中点击直接触发
+        function selectConcubineCard(idx) {
+            selectedConcubine = idx;
+            renderConcubines();
+            // 添加访问按钮
+            const grid = document.getElementById('concubine-grid');
+            const resultDiv = document.getElementById('concubine-result');
+            resultDiv.innerHTML = `
+                <div style="text-align:center; margin-top:15px;">
+                    <button class="action-btn primary" onclick="visitConcubine(${idx})">🌸 今夜宠幸${concubines[idx].name}</button>
+                </div>
+            `;
+        }
+
+        // ============================================================
+        // 大臣系统
+        // ============================================================
+
+        function renderMinisters() {
+            const list = document.getElementById('minister-list');
+            list.innerHTML = ministers.filter(m => m.status === 'active').map((m, i) => `
+                <div class="minister-card">
+                    <div class="minister-name">${m.name}</div>
+                    <div class="minister-role">${m.role}</div>
+                    <div class="minister-ability">💪 ${m.ability}：${m.abilityVal} | 忠诚：${m.loyalty}</div>
+                    <button class="minister-action" onclick="delegateTask(${i})">委派：${getDelegateTask(m, i)}</button>
+                </div>
+            `).join('');
+        }
+
+        function getDelegateTask(m, i) {
+            const tasks = {
+                '治理': '整顿吏治',
+                '军事': '巡边防务',
+                '财政': '清查账目',
+                '文化': '编修典籍',
+                '监察': '巡视地方'
+            };
+            return tasks[m.ability] || '办理要务';
+        }
+
+        function delegateTask(idx) {
+            const m = ministers[idx];
+            if (!m || m.status !== 'active') return;
+
+            const success = Math.random() < (m.abilityVal / 100) * 0.8 + 0.1;
+            const resultDiv = document.getElementById('event-area');
+
+            if (success) {
+                const results = {
+                    '治理': { popularity: 10, treasury: 50, text: `${m.name}整顿吏治成效显著，贪官污吏纷纷落马，百姓拍手称快。` },
+                    '军事': { military: 10, text: `${m.name}巡边防务归来，对军队进行了全面评估和调整。边防更加稳固。` },
+                    '财政': { treasury: 200, text: `${m.name}清查账目发现了不少漏洞，追回了大量被贪污的银两。` },
+                    '文化': { culture: 15, text: `${m.name}编修典籍大获成功，收集了大量珍贵的文献典籍。` },
+                    '监察': { popularity: 15, treasury: 100, text: `${m.name}巡视地方归来，揭发了多起地方官贪腐案件，为民除害。` }
+                };
+                const r = results[m.ability];
+                if (r.popularity) gameState.popularity = Math.min(100, gameState.popularity + r.popularity);
+                if (r.treasury) gameState.treasury += r.treasury;
+                if (r.military) gameState.military = Math.min(100, gameState.military + r.military);
+                if (r.culture) gameState.culture = Math.min(100, gameState.culture + r.culture);
+
+                resultDiv.innerHTML += `
+                    <div class="result-box">
+                        <div class="result-title">✅ ${m.name} ${getDelegateTask(m, idx)}圆满成功！</div>
+                        <div class="result-desc">${r.text}</div>
+                        <div class="result-effects">
+                            ${r.popularity ? `<span class="effect-item effect-pos">❤️ 民心+${r.popularity}</span>` : ''}
+                            ${r.treasury ? `<span class="effect-item effect-pos">💰 +${r.treasury}万</span>` : ''}
+                            ${r.military ? `<span class="effect-item effect-pos">⚔️ 军力+${r.military}</span>` : ''}
+                            ${r.culture ? `<span class="effect-item effect-pos">📚 文化+${r.culture}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                addHistory('朝堂', `${m.name}${getDelegateTask(m, idx)}成功`);
+            } else {
+                gameState.popularity = Math.max(0, gameState.popularity - 5);
+                resultDiv.innerHTML += `
+                    <div class="result-box" style="border-color: #ff4444;">
+                        <div class="result-title" style="color: #ff4444;">❌ ${m.name} ${getDelegateTask(m, idx)}遭遇挫折</div>
+                        <div class="result-desc">${m.name}能力有限，事情没有办漂亮。百姓略有微词。</div>
+                        <div class="result-effects">
+                            <span class="effect-item effect-neg">❤️ 民心-5</span>
+                        </div>
+                    </div>
+                `;
+                addHistory('朝堂', `${m.name}${getDelegateTask(m, idx)}失败`);
+            }
+
+            updateStatus();
+            updateAchievements();
+        }
+
+        // ============================================================
+        // 国策系统
+        // ============================================================
+
+        function renderPolicies() {
+            const area = document.getElementById('policy-area');
+            const policies = [
+                { id: 'tax_cut', name: '减税政策', desc: '减轻百姓赋税，换取民心支持', effect: { popularity: 10, treasury: -150 }, cost: 150 },
+                { id: 'tax_raise', name: '加税政策', desc: '增加赋税充实国库，但百姓会有怨言', effect: { popularity: -10, treasury: 250 }, cost: -250 },
+                { id: 'train_army', name: '训练军队', desc: '加强军事训练，提升军力', effect: { military: 15, treasury: -100 }, cost: 100 },
+                { id: 'promote_culture', name: '推崇文化', desc: '修建书院，奖励学术', effect: { culture: 15, treasury: -80 }, cost: 80 },
+                { id: 'rest', name: '休养生息', desc: '什么都不做，让国家自然恢复', effect: { popularity: 3, treasury: 30 }, cost: 0 },
+            ];
+            area.innerHTML = policies.map(p => `
+                <div class="minister-card" style="cursor:pointer;" onclick="executePolicy('${p.id}')">
+                    <div class="minister-name">${p.name}</div>
+                    <div class="minister-role">${p.desc}</div>
+                    <div class="minister-ability">
+                        ${p.effect.popularity ? `<span style="color:${p.effect.popularity >= 0 ? '#4CAF50' : '#f44336'}">民心${p.effect.popularity >= 0 ? '+' : ''}${p.effect.popularity}</span>` : ''}
+                        ${p.effect.treasury ? `<span style="color:${p.effect.treasury >= 0 ? '#4CAF50' : '#f44336'}; margin-left:15px;">${p.effect.treasury >= 0 ? '+' : ''}${p.effect.treasury}万</span>` : ''}
+                        ${p.effect.military ? `<span style="color:${p.effect.military >= 0 ? '#4CAF50' : '#f44336'}; margin-left:15px;">军力+${p.effect.military}</span>` : ''}
+                        ${p.effect.culture ? `<span style="color:${p.effect.culture >= 0 ? '#4CAF50' : '#f44336'}; margin-left:15px;">文化+${p.effect.culture}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function executePolicy(policyId) {
+            const policies = {
+                'tax_cut': { popularity: 10, treasury: -150, result: '你下令减税，百姓欢天喜地。虽然国库收入减少了，但民心大涨。' },
+                'tax_raise': { popularity: -10, treasury: 250, result: '你增加了赋税。国库充盈了，但百姓怨声载道。' },
+                'train_army': { military: 15, treasury: -100, result: '你下令全军集训。将士们士气高涨，军力大增。' },
+                'promote_culture': { culture: 15, treasury: -80, result: '你在全国修建书院，奖励学术。文化氛围日益浓厚。' },
+                'rest': { popularity: 3, treasury: 30, result: '你让国家休养生息。虽然进展缓慢，但一切都在稳步改善。' }
+            };
+            const p = policies[policyId];
+            if (!p) return;
+
+            if (p.popularity) gameState.popularity = Math.min(100, Math.max(0, gameState.popularity + p.popularity));
+            if (p.treasury) gameState.treasury += p.treasury;
+            if (p.military) gameState.military = Math.min(100, Math.max(0, gameState.military + p.military));
+            if (p.culture) gameState.culture = Math.min(100, Math.max(0, gameState.culture + p.culture));
+
+            gameState.decisionCount++;
+
+            // 在奏折tab显示结果
+            const resultArea = document.getElementById('result-area');
+            let effectsHtml = '';
+            const items = [];
+            if (p.popularity) items.push(`<span class="effect-item ${p.popularity >= 0 ? 'effect-pos' : 'effect-neg'}">❤️ ${p.popularity >= 0 ? '+' : ''}${p.popularity}</span>`);
+            if (p.treasury) items.push(`<span class="effect-item ${p.treasury >= 0 ? 'effect-pos' : 'effect-neg'}">💰 ${p.treasury >= 0 ? '+' : ''}${p.treasury}万</span>`);
+            if (p.military) items.push(`<span class="effect-item ${p.military >= 0 ? 'effect-pos' : 'effect-neg'}">⚔️ +${p.military}</span>`);
+            if (p.culture) items.push(`<span class="effect-item ${p.culture >= 0 ? 'effect-pos' : 'effect-neg'}">📚 +${p.culture}</span>`);
+            effectsHtml = `<div class="result-effects">${items.join('')}</div>`;
+
+            resultArea.innerHTML = `
+                <div class="result-box">
+                    <div class="result-title">📢 国策执行完毕</div>
+                    <div class="result-desc">${p.result}</div>
+                    ${effectsHtml}
+                </div>
+            `;
+
+            updateStatus();
+            updateAchievements();
+            addHistory('国策', policyId);
+
+            // 切换到奏折tab
+            const firstTab = document.querySelector('.tab-btn');
+            switchTab({ target: firstTab }, 'memorials');
+        }
+
+        // ============================================================
+        // 成就系统
+        // ============================================================
+
+        function updateAchievements() {
+            const list = document.getElementById('achievements-list');
+            gameState.unlockedAchievements = [];
+            let html = '';
+            for (const a of achievements) {
+                const unlocked = a.check(gameState);
+                if (unlocked) gameState.unlockedAchievements.push(a.id);
+                html += `<span class="achievement-tag ${unlocked ? '' : 'locked'}" title="${a.desc}">${a.icon} ${a.name}</span>`;
+            }
+            list.innerHTML = html;
+        }
+
+        // ============================================================
+        // Tab 切换
+        // ============================================================
+
+        function switchTab(event, tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            if (event && event.target) event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            // 后宫tab中，渲染后自动添加访问按钮
+            if (tabName === 'concubines') {
+                renderConcubines();
+            }
+        }
+
+        // ============================================================
+        // Game Over
+        // ============================================================
+
+        function checkGameOver() {
+            let gameOver = false;
+            let reason = '';
+
+            if (gameState.popularity <= 0) {
+                gameOver = true;
+                reason = '民心尽失，百姓揭竿而起！';
+            } else if (gameState.treasury <= 0) {
+                gameOver = true;
+                reason = '国库空虚，无力维持统治！';
+            } else if (gameState.military <= 0) {
+                gameOver = true;
+                reason = '军力崩溃，敌军长驱直入！';
+            }
+
+            if (gameOver) {
+                showGameOver(reason);
+            }
+        }
+
+        function showGameOver(reason) {
+            const avg = (gameState.popularity + gameState.military + gameState.culture) / 3;
+            let legacy = '';
+            if (avg >= 80) legacy = '虽有遗憾，但你确实是一位明君。史书会记住你的功绩。';
+            else if (avg >= 50) legacy = '你治下平平，无功无过。历史对你评价一般。';
+            else legacy = '你治下乱象丛生，后世对你的评价恐怕不会太高。';
+
+            const overlay = document.getElementById('game-over-overlay');
+            overlay.classList.add('show');
+            document.getElementById('go-title').textContent = reason;
+            document.getElementById('go-legacy').textContent = legacy;
+            document.getElementById('go-stats').innerHTML = `
+                <div>📅 统治年限：${gameState.year}年</div>
+                <div>📜 决策总数：${gameState.decisionCount}次</div>
+                <div>👶 皇嗣数量：${gameState.heirs}人</div>
+                <div>🏆 成就解锁：${gameState.unlockedAchievements.length}/${achievements.length}</div>
+                <div>💰 最终国库：${gameState.treasury}万</div>
+                <div>📊 综合国力：${getPowerLevel()}</div>
+            `;
+        }
+
+        // 初始化后宫tab - 添加点击事件
+        function initConcubineTab() {
+            const grid = document.getElementById('concubine-grid');
+            grid.addEventListener('click', function(e) {
+                const card = e.target.closest('.concubine-card');
+                if (card) {
+                    const idx = [...grid.children].indexOf(card);
+                    selectConcubineCard(idx);
+                }
+            });
+        }
+
+        // 页面加载后初始化
+        window.onload = function() {
+            initConcubineTab();
+        };
+    </script>
+</body>
+</html>

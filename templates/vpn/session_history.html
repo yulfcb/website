@@ -1,0 +1,139 @@
+{% extends "vpn/base.html" %}
+{% block title %}历史终端{% endblock %}
+{% block page_title %}历史终端{% endblock %}
+{% block vpn_content %}
+
+{%- macro page_link(p) -%}
+  {%- set qs = dict(request.args) -%}
+  {%- set _ = qs.update({'page': p}) -%}
+  {%- for k, v in qs.items() -%}
+    {%- if not v -%}
+      {%- set _ = qs.pop(k) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{ url_for('vpn_session_history', **qs) }}
+{%- endmacro -%}
+
+<div class="vpn-card">
+  <h2>历史终端（已结束的会话）</h2>
+  <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+    数据来源：<code>vpn_session_history</code> 表。每次会话"刚结束"（连续 5 分钟无流量）由
+    <code>traffic-sync</code> 守护线程归档一行。最多保留 <code>VPN_SESSION_HISTORY_MAX</code> 条（默认 5000），
+    超出按结束时间删最老的。
+  </p>
+
+  <form method="get" action="{{ url_for('vpn_session_history') }}" style="margin-bottom:1rem;">
+    <div class="vpn-form-grid">
+      <div>
+        <label for="q">用户名 / IP（模糊）</label>
+        <input id="q" type="text" name="q" value="{{ filters.q or filters.user or '' }}" placeholder="例如 alice 或 1.2.3.4">
+      </div>
+      <div>
+        <label for="start">起始日期（接入时间 ≥）</label>
+        <input id="start" type="date" name="start" value="{{ filters.start or '' }}">
+      </div>
+      <div>
+        <label for="end">结束日期（接入时间 ≤）</label>
+        <input id="end" type="date" name="end" value="{{ filters.end or '' }}">
+      </div>
+    </div>
+    <div class="vpn-form-actions">
+      <button type="submit" class="btn btn-primary">筛选</button>
+      <a href="{{ url_for('vpn_session_history') }}" class="btn btn-secondary">清除筛选</a>
+    </div>
+  </form>
+
+  {% if items %}
+  <div style="overflow-x:auto;">
+    <table class="vpn-table">
+      <thead>
+        <tr>
+          <th>用户</th>
+          <th>UUID</th>
+          <th>接入时间</th>
+          <th>结束时间</th>
+          <th>时长</th>
+          <th>会话 ↑</th>
+          <th>会话 ↓</th>
+          <th>最近 IP</th>
+          <th>地理位置</th>
+          <th>设备</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in items %}
+          <tr>
+            <td><b>{{ h.username }}</b></td>
+            <td>
+              {% if h.uuid %}
+                <code>{{ h.uuid[:8] }}…</code>
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>{{ h.started_at | ts }}</td>
+            <td>{{ h.ended_at | ts }}</td>
+            <td>{{ h.duration_sec | duration }}</td>
+            <td>{{ h.session_up | filesize }}</td>
+            <td>{{ h.session_dn | filesize }}</td>
+            <td>
+              {% if h.last_ip %}
+                <code style="font-size:0.85em;">{{ h.last_ip }}</code>
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if h.geo %}
+                {{ h.geo.country }}{% if h.geo.city %} · {{ h.geo.city }}{% endif %}
+                {% if h.geo.isp %}
+                  <br><span style="color:var(--text-secondary);font-size:0.8em;">{{ h.geo.isp }}</span>
+                {% endif %}
+              {% elif h.last_ip %}
+                <span style="color:var(--text-secondary);">缓存已淘汰</span>
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if h.device %}
+                {{ h.device }}
+              {% else %}
+                <span style="color:var(--text-secondary);">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;flex-wrap:wrap;gap:0.5rem;">
+    <span style="color:var(--text-secondary);font-size:0.9rem;">
+      共 <b>{{ total }}</b> 条记录 · 第 <b>{{ page }}</b> / {{ total_pages }} 页
+    </span>
+    <span class="vpn-actions">
+      {% if page > 1 %}
+        <a href="{{ page_link(page - 1) }}" class="btn btn-secondary">&lt; 上一页</a>
+      {% else %}
+        <span class="btn btn-secondary" style="opacity:0.4;pointer-events:none;">&lt; 上一页</span>
+      {% endif %}
+      {% if page < total_pages %}
+        <a href="{{ page_link(page + 1) }}" class="btn btn-secondary">下一页 &gt;</a>
+      {% else %}
+        <span class="btn btn-secondary" style="opacity:0.4;pointer-events:none;">下一页 &gt;</span>
+      {% endif %}
+    </span>
+  </div>
+
+  {% else %}
+  <p class="vpn-empty">
+    {% if filters.q or filters.user or filters.start or filters.end %}
+      当前筛选条件下暂无历史会话。<a href="{{ url_for('vpn_session_history') }}">清除筛选</a>
+    {% else %}
+      暂无历史会话（系统启动后尚无已结束会话，或 LRU 上限已被更老的记录占满）
+    {% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 个人空间</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if logged_in %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>{% endif %}
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/" class="{% if request.endpoint and request.endpoint.startswith('vpn_') %}active{% endif %}">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin" class="{% if request.endpoint and request.endpoint.startswith('admin_') %}active{% endif %}">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+            {% if logged_in %}
+            <button id="logoutBtn" class="btn btn-sm btn-secondary">退出登录</button>
+            {% endif %}
+        </div>
+    </nav>
+
+    {% if not logged_in %}
+    <!-- Login Form -->
+    <section class="admin-login">
+        <div class="container">
+            <div class="login-card">
+                <h2>管理后台登录</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">用户名</label>
+                        <input type="text" id="username" name="username" required autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">登录</button>
+                    <p id="loginError" class="error-text" style="display:none;">用户名或密码错误</p>
+                </form>
+            </div>
+        </div>
+    </section>
+    {% else %}
+    <!-- Admin Dashboard -->
+    <section class="admin-dashboard">
+        <div class="container">
+            <h1 class="page-title">访客统计</h1>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>总访问量</h3>
+                    <p id="statTotal" class="stat-number">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>独立访客</h3>
+                    <p id="statUnique" class="stat-number">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>今日访问</h3>
+                    <p id="statToday" class="stat-number">-</p>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="chart-container">
+                <h3>访问趋势（最近7天）</h3>
+                <canvas id="trendChart"></canvas>
+            </div>
+
+            <!-- Notification Settings -->
+            <div class="settings-card">
+                <h3>飞书通知设置</h3>
+                <div class="setting-row">
+                    <span>启用访客通知</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="notifyToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <label for="webhookUrl">Webhook URL</label>
+                    <input type="text" id="webhookUrl" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." style="width:100%;margin-top:0.5rem;">
+                    <button id="saveWebhookBtn" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">保存 Webhook URL</button>
+                </div>
+            </div>
+
+            <!-- Anniversary Check Time Settings -->
+            <div class="settings-card">
+                <h3>纪念日检测时间</h3>
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                    设置每天自动检测纪念日并发送通知的时间。留空或点击"取消定时"可停用自动检测。
+                </p>
+                <div class="setting-row">
+                    <label for="anniversaryCheckTime">检测时间（时:分:秒）</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
+                        <input type="time" id="anniversaryCheckTime" step="1" style="flex:1;">
+                        <button id="saveCheckTimeBtn" class="btn btn-primary btn-sm">保存</button>
+                        <button id="cancelCheckTimeBtn" class="btn btn-secondary btn-sm">取消定时</button>
+                    </div>
+                </div>
+                <div id="checkTimeStatus" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+            </div>
+
+            <!-- VPN 设置 -->
+            <div class="settings-card">
+                <h3>VPN 设置</h3>
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                    控制在线终端判定、历史记录保留和分页。点击"保存"后会自动重启服务（<span style="color:var(--warn);">约 3-5 秒</span>，期间 VPN 用户连接会短暂中断）。
+                </p>
+                <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:0.8rem;">
+                    <div class="form-group">
+                        <label for="vpnMaxRecords">历史终端最大保存记录（条）</label>
+                        <input type="number" id="vpnMaxRecords" min="0" step="100" placeholder="5000">
+                        <small style="color:var(--text-secondary);">填 0 表示完全停用归档（清空历史表）</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="vpnPageSize">历史终端每页条数</label>
+                        <input type="number" id="vpnPageSize" min="10" step="10" placeholder="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="vpnActiveWindow">在线终端判定窗口（秒，无流量超过此时间算下线并归档）</label>
+                        <input type="number" id="vpnActiveWindow" min="10" step="10" placeholder="60">
+                        <small style="color:var(--text-secondary);">最小 10 秒；改小响应更灵敏但流量 API 频率需跟上</small>
+                    </div>
+                    <div>
+                        <button id="saveVpnSettingsBtn" class="btn btn-primary btn-sm">保存 VPN 设置</button>
+                        <span id="vpnSettingsMsg" style="margin-left:0.5rem;font-size:0.85rem;"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 代理 管理入口 -->
+            <div class="settings-card">
+                <h3>代理 管理</h3>
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                    代理 用户、流量、在线终端、订阅链接
+                </p>
+                <a href="/vpn/" class="btn btn-primary">进入代理管理 →</a>
+            </div>
+
+            <!-- Account Management -->
+            <div class="settings-card">
+                <h3>账户管理</h3>
+                <div class="account-list" id="accountList">
+                    <p>加载中...</p>
+                </div>
+                <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem;">
+                    <h4 style="margin-bottom:0.5rem;">添加新账户</h4>
+                    <div class="form-group">
+                        <label for="newUsername">用户名</label>
+                        <input type="text" id="newUsername" placeholder="用户名">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">密码</label>
+                        <input type="password" id="newPassword" placeholder="密码（至少4位）">
+                    </div>
+                    <button id="addAccountBtn" class="btn btn-primary btn-sm">添加账户</button>
+                    <p id="accountMsg" style="margin-top:0.5rem;color:var(--danger);display:none;"></p>
+                </div>
+            </div>
+
+            <!-- Visitor Log -->
+            <div class="visitor-log">
+                <h3>访客日志</h3>
+                <div class="filters">
+                    <input type="text" id="filterIP" placeholder="按IP搜索">
+                    <input type="text" id="filterPage" placeholder="按页面搜索">
+                    <button id="filterBtn" class="btn btn-primary btn-sm">筛选</button>
+                    <button id="clearFilterBtn" class="btn btn-secondary btn-sm">清除</button>
+                </div>
+                <div class="table-wrapper">
+                    <table id="visitsTable">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>IP地址</th>
+                                <th>地理位置</th>
+                                <th>浏览器</th>
+                                <th>操作系统</th>
+                                <th>页面</th>
+                                <th>来源</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visitsBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <button id="prevPage" class="btn btn-sm btn-secondary" disabled>上一页</button>
+                    <span id="pageInfo">第 1 页</span>
+                    <button id="nextPage" class="btn btn-sm btn-secondary">下一页</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VPN 设置：确认重启 + 重启中 模态框 -->
+        <div id="vpnRestartConfirmModal" class="modal-overlay" style="display:none;">
+            <div class="modal modal-sm">
+                <h3 style="margin-bottom:1rem;">确认重启服务？</h3>
+                <p style="color:var(--text-secondary);margin:1rem 0;">
+                    重启期间 VPN 用户连接可能短暂中断（约 3-5 秒），确认继续？
+                </p>
+                <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1.5rem;">
+                    <button id="vpnRestartCancel" class="btn btn-secondary btn-sm">取消</button>
+                    <button id="vpnRestartConfirm" class="btn btn-primary btn-sm">确认重启</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="vpnRestartingModal" class="modal-overlay modal-confirm" style="display:none;">
+            <div class="modal modal-sm">
+                <h3 style="margin-bottom:1rem;">服务正在重启</h3>
+                <p style="color:var(--text-secondary);margin:1rem 0;">
+                    预计 3-5 秒完成，<span id="vpnRestartCountdown" style="font-weight:600;color:var(--text-primary);">3</span> 秒后自动刷新...
+                </p>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}?v=4"></script>
+</body>
+</html>

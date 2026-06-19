@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏中心 - 个人空间</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games" class="active">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Games Hub Section -->
+    <section class="games-hub">
+        <div class="container">
+            <h1 class="page-title">游戏中心</h1>
+            <p class="page-subtitle">在这里放松一下，享受游戏的乐趣</p>
+            
+            <div class="games-grid">
+                <!-- Tetris Game Card -->
+                <a href="/games/tetris" class="game-card">
+                    <div class="game-thumbnail">
+                        <div class="tetris-preview">
+                            <div class="block b1"></div>
+                            <div class="block b2"></div>
+                            <div class="block b3"></div>
+                            <div class="block b4"></div>
+                        </div>
+                    </div>
+                    <div class="game-info">
+                        <h3 class="game-title">俄罗斯方块</h3>
+                        <p class="game-description">经典的俄罗斯方块游戏，考验你的反应速度和空间思维能力</p>
+                        <span class="game-badge">经典</span>
+                    </div>
+                </a>
+
+                <!-- Minesweeper Game Card -->
+                <a href="/games/minesweeper" class="game-card">
+                    <div class="game-thumbnail">
+                        <div style="display:grid;grid-template-columns:repeat(3,24px);gap:3px;padding:16px">
+                            <div style="width:24px;height:24px;background:#45475a;border-radius:4px"></div>
+                            <div style="width:24px;height:24px;background:#45475a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">💣</div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px"></div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#89b4fa;font-weight:700">1</div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px"></div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#a6e3a1;font-weight:700">2</div>
+                            <div style="width:24px;height:24px;background:#45475a;border-radius:4px"></div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#89b4fa;font-weight:700">1</div>
+                            <div style="width:24px;height:24px;background:#313244;border-radius:4px"></div>
+                        </div>
+                    </div>
+                    <div class="game-info">
+                        <h3 class="game-title">💣 扫雷</h3>
+                        <p class="game-description">经典扫雷游戏，三种难度可选，还有在线排行榜等你来挑战！</p>
+                        <span class="game-badge">经典</span>
+                    </div>
+                </a>
+
+                <!-- Placeholder for future games -->
+                <div class="game-card disabled">
+                    <div class="game-thumbnail">
+                        <div class="coming-soon">
+                            <span>即将推出</span>
+                        </div>
+                    </div>
+                    <div class="game-info">
+                        <h3 class="game-title">更多游戏</h3>
+                        <p class="game-description">敬请期待更多精彩游戏...</p>
+                        <span class="game-badge badge-soon">即将推出</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

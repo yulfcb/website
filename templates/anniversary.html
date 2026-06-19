@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>纪念日 - 个人空间</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary" class="active">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <section class="anniversary-section">
+        <div class="container">
+            <div class="anniversary-header">
+                <div>
+                    <h1 class="page-title">💕 纪念日</h1>
+                    <p class="page-subtitle">记录每一个珍贵的日子</p>
+                </div>
+                <button class="btn btn-primary" id="addAnnivBtn">+ 新建纪念日</button>
+            </div>
+
+            <div id="annivList" class="anniv-grid">
+                <p class="loading-text">加载中...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Add/Edit Anniversary Modal -->
+    <div class="modal-overlay" id="annivModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="annivModalTitle">新建纪念日</h3>
+                <button class="modal-close" data-close="annivModal">&times;</button>
+            </div>
+            <form id="annivForm">
+                <input type="hidden" id="annivId">
+                <div class="form-group">
+                    <label for="annivName">名称</label>
+                    <input type="text" id="annivName" placeholder="如：在一起、第一次旅行" required>
+                </div>
+                <div class="form-group">
+                    <label for="annivDate">日期</label>
+                    <input type="date" id="annivDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="annivEmoji">图标</label>
+                    <input type="text" id="annivEmoji" placeholder="💕" value="💕" maxlength="4">
+                </div>
+                <div class="form-group">
+                    <label for="annivDesc">描述（可选）</label>
+                    <textarea id="annivDesc" rows="3" placeholder="添加一些备注..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" data-close="annivModal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay modal-confirm" id="deleteModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>确认删除</h3>
+                <button class="modal-close" data-close="deleteModal">&times;</button>
+            </div>
+            <p id="deleteMessage" style="margin-bottom: 1.5rem; color: var(--text-secondary);">确定要删除这个纪念日吗？此操作不可撤销。</p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-close="deleteModal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Management Modal -->
+    <div class="modal-overlay" id="rulesModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 id="rulesModalTitle">提醒规则</h3>
+                <button class="modal-close" data-close="rulesModal">&times;</button>
+            </div>
+            <div id="rulesList" class="rules-list">
+                <p style="color: var(--text-secondary);">暂无提醒规则</p>
+            </div>
+            <div class="rule-add-section">
+                <h4>添加新规则</h4>
+                <div class="form-group">
+                    <label for="ruleExpression">规则表达式</label>
+                    <input type="text" id="ruleExpression" placeholder="如：before:7d">
+                </div>
+                <div class="rule-help">
+                    <p><strong>表达式语法说明：</strong></p>
+                    <ul>
+                        <li><code>before:7d</code> — 纪念日前 7 天提醒</li>
+                        <li><code>every:100d</code> — 每 100 天提醒一次</li>
+                        <li><code>yearly:m6d1:pre:3d</code> — 每年6月1日前3天提醒</li>
+                        <li><code>anniversary:pre:7d</code> — 每年周年日前7天提醒</li>
+                        <li><code>days_after:100</code> — 纪念日后第100天提醒</li>
+                        <li><code>monthly:d5</code> — 每月 5 号提醒（2月没有 31 号时自动挪到月底）</li>
+                        <li><code>monthly:d5:pre:3d</code> — 每月 5 号前 3 天提醒</li>
+                    </ul>
+                </div>
+                <button class="btn btn-primary btn-sm" id="addRuleBtn">添加规则</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Rule Modal -->
+    <div class="modal-overlay" id="editRuleModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>编辑规则</h3>
+                <button class="modal-close" data-close="editRuleModal">&times;</button>
+            </div>
+            <form id="editRuleForm">
+                <input type="hidden" id="editRuleId">
+                <div class="form-group">
+                    <label for="editRuleExpression">规则表达式</label>
+                    <input type="text" id="editRuleExpression" required>
+                </div>
+                <div class="rule-help">
+                    <p><strong>表达式语法说明：</strong></p>
+                    <ul>
+                        <li><code>before:7d</code> — 纪念日前 7 天提醒</li>
+                        <li><code>every:100d</code> — 每 100 天提醒一次</li>
+                        <li><code>yearly:m6d1:pre:3d</code> — 每年6月1日前3天提醒</li>
+                        <li><code>anniversary:pre:7d</code> — 每年周年日前7天提醒</li>
+                        <li><code>days_after:100</code> — 纪念日后第100天提醒</li>
+                        <li><code>monthly:d5</code> — 每月 5 号提醒（2月没有 31 号时自动挪到月底）</li>
+                        <li><code>monthly:d5:pre:3d</code> — 每月 5 号前 3 天提醒</li>
+                    </ul>
+                </div>
+                <div class="form-group">
+                    <label class="toggle" style="margin-top: 0.5rem;">
+                        <input type="checkbox" id="editRuleEnabled" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="margin-left: 0.5rem; color: var(--text-secondary);">启用</span>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" data-close="editRuleModal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notify Preview Modal -->
+    <div class="modal-overlay" id="notifyModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3>发送通知</h3>
+                <button class="modal-close" data-close="notifyModal">&times;</button>
+            </div>
+            <p style="margin-bottom: 1rem; color: var(--text-secondary);">将通过飞书发送以下通知：</p>
+            <div id="notifyPreview" class="notify-preview"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-close="notifyModal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmNotifyBtn">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/anniversary.js') }}"></script>
+</body>
+</html>

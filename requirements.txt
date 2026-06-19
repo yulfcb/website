@@ -1,0 +1,13 @@
+flask==3.1.1
+gunicorn==23.0.0
+python-dotenv==1.1.0
+requests==2.32.3
+flask-cors==5.0.1
+user-agents==2.2.0
+# VPN panel dependencies (migrated from vpn-server)
+grpcio==1.66.2
+grpcio-tools==1.66.2
+protobuf==5.28.2
+pyyaml==6.0.1
+qrcode==7.4.2
+pillow==10.4.0

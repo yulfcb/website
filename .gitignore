@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 数据库（含密码哈希、用户隐私）
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 环境变量 / 密钥
+.env
+.env.local
+.env.*.local
+.envrc
+
+# 备份
+backup/
+
+# 日志
+logs/
+*.log
+data/*.log
+data/*.log.*
+
+# xray protobuf 临时目录
+.xray_pb/
+
+# OS 元数据
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 测试 / 临时文件
+test_cron.txt
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 部署相关
+personal_website.db

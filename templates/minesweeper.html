@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💣 扫雷 - 个人空间</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .mine-section { padding: 80px 0 40px; min-height: 100vh; }
+        .mine-wrapper { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+
+        /* Auth area */
+        .mine-auth-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+        }
+        .mine-auth-bar .user-tag {
+            background: var(--card-bg, #1e1e2e);
+            padding: 8px 16px; border-radius: 10px;
+            font-size: 14px; color: var(--text-primary, #cdd6f4);
+        }
+
+        /* Difficulty tabs */
+        .mine-diff-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .mine-diff-tab {
+            padding: 8px 18px; border: 2px solid var(--border, #45475a);
+            border-radius: 10px; background: var(--card-bg, #1e1e2e);
+            cursor: pointer; font-weight: 600; font-size: 14px;
+            color: var(--text-primary, #cdd6f4); transition: all 0.2s;
+        }
+        .mine-diff-tab:hover { border-color: var(--accent, #89b4fa); }
+        .mine-diff-tab.active {
+            border-color: var(--accent, #89b4fa);
+            color: var(--accent, #89b4fa);
+            background: rgba(137, 180, 250, 0.1);
+        }
+
+        /* Game header */
+        .mine-game-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+        }
+        .mine-timer {
+            font-size: 28px; font-weight: 700;
+            font-family: 'Courier New', monospace;
+            color: var(--accent, #89b4fa); min-width: 80px; text-align: center;
+        }
+        .mine-remaining {
+            font-size: 18px; font-weight: 600;
+            color: var(--red, #f38ba8);
+        }
+        .mine-controls { display: flex; gap: 8px; align-items: center; }
+        .mine-btn {
+            padding: 8px 16px; border: 2px solid var(--border, #45475a);
+            border-radius: 10px; background: var(--card-bg, #1e1e2e);
+            color: var(--text-primary, #cdd6f4); font-size: 14px;
+            font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .mine-btn:hover { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); }
+        .mine-btn-primary {
+            background: var(--accent, #89b4fa); color: var(--bg, #11111b);
+            border-color: var(--accent, #89b4fa);
+        }
+        .mine-btn-primary:hover { opacity: 0.9; }
+        .mine-select {
+            padding: 8px 12px; border: 2px solid var(--border, #45475a);
+            border-radius: 10px; background: var(--card-bg, #1e1e2e);
+            color: var(--text-primary, #cdd6f4); font-size: 14px; cursor: pointer;
+        }
+
+        /* Board */
+        .mine-board-wrap { overflow-x: auto; margin-bottom: 20px; }
+        .mine-board {
+            display: inline-grid; gap: 2px;
+            background: var(--border, #45475a);
+            border-radius: 10px; padding: 2px;
+        }
+        .mine-cell {
+            width: 34px; height: 34px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700;
+            cursor: pointer; user-select: none;
+            border-radius: 4px; transition: background 0.1s;
+        }
+        .mine-cell.hidden-cell {
+            background: var(--surface1, #313244);
+        }
+        .mine-cell.hidden-cell:hover {
+            background: var(--surface2, #45475a);
+        }
+        .mine-cell.revealed {
+            background: var(--card-bg, #1e1e2e);
+            cursor: default;
+        }
+        .mine-cell.mine { background: var(--red, #f38ba8); }
+        .mine-cell.flagged::after { content: '🚩'; font-size: 16px; }
+        .mine-cell.q-mark::after { content: '❓'; font-size: 16px; }
+        .mine-cell[data-num="1"] { color: #89b4fa; }
+        .mine-cell[data-num="2"] { color: #a6e3a1; }
+        .mine-cell[data-num="3"] { color: #f38ba8; }
+        .mine-cell[data-num="4"] { color: #cba6f7; }
+        .mine-cell[data-num="5"] { color: #fab387; }
+        .mine-cell[data-num="6"] { color: #94e2d5; }
+        .mine-cell[data-num="7"] { color: #cdd6f4; }
+        .mine-cell[data-num="8"] { color: #6c7086; }
+
+        /* Leaderboard */
+        .mine-lb-section { margin-top: 30px; }
+        .mine-lb-card {
+            background: var(--card-bg, #1e1e2e);
+            border-radius: 16px; overflow: hidden;
+            border: 1px solid var(--border, #45475a);
+        }
+        .mine-lb-card h3 {
+            padding: 16px 20px; border-bottom: 1px solid var(--border, #45475a);
+            font-size: 16px; color: var(--text-primary, #cdd6f4);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .mine-lb-table { width: 100%; border-collapse: collapse; }
+        .mine-lb-table th {
+            text-align: left; padding: 10px 16px;
+            font-size: 12px; color: var(--text-secondary, #a6adc8);
+            background: var(--surface0, #181825);
+            text-transform: uppercase;
+        }
+        .mine-lb-table td {
+            padding: 12px 16px; border-bottom: 1px solid var(--border, #45475a);
+            font-size: 14px; color: var(--text-primary, #cdd6f4);
+        }
+        .mine-lb-table tr:last-child td { border-bottom: none; }
+        .mine-lb-rank {
+            width: 30px; height: 30px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 13px;
+        }
+        .rank-1 { background: rgba(249,226,175,0.2); color: #f9e2af; }
+        .rank-2 { background: rgba(166,173,200,0.2); color: #a6adc8; }
+        .rank-3 { background: rgba(250,179,135,0.2); color: #fab387; }
+        .mine-lb-time {
+            font-weight: 700; color: var(--accent, #89b4fa);
+            font-family: 'Courier New', monospace;
+        }
+        .mine-lb-empty {
+            text-align: center; padding: 40px;
+            color: var(--text-secondary, #a6adc8);
+        }
+
+        /* Modal */
+        .mine-modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000; padding: 20px;
+        }
+        .mine-modal-overlay.show { display: flex; }
+        .mine-modal {
+            background: var(--card-bg, #1e1e2e);
+            border: 1px solid var(--border, #45475a);
+            border-radius: 16px; padding: 30px;
+            width: 100%; max-width: 380px;
+        }
+        .mine-modal h2 { margin-bottom: 20px; text-align: center; color: var(--text-primary, #cdd6f4); }
+        .mine-modal .tab-switch {
+            display: flex; margin-bottom: 20px;
+            background: var(--surface0, #181825);
+            border-radius: 8px; padding: 4px;
+        }
+        .mine-modal .tab-switch button {
+            flex: 1; padding: 8px; border: none;
+            background: transparent; border-radius: 6px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            color: var(--text-secondary, #a6adc8);
+        }
+        .mine-modal .tab-switch button.active {
+            background: var(--card-bg, #1e1e2e);
+            color: var(--accent, #89b4fa);
+        }
+        .mine-modal .form-group { margin-bottom: 16px; }
+        .mine-modal label {
+            display: block; font-size: 13px; font-weight: 600;
+            margin-bottom: 6px; color: var(--text-secondary, #a6adc8);
+        }
+        .mine-modal input {
+            width: 100%; padding: 12px;
+            border: 2px solid var(--border, #45475a);
+            border-radius: 10px; font-size: 15px;
+            background: var(--surface0, #181825);
+            color: var(--text-primary, #cdd6f4);
+            outline: none;
+        }
+        .mine-modal input:focus { border-color: var(--accent, #89b4fa); }
+        .mine-modal .form-error {
+            color: var(--red, #f38ba8); font-size: 13px;
+            margin-top: 6px; display: none;
+        }
+        .mine-modal-btn {
+            width: 100%; padding: 12px; border: none;
+            border-radius: 10px; font-size: 16px; font-weight: 600;
+            cursor: pointer; margin-top: 8px;
+        }
+        .mine-modal-btn-primary {
+            background: var(--accent, #89b4fa); color: var(--bg, #11111b);
+        }
+        .mine-modal-btn-cancel {
+            background: transparent; color: var(--text-secondary, #a6adc8);
+        }
+
+        /* Game result overlay */
+        .mine-result-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: none; align-items: center; justify-content: center;
+            z-index: 500; padding: 20px;
+        }
+        .mine-result-overlay.show { display: flex; }
+        .mine-result-card {
+            background: var(--card-bg, #1e1e2e);
+            border: 1px solid var(--border, #45475a);
+            border-radius: 20px; padding: 40px;
+            text-align: center; max-width: 350px; width: 100%;
+        }
+        .mine-result-icon { font-size: 60px; margin-bottom: 10px; }
+        .mine-result-card h2 { margin-bottom: 10px; color: var(--text-primary, #cdd6f4); }
+        .mine-result-card p { color: var(--text-secondary, #a6adc8); margin-bottom: 20px; }
+        .mine-result-time {
+            font-size: 36px; font-weight: 800;
+            color: var(--accent, #89b4fa);
+            font-family: 'Courier New', monospace;
+        }
+        .mine-result-rank {
+            font-size: 18px; color: #f9e2af;
+            font-weight: 700; margin-top: 10px;
+        }
+
+        /* Toast */
+        .mine-toast {
+            position: fixed; top: 70px; left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface2, #45475a);
+            color: var(--text-primary, #cdd6f4);
+            padding: 10px 24px; border-radius: 30px;
+            font-size: 14px; z-index: 9999;
+            display: none; border: 1px solid var(--border, #45475a);
+        }
+        .mine-toast.show { display: block; animation: mineFadeIn 0.3s; }
+        @keyframes mineFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        @media (max-width: 600px) {
+            .mine-cell { width: 28px; height: 28px; font-size: 12px; }
+            .mine-timer { font-size: 22px; }
+            .mine-section { padding: 70px 0 30px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games" class="active">游戏</a></li>
+                <li><a href="/raise">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Minesweeper Section -->
+    <section class="mine-section">
+        <div class="mine-wrapper">
+            <!-- Auth bar -->
+            <div class="mine-auth-bar">
+                <h2 style="color:var(--text-primary,#cdd6f4)">💣 扫雷</h2>
+                <div>
+                    <span class="user-tag" id="mine-user-display" style="display:none">👤 <span id="mine-username-display"></span></span>
+                    <button class="mine-btn" id="mine-auth-btn" onclick="showMineAuth()">登录</button>
+                </div>
+            </div>
+
+            <!-- Difficulty tabs -->
+            <div class="mine-diff-tabs">
+                <div class="mine-diff-tab active" data-diff="easy" onclick="selectMineDiff('easy')">简单 9×9</div>
+                <div class="mine-diff-tab" data-diff="medium" onclick="selectMineDiff('medium')">中等 16×16</div>
+                <div class="mine-diff-tab" data-diff="hard" onclick="selectMineDiff('hard')">困难 16×30</div>
+            </div>
+
+            <!-- Game header -->
+            <div class="mine-game-header">
+                <span class="mine-remaining">💣 <span id="mine-remaining">10</span></span>
+                <div class="mine-timer" id="mine-timer">000</div>
+                <div class="mine-controls">
+                    <button class="mine-btn mine-btn-primary" onclick="newMineGame()">🔄 新游戏</button>
+                    <button class="mine-btn" id="mine-mode-btn" onclick="toggleMineMode()">⛏️ 挖雷</button>
+                </div>
+            </div>
+
+            <!-- Board -->
+            <div class="mine-board-wrap">
+                <div class="mine-board" id="mine-board"></div>
+            </div>
+
+            <!-- Leaderboard -->
+            <div class="mine-lb-section">
+                <div class="mine-diff-tabs" style="margin-bottom:12px">
+                    <div class="mine-diff-tab active" data-lb-diff="easy" onclick="switchLbDiff('easy')">🟢 简单榜</div>
+                    <div class="mine-diff-tab" data-lb-diff="medium" onclick="switchLbDiff('medium')">🟡 中等榜</div>
+                    <div class="mine-diff-tab" data-lb-diff="hard" onclick="switchLbDiff('hard')">🔴 困难榜</div>
+                </div>
+                <div class="mine-lb-card">
+                    <h3>🏆 排行榜 <span id="mine-lb-diff-name" style="color:var(--accent,#89b4fa);font-size:14px">简单</span></h3>
+                    <div id="mine-lb-content">
+                        <div class="mine-lb-empty">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Auth Modal -->
+    <div class="mine-modal-overlay" id="mine-auth-modal">
+        <div class="mine-modal">
+            <h2>👤 输入昵称</h2>
+            <div class="form-group">
+                <label>你的昵称</label>
+                <input type="text" id="mine-auth-username" placeholder="输入昵称开始游戏" maxlength="20">
+            </div>
+            <div class="form-error" id="mine-auth-error"></div>
+            <button class="mine-modal-btn mine-modal-btn-primary" onclick="submitMineAuth()">开始游戏</button>
+            <button class="mine-modal-btn mine-modal-btn-cancel" onclick="closeMineAuth()">取消</button>
+        </div>
+    </div>
+
+    <!-- Game Result -->
+    <div class="mine-result-overlay" id="mine-result">
+        <div class="mine-result-card">
+            <div class="mine-result-icon" id="mine-result-icon">🎉</div>
+            <h2 id="mine-result-title">恭喜过关！</h2>
+            <p id="mine-result-desc"></p>
+            <div class="mine-result-time" id="mine-result-time">000</div>
+            <div class="mine-result-rank" id="mine-result-rank"></div>
+            <div style="display:flex;gap:10px;margin-top:20px">
+                <button class="mine-btn mine-btn-primary" style="flex:1" onclick="closeMineResult();newMineGame()">再来一局</button>
+                <button class="mine-btn" style="flex:1" onclick="closeMineResult()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="mine-toast" id="mine-toast"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+    // ========== State ==========
+    let mineUser = null;
+    let mineDiff = 'easy';
+    let mineLbDiff = 'easy';
+    let mineFlagMode = false; // false=dig, true=flag
+
+    const MINE_CONFIG = {
+        easy: { rows: 9, cols: 9, mines: 10 },
+        medium: { rows: 16, cols: 16, mines: 40 },
+        hard: { rows: 16, cols: 30, mines: 99 }
+    };
+
+    let mBoard = [], mRevealed = [], mFlagged = [];
+    let mGameStarted = false, mGameOver = false, mFirstClick = true;
+    let mTimerInterval = null, mTimeElapsed = 0;
+
+    // ========== Auth ==========
+    function showMineAuth() { document.getElementById('mine-auth-modal').classList.add('show'); }
+    function closeMineAuth() {
+        document.getElementById('mine-auth-modal').classList.remove('show');
+        document.getElementById('mine-auth-error').style.display = 'none';
+    }
+    async function submitMineAuth() {
+        const username = document.getElementById('mine-auth-username').value.trim();
+        const errEl = document.getElementById('mine-auth-error');
+        if (!username) { errEl.textContent = '请输入昵称'; errEl.style.display = 'block'; return; }
+        try {
+            const res = await fetch('/api/mine/login', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (data.error) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+            mineUser = data.username;
+            updateMineUserUI();
+            closeMineAuth();
+            mineToast(`欢迎 ${mineUser}！`);
+        } catch (e) { errEl.textContent = '网络错误'; errEl.style.display = 'block'; }
+    }
+    async function mineLogout() {
+        await fetch('/api/mine/logout', { method: 'POST' });
+        mineUser = null; updateMineUserUI();
+        mineToast('已退出登录');
+    }
+    function updateMineUserUI() {
+        const display = document.getElementById('mine-user-display');
+        const nameEl = document.getElementById('mine-username-display');
+        const btn = document.getElementById('mine-auth-btn');
+        if (mineUser) {
+            display.style.display = 'inline'; nameEl.textContent = mineUser;
+            btn.textContent = '退出'; btn.onclick = mineLogout;
+        } else {
+            display.style.display = 'none';
+            btn.textContent = '登录'; btn.onclick = showMineAuth;
+        }
+    }
+    async function checkMineAuth() {
+        const res = await fetch('/api/mine/me');
+        const data = await res.json();
+        if (data.logged_in) { mineUser = data.username; updateMineUserUI(); }
+    }
+
+    // ========== Mode Toggle ==========
+    function toggleMineMode() {
+        mineFlagMode = !mineFlagMode;
+        const modeBtn = document.getElementById('mine-mode-btn');
+        if (mineFlagMode) {
+            modeBtn.textContent = '🚩 插旗';
+            modeBtn.classList.add('mine-btn-primary');
+        } else {
+            modeBtn.textContent = '⛏️ 挖雷';
+            modeBtn.classList.remove('mine-btn-primary');
+        }
+    }
+
+    // ========== Game ==========
+    function selectMineDiff(diff) {
+        mineDiff = diff;
+        document.querySelectorAll('[data-diff]').forEach(t => t.classList.remove('active'));
+        document.querySelector(`[data-diff="${diff}"]`).classList.add('active');
+        newMineGame();
+    }
+
+    function newMineGame() {
+        const cfg = MINE_CONFIG[mineDiff];
+        mBoard = Array(cfg.rows).fill(null).map(() => Array(cfg.cols).fill(0));
+        mRevealed = Array(cfg.rows).fill(null).map(() => Array(cfg.cols).fill(false));
+        mFlagged = Array(cfg.rows).fill(null).map(() => Array(cfg.cols).fill(0));
+        mGameStarted = false; mGameOver = false; mFirstClick = true;
+        mTimeElapsed = 0;
+        clearInterval(mTimerInterval);
+        document.getElementById('mine-timer').textContent = '000';
+        document.getElementById('mine-remaining').textContent = cfg.mines;
+        mineFlagMode = false;
+        const modeBtn = document.getElementById('mine-mode-btn');
+        modeBtn.textContent = '⛏️ 挖雷';
+        modeBtn.classList.remove('mine-btn-primary');
+        renderMineBoard();
+    }
+
+    function placeMineMines(er, ec) {
+        const cfg = MINE_CONFIG[mineDiff];
+        let placed = 0;
+        while (placed < cfg.mines) {
+            const r = Math.floor(Math.random() * cfg.rows);
+            const c = Math.floor(Math.random() * cfg.cols);
+            if (mBoard[r][c] === -1) continue;
+            if (Math.abs(r - er) <= 1 && Math.abs(c - ec) <= 1) continue;
+            mBoard[r][c] = -1; placed++;
+        }
+        for (let r = 0; r < cfg.rows; r++) {
+            for (let c = 0; c < cfg.cols; c++) {
+                if (mBoard[r][c] === -1) continue;
+                let count = 0;
+                for (let dr = -1; dr <= 1; dr++)
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = r+dr, nc = c+dc;
+                        if (nr >= 0 && nr < cfg.rows && nc >= 0 && nc < cfg.cols && mBoard[nr][nc] === -1) count++;
+                    }
+                mBoard[r][c] = count;
+            }
+        }
+    }
+
+    function renderMineBoard() {
+        const cfg = MINE_CONFIG[mineDiff];
+        const el = document.getElementById('mine-board');
+        el.style.gridTemplateColumns = `repeat(${cfg.cols}, 34px)`;
+        el.innerHTML = '';
+        for (let r = 0; r < cfg.rows; r++) {
+            for (let c = 0; c < cfg.cols; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'mine-cell hidden-cell';
+                cell.dataset.r = r; cell.dataset.c = c;
+                cell.addEventListener('click', () => mineCellClick(r, c));
+                cell.addEventListener('contextmenu', (e) => { e.preventDefault(); mineToggleFlag(r, c); });
+                el.appendChild(cell);
+            }
+        }
+    }
+
+    function getMineCell(r, c) {
+        return document.querySelector(`.mine-cell[data-r="${r}"][data-c="${c}"]`);
+    }
+
+    function mineCellClick(r, c) {
+        if (mGameOver) return;
+        if (mFlagged[r][c] === 1) return;
+        if (mineFlagMode) { mineToggleFlag(r, c); return; }
+        if (mRevealed[r][c]) { mineChord(r, c); return; }
+        if (mFirstClick) {
+            mFirstClick = false; placeMineMines(r, c);
+            mGameStarted = true; startMineTimer();
+        }
+        mineReveal(r, c);
+    }
+
+    function mineReveal(r, c) {
+        const cfg = MINE_CONFIG[mineDiff];
+        if (r < 0 || r >= cfg.rows || c < 0 || c >= cfg.cols) return;
+        if (mRevealed[r][c] || mFlagged[r][c] === 1) return;
+        mRevealed[r][c] = true;
+        const cell = getMineCell(r, c);
+        if (mBoard[r][c] === -1) {
+            cell.classList.remove('hidden-cell');
+            cell.classList.add('mine'); cell.textContent = '💥';
+            mineLose(); return;
+        }
+        cell.classList.remove('hidden-cell'); cell.classList.add('revealed');
+        if (mBoard[r][c] > 0) { cell.textContent = mBoard[r][c]; cell.dataset.num = mBoard[r][c]; }
+        else { for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) mineReveal(r+dr, c+dc); }
+        mineCheckWin();
+    }
+
+    function mineChord(r, c) {
+        if (!mRevealed[r][c] || mBoard[r][c] <= 0) return;
+        const cfg = MINE_CONFIG[mineDiff];
+        let adjFlags = 0;
+        for (let dr = -1; dr <= 1; dr++)
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = r+dr, nc = c+dc;
+                if (nr >= 0 && nr < cfg.rows && nc >= 0 && nc < cfg.cols && mFlagged[nr][nc] === 1) adjFlags++;
+            }
+        if (adjFlags === mBoard[r][c]) {
+            for (let dr = -1; dr <= 1; dr++)
+                for (let dc = -1; dc <= 1; dc++) {
+                    const nr = r+dr, nc = c+dc;
+                    if (nr >= 0 && nr < cfg.rows && nc >= 0 && nc < cfg.cols && !mRevealed[nr][nc] && mFlagged[nr][nc] !== 1)
+                        mineReveal(nr, nc);
+                }
+        }
+    }
+
+    function mineToggleFlag(r, c) {
+        if (mGameOver || mRevealed[r][c]) return;
+        const cell = getMineCell(r, c);
+        const cfg = MINE_CONFIG[mineDiff];
+        if (mFlagged[r][c] === 0) { mFlagged[r][c] = 1; cell.classList.add('flagged'); }
+        else if (mFlagged[r][c] === 1) { mFlagged[r][c] = 2; cell.classList.remove('flagged'); cell.classList.add('q-mark'); }
+        else { mFlagged[r][c] = 0; cell.classList.remove('q-mark'); }
+        let flagCount = 0;
+        for (let i = 0; i < cfg.rows; i++)
+            for (let j = 0; j < cfg.cols; j++)
+                if (mFlagged[i][j] === 1) flagCount++;
+        document.getElementById('mine-remaining').textContent = cfg.mines - flagCount;
+    }
+
+    function mineCheckWin() {
+        const cfg = MINE_CONFIG[mineDiff];
+        let unrevealed = 0;
+        for (let r = 0; r < cfg.rows; r++)
+            for (let c = 0; c < cfg.cols; c++)
+                if (!mRevealed[r][c]) unrevealed++;
+        if (unrevealed === cfg.mines) mineWin();
+    }
+
+    function mineWin() {
+        mGameOver = true; clearInterval(mTimerInterval);
+        const cfg = MINE_CONFIG[mineDiff];
+        for (let r = 0; r < cfg.rows; r++)
+            for (let c = 0; c < cfg.cols; c++)
+                if (mBoard[r][c] === -1 && mFlagged[r][c] !== 1) {
+                    mFlagged[r][c] = 1;
+                    getMineCell(r, c).classList.add('flagged');
+                }
+        showMineResult(true);
+        submitMineScore();
+    }
+
+    function mineLose() {
+        mGameOver = true; clearInterval(mTimerInterval);
+        const cfg = MINE_CONFIG[mineDiff];
+        for (let r = 0; r < cfg.rows; r++)
+            for (let c = 0; c < cfg.cols; c++)
+                if (mBoard[r][c] === -1 && !mRevealed[r][c]) {
+                    const cell = getMineCell(r, c);
+                    cell.classList.remove('hidden-cell');
+                    cell.classList.add('mine'); cell.textContent = '💣';
+                }
+        showMineResult(false);
+    }
+
+    function showMineResult(won) {
+        document.getElementById('mine-result-icon').textContent = won ? '🎉' : '💥';
+        document.getElementById('mine-result-title').textContent = won ? '恭喜过关！' : '踩雷了！';
+        const names = { easy: '简单', medium: '中等', hard: '困难' };
+        document.getElementById('mine-result-desc').textContent = won ? `${names[mineDiff]}难度完成` : '下次再接再厉！';
+        document.getElementById('mine-result-time').textContent = mineFmtTime(mTimeElapsed);
+        document.getElementById('mine-result-rank').textContent = '';
+        document.getElementById('mine-result').classList.add('show');
+    }
+    function closeMineResult() { document.getElementById('mine-result').classList.remove('show'); }
+
+    async function submitMineScore() {
+        if (!mineUser) { mineToast('登录后可记录成绩到排行榜'); return; }
+        try {
+            const res = await fetch('/api/mine/submit', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ difficulty: mineDiff, time: mTimeElapsed })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('mine-result-rank').textContent = `🏆 排名第 ${data.rank} 名！`;
+                loadMineLeaderboard();
+            }
+        } catch (e) {}
+    }
+
+    // ========== Timer ==========
+    function startMineTimer() {
+        mTimeElapsed = 0; clearInterval(mTimerInterval);
+        mTimerInterval = setInterval(() => {
+            mTimeElapsed++;
+            document.getElementById('mine-timer').textContent = mineFmtTime(mTimeElapsed);
+        }, 1000);
+    }
+    function mineFmtTime(s) { return String(s).padStart(3, '0'); }
+
+    // ========== Leaderboard ==========
+    function switchLbDiff(diff) {
+        mineLbDiff = diff;
+        document.querySelectorAll('[data-lb-diff]').forEach(t => t.classList.remove('active'));
+        document.querySelector(`[data-lb-diff="${diff}"]`).classList.add('active');
+        const names = { easy: '简单', medium: '中等', hard: '困难' };
+        document.getElementById('mine-lb-diff-name').textContent = names[diff];
+        loadMineLeaderboard();
+    }
+
+    async function loadMineLeaderboard() {
+        const container = document.getElementById('mine-lb-content');
+        container.innerHTML = '<div class="mine-lb-empty">加载中...</div>';
+        try {
+            const res = await fetch(`/api/mine/leaderboard/${mineLbDiff}`);
+            const data = await res.json();
+            if (data.error) { container.innerHTML = `<div class="mine-lb-empty">${data.error}</div>`; return; }
+            if (data.length === 0) { container.innerHTML = '<div class="mine-lb-empty">暂无记录，快来挑战吧！🎮</div>'; return; }
+            const medals = ['🥇', '🥈', '🥉'];
+            let html = `<table class="mine-lb-table"><thead><tr><th>#</th><th>玩家</th><th>最佳成绩</th><th>总局数</th></tr></thead><tbody>`;
+            data.forEach(row => {
+                const medal = row.rank <= 3 ? medals[row.rank - 1] : '';
+                const rankClass = row.rank <= 3 ? `rank-${row.rank}` : '';
+                html += `<tr>
+                    <td><span class="mine-lb-rank ${rankClass}">${medal || row.rank}</span></td>
+                    <td><strong>${escHtml(row.username)}</strong></td>
+                    <td class="mine-lb-time">${mineFmtTime(row.best_time)}秒</td>
+                    <td>${row.total_games}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } catch (e) { container.innerHTML = '<div class="mine-lb-empty">加载失败</div>'; }
+    }
+
+    // ========== Utils ==========
+    function mineToast(msg) {
+        const toast = document.getElementById('mine-toast');
+        toast.textContent = msg; toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+    function escHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text; return div.innerHTML;
+    }
+
+    // ========== Init ==========
+    checkMineAuth();
+    newMineGame();
+    loadMineLeaderboard();
+    </script>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

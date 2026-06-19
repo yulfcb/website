@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>养成频道 - 个人网站</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .raise-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .raise-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .raise-header h1 {
+            font-size: 2.5em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .raise-header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        .game-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-align: center;
+            cursor: pointer;
+        }
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+        .game-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        .game-title {
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .game-desc {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .game-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 25px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: bold;
+        }
+        .coming-soon {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .coming-soon:hover {
+            transform: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">我的空间</a>
+            <ul class="nav-links">
+                <li><a href="/">首页</a></li>
+                <li><a href="/games">游戏</a></li>
+                <li><a href="/raise" class="active">养成</a></li>
+                <li><a href="/economy">经济</a></li>
+                <li><a href="/anniversary">纪念</a></li>
+                <li><a href="/vpn/">代理</a></li>
+                <li><a href="/#about">关于</a></li>
+                <li><a href="/admin">管理</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+                <span class="icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="raise-container">
+        <div class="raise-header">
+            <h1>🌟 养成频道</h1>
+            <p>在这里体验不一样的人生，养成你的理想角色</p>
+        </div>
+
+        <div class="game-grid">
+            <a href="/raise/emperor" class="game-card" style="text-decoration: none; color: inherit;">
+                <div class="game-icon">👑</div>
+                <h2 class="game-title">皇帝养成</h2>
+                <p class="game-desc">
+                    穿越成为历史帝王，治理江山社稷<br>
+                    批阅奏折、翻牌子、商讨政务<br>
+                    体验一代帝王的传奇人生
+                </p>
+                <span class="game-btn">开始游戏</span>
+            </a>
+
+            <div class="game-card coming-soon">
+                <div class="game-icon">🏰</div>
+                <h2 class="game-title">城主养成</h2>
+                <p class="game-desc">
+                    建设你的理想城池<br>
+                    发展经济、训练军队、外交联盟<br>
+                    成为一代霸主
+                </p>
+                <span class="game-btn" style="background: #ccc;">敬请期待</span>
+            </div>
+
+            <div class="game-card coming-soon">
+                <div class="game-icon">⚔️</div>
+                <h2 class="game-title">侠客养成</h2>
+                <p class="game-desc">
+                    行走江湖，快意恩仇<br>
+                    修炼武功、结交豪杰、闯荡天下<br>
+                    成就武林传奇
+                </p>
+                <span class="game-btn" style="background: #ccc;">敬请期待</span>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="social-links">
+                <a href="#" class="social-link" aria-label="GitHub">GitHub</a>
+                <a href="#" class="social-link" aria-label="Twitter">Twitter</a>
+                <a href="#" class="social-link" aria-label="Email">Email</a>
+            </div>
+            <p class="copyright">© 2024 我的个人空间. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

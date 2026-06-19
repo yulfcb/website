@@ -1,0 +1,34 @@
+{% extends "vpn/base.html" %}
+{% block title %}代理 流量统计{% endblock %}
+{% block page_title %}代理 流量统计{% endblock %}
+{% block vpn_content %}
+
+<div class="vpn-card">
+  <h2>用户流量总览</h2>
+  {% if rows %}
+  <div style="overflow-x:auto;">
+    <table class="vpn-table">
+      <thead>
+        <tr><th>用户</th><th>UUID</th><th>状态</th><th>上行</th><th>下行</th><th>总计</th><th>最后同步</th></tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        {% set tot = (r.total_upload or 0) + (r.total_download or 0) %}
+        <tr>
+          <td>{{ r.username }}{% if r.is_admin %} <span class="badge badge-admin">管理员</span>{% endif %}</td>
+          <td><code>{{ r.uuid[:8] }}…</code></td>
+          <td>{% if r.enabled %}<span class="badge badge-on">启用</span>{% else %}<span class="badge badge-off">禁用</span>{% endif %}</td>
+          <td>{{ (r.total_upload or 0) | filesize }}</td>
+          <td>{{ (r.total_download or 0) | filesize }}</td>
+          <td><b>{{ tot | filesize }}</b></td>
+          <td>{{ r.last_sync_at | ts }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="vpn-empty">暂无流量数据</p>
+  {% endif %}
+</div>
+{% endblock %}
