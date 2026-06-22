@@ -1,11 +1,13 @@
 """
 流量同步守护线程 —— 每 60s 拉一次 xray 流量统计，累加写入 SQLite
 
-迁移到 personal-website 后：
-- 直接用 personal-website 的 get_db() 查 vpn_users / vpn_traffic_records
-- 不再依赖 vpn-server 的 models.py
-- xray stats 内部按 user.email（即 xray 看到的 user 标识）记录流量
-  本系统用 username 作为 email 传给 xray
+多 worker 共享状态：
+- 原本的 4 个内存 dict 沉到 vpn_session_state 表，所有 gunicorn worker 看到同一份
+  "在线 / 会话起点" 状态（修复多 worker 各自判定新会话 / 归档不到的问题）
+- get_db() 已开 WAL + busy_timeout，多 worker 写并发安全
+
+xray stats 内部按 user.email（即 xray 看到的 user 标识）记录流量
+本系统用 username 作为 email 传给 xray
 """
 import logging
 import threading
@@ -14,9 +16,6 @@ import time
 import xray_client
 
 log = logging.getLogger("traffic-sync")
-
-_last_cumulative = {}  # username -> (up, dn) 上次读到的累计值
-_recent_active = {}    # username -> 最近一次流量增加的时间戳（用于判断"近期活跃"）
 
 # 在线判定窗口（秒）。从 settings.VPN_ACTIVE_WINDOW_SEC 动态读，默认 60s。
 # 每次取用都查一次 settings（不是缓存为常量），这样 admin 后台改值后立即生效
@@ -31,13 +30,6 @@ def _get_active_window_sec() -> int:
     except Exception:
         return 60
 
-# 会话追踪：每个用户最近一次"上线"的起点。判定规则——
-#   1. 首次出现（_last_cumulative 没记录）→ 记为新会话起点
-#   2. _recent_active 上一次活跃距今 > 当前 active window（即"刚复活"）→ 记为新会话起点
-# 这样短暂掉线再回来不会反复重置，但长时间离线后回来会重新起算
-_session_start_ts = {}              # username -> 本次会话开始的 unix 时间戳
-_session_start_cumulative = {}      # username -> 会话开始时的 (up, dn) 累计值（不归零）
-
 # 同步并发控制：_sync_once() 跑的时候（守护线程 60s 一轮 + 请求线程 trigger_sync_now）
 # 可能撞车，用 _sync_lock 做互斥；acquire(blocking=False) 实现"已在跑就跳过"。
 # threading 已在文件顶部 import
@@ -48,6 +40,77 @@ _sync_lock = threading.Lock()
 def _get_db():
     from app import get_db
     return get_db()
+
+
+# ===== vpn_session_state 表读写 =====
+# 该表是 gunicorn 多 worker 共享的"在线 + 会话起点"真相源。
+# 一行 = 一个用户：last_cum_* 是上次读到的 xray 累计值；last_seen_at 是最近活跃时间；
+# session_start_at / session_start_cum_* 是当前活跃会话的起点（NULL = 不在会话中）。
+# 注意：_sync_once 不会预创建空行——只有"之前有过流量"或"本轮有流量"才写。
+
+def _load_state(username: str):
+    """读一行 state，没有返回 None。"""
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            'SELECT last_cum_up, last_cum_dn, last_seen_at, '
+            'session_start_at, session_start_cum_up, session_start_cum_dn, '
+            'idle_rounds '
+            'FROM vpn_session_state WHERE username=?', (username,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _upsert_state(username, *, last_cum_up, last_cum_dn,
+                  last_seen_at=None, session_start_at=None,
+                  session_start_cum_up=None, session_start_cum_dn=None,
+                  idle_rounds=0):
+    """INSERT OR REPLACE，state 表只有 username 是 key。所有列都写一遍便于全量替换。
+
+    idle_rounds：连续无流量轮数（仅在 has_traffic 写时传 0）。
+    上一轮无流量 → idle_rounds 累加的分支走 _update_state_partial，不进这里。
+    """
+    conn = _get_db()
+    try:
+        conn.execute('''
+            INSERT INTO vpn_session_state
+              (username, last_cum_up, last_cum_dn, last_seen_at,
+               session_start_at, session_start_cum_up, session_start_cum_dn,
+               idle_rounds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+              last_cum_up=excluded.last_cum_up,
+              last_cum_dn=excluded.last_cum_dn,
+              last_seen_at=excluded.last_seen_at,
+              session_start_at=excluded.session_start_at,
+              session_start_cum_up=excluded.session_start_cum_up,
+              session_start_cum_dn=excluded.session_start_cum_dn,
+              idle_rounds=excluded.idle_rounds
+        ''', (username, last_cum_up, last_cum_dn, last_seen_at,
+              session_start_at, session_start_cum_up, session_start_cum_dn,
+              idle_rounds))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _update_state_partial(username: str, **fields):
+    """只更新指定字段（last_seen_at / session_start_at 等），保留其他字段。
+    fields 里出现的 key 才写。"""
+    if not fields:
+        return
+    cols = ', '.join(f'{k}=?' for k in fields)
+    vals = list(fields.values()) + [username]
+    conn = _get_db()
+    try:
+        conn.execute(
+            f'UPDATE vpn_session_state SET {cols} WHERE username=?', vals
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _list_vpn_users():
@@ -83,52 +146,70 @@ def _update_traffic(user_id: int, delta_up: int, delta_dn: int):
 
 
 def get_active_users():
-    """返回最近 N 秒内有流量的用户列表 [(username, up, dn, last_seen)]，N 由 settings 控制"""
+    """返回当前在线用户列表（username 列表）。
+
+    数据来源：vpn_session_state 表的 last_seen_at（NULL 或 > active window 算离线）。
+    之前是 list[(username, up, dn, last_seen)]，但当前唯一调用方 (app.py:1920) 只用
+    len(active)，改成 list[str] 即可。
+    """
     now = time.time()
     window = _get_active_window_sec()
-    result = []
-    for username, ts in list(_recent_active.items()):
-        if now - ts > window:
-            _recent_active.pop(username, None)
-            continue
-        up, dn = _last_cumulative.get(username, (0, 0))
-        result.append((username, up, dn, int(ts)))
-    return result
+    conn = _get_db()
+    try:
+        rows = conn.execute(
+            'SELECT username FROM vpn_session_state '
+            'WHERE last_seen_at IS NOT NULL AND last_seen_at > ?',
+            (now - window,)
+        ).fetchall()
+        return [r['username'] for r in rows]
+    finally:
+        conn.close()
 
 
 def get_active_sessions():
     """返回当前活跃会话的详情列表，每个会话包含：
-        username, uuid, session_start_ts, session_up, session_dn,
+        username, uuid, session_start, session_up, session_dn,
         total_up, total_dn, last_seen
 
-    "活跃"指 _recent_active 距今 ≤ 当前 active window（动态读 settings）。
+    "活跃"指 last_seen_at 距今 ≤ 当前 active window（动态读 settings）。
     设备列（OS / 客户端类型）xray 不暴露（VLESS 协议不传 User-Agent），
     此处暂不返回，前端用 '—' 占位。
     """
     now = time.time()
     window = _get_active_window_sec()
+    conn = _get_db()
+    try:
+        rows = conn.execute(
+            'SELECT username, last_cum_up, last_cum_dn, last_seen_at, '
+            'session_start_at, session_start_cum_up, session_start_cum_dn '
+            'FROM vpn_session_state '
+            'WHERE last_seen_at IS NOT NULL AND last_seen_at > ?',
+            (now - window,)
+        ).fetchall()
+    finally:
+        conn.close()
+
     result = []
-    for username, ts in list(_recent_active.items()):
-        if now - ts > window:
-            _recent_active.pop(username, None)
-            continue
-        sess_start = _session_start_ts.get(username, ts)
-        sess_start_cum = _session_start_cumulative.get(username, (0, 0))
-        curr_cum = _last_cumulative.get(username, (0, 0))
-        sess_up = max(0, curr_cum[0] - sess_start_cum[0])
-        sess_dn = max(0, curr_cum[1] - sess_start_cum[1])
-        summary = _get_user_summary(username)
+    for r in rows:
+        sess_start = r['session_start_at'] or r['last_seen_at']
+        sess_start_cum_up = r['session_start_cum_up'] or 0
+        sess_start_cum_dn = r['session_start_cum_dn'] or 0
+        curr_up = r['last_cum_up']
+        curr_dn = r['last_cum_dn']
+        sess_up = max(0, curr_up - sess_start_cum_up)
+        sess_dn = max(0, curr_dn - sess_start_cum_dn)
+        summary = _get_user_summary(r['username'])
         if not summary:
             continue
         result.append({
-            'username': username,
+            'username': r['username'],
             'uuid': summary['uuid'],
             'session_start': sess_start,
             'session_up': sess_up,
             'session_dn': sess_dn,
             'total_up': summary['total_up'] or 0,
             'total_dn': summary['total_dn'] or 0,
-            'last_seen': int(ts),
+            'last_seen': int(r['last_seen_at']),
         })
     return result
 
@@ -160,81 +241,6 @@ def get_inbound_total():
     return xray_client.query_inbound_total()
 
 
-def _sync_once():
-    global _last_cumulative
-    users = _list_vpn_users()
-    # 记录本轮开始时的"活跃集合"——本轮结束后如果某个用户从这个集合里掉出来，
-    # 说明 ta 没有再产生流量，即"会话刚结束"，需要归档到 vpn_session_history。
-    active_before = set(_recent_active.keys())
-    for u in users:
-        if not u["enabled"]:
-            continue
-        try:
-            up, dn = xray_client.query_user_traffic_by_email(u["username"])
-        except Exception as e:
-            log.warning(f"[traffic-sync] 拉取用户 {u['username']} 流量失败: {e}")
-            continue
-
-        username = u["username"]
-        if up == 0 and dn == 0:
-            # 用户本轮流量为 0（通常是因为已下线/超过 active window）：
-            # 从 _recent_active 移除，让本轮结尾的归档分支能感知到 ta "刚结束"。
-            # 上一版这里直接 continue，导致 _recent_active 永远留着这个用户，
-            # 归档分支的 `if username in _recent_active: continue` 永远命中，
-            # 离线的历史会话就再也写不进 vpn_session_history。
-            if username in _recent_active:
-                log.info(
-                    f"[traffic-sync] {username} 本轮无流量，从活跃集合移除（准备归档）"
-                )
-                _recent_active.pop(username, None)
-            continue
-
-        prev = _last_cumulative.get(username)
-        prev_ts = _recent_active.get(username)
-
-        # 新会话判定：
-        # 1) 首次见到（prev 为 None）；
-        # 2) 上次活跃距今 > 当前 active window（即用户离线过，再次复活）。
-        # 满足任一即视为新会话起点。
-        is_new_session = False
-        if prev is None:
-            is_new_session = True
-        elif prev_ts is not None and (time.time() - prev_ts) > _get_active_window_sec():
-            is_new_session = True
-
-        # xray 重启会让 stats 归零，prev 可能 > current，此时按 current 处理（=0 delta）
-        delta_up = max(0, up - (prev[0] if prev else 0))
-        delta_dn = max(0, dn - (prev[1] if prev else 0))
-
-        if delta_up > 0 or delta_dn > 0:
-            try:
-                _update_traffic(u["id"], delta_up, delta_dn)
-                _recent_active[username] = time.time()  # 标记活跃
-                log.info(f"[traffic-sync] {username} +↑{delta_up}/+↓{delta_dn}")
-            except Exception as e:
-                log.error(f"[traffic-sync] 写库失败: {e}")
-
-        # 更新会话起点（无论本轮是否有 delta，都要更新累计值，
-        # 否则下一次比较会拿到陈旧的 prev）
-        if is_new_session:
-            _session_start_ts[username] = time.time()
-            _session_start_cumulative[username] = (up, dn)
-            log.info(f"[traffic-sync] {username} 新会话开始（{_session_start_ts[username]:.0f}）")
-
-        _last_cumulative[username] = (up, dn)
-
-    # 归档：本轮结束后仍未在 _recent_active 里的用户 → 视为"会话刚结束"
-    # （覆盖：被禁用、流量为 0、用户被删除等所有"不再活跃"的路径）
-    now = time.time()
-    for username in active_before:
-        if username in _recent_active:
-            continue
-        _archive_session(username, ended_at=now)
-        # 从"曾经活跃"集合里清掉，避免重复归档（虽然下次 _sync_once 还会重做）
-        _session_start_ts.pop(username, None)
-        _session_start_cumulative.pop(username, None)
-
-
 def trigger_sync_now() -> bool:
     """在请求线程里立即触发一次 _sync_once()，不等下一个 daemon 周期（60s）。
     用于"访问 /vpn/connections 或 /vpn/sessions 时主动同步"。
@@ -261,13 +267,15 @@ def trigger_sync_now() -> bool:
 def _archive_session(username: str, ended_at: float):
     """把刚结束的会话归档到 vpn_session_history。
 
-    只在 _sync_once 里调用：判定用户上一轮还在 _recent_active、本轮消失了。
+    只在 _sync_once 里调用：判定用户上一轮还在活跃集合、本轮消失了。
     写入字段：user_id / username / uuid / started_at / ended_at / duration_sec /
               session_up / session_dn / last_ip / last_seen_at（device 暂时 NULL）。
     写完后调用 evict_session_history_lru() 触发上限清理。
 
     VPN_SESSION_HISTORY_MAX <= 0 表示归档功能完全停用：直接 return，不写新记录
     （清表动作交给 evict_session_history_lru 处理）。
+
+    数据来源：vpn_session_state（多 worker 共享），不再读内存 dict。
     """
     # 上限 <= 0 → 完全停用归档
     try:
@@ -278,53 +286,59 @@ def _archive_session(username: str, ended_at: float):
     if max_n <= 0:
         return
 
-    started_at = _session_start_ts.get(username)
-    sess_start_cum = _session_start_cumulative.get(username)
+    state = _load_state(username)
+    if not state:
+        return
+    started_at = state['session_start_at']
+    sess_start_cum_up = state['session_start_cum_up']
+    sess_start_cum_dn = state['session_start_cum_dn']
+    if started_at is None or sess_start_cum_up is None or sess_start_cum_dn is None:
+        # 从未真正"开始"过会话（比如首次拉流量就是 0，或 state 行被外部污染）
+        return
+
     summary = _get_user_summary(username)
     if not summary:
         return
-    # 起始时间缺失（用户从未真正"开始"过会话，比如首次拉流量就是 0）→ 跳过
-    if started_at is None or sess_start_cum is None:
-        return
 
-    curr_cum = _last_cumulative.get(username, sess_start_cum)
-    sess_up = max(0, int(curr_cum[0]) - int(sess_start_cum[0]))
-    sess_dn = max(0, int(curr_cum[1]) - int(sess_start_cum[1]))
+    curr_up = state['last_cum_up']
+    curr_dn = state['last_cum_dn']
+    sess_up = max(0, int(curr_up) - int(sess_start_cum_up))
+    sess_dn = max(0, int(curr_dn) - int(sess_start_cum_dn))
     duration_sec = max(0, int(ended_at) - int(started_at))
 
     # last_ip + last_seen_at 来自 vpn_users（access log tailer 写入）
+    import sqlite3
     conn = _get_db()
     try:
         row = conn.execute(
             'SELECT id, last_ip, last_seen_at FROM vpn_users WHERE username=?',
-            (username,),
+            (username,)
         ).fetchone()
         if not row:
             return
-        user_id = row['id']
-        last_ip = row['last_ip']
-        last_seen_at = row['last_seen_at']
-    finally:
-        conn.close()
-
-    conn = _get_db()
-    try:
-        conn.execute(
-            '''INSERT INTO vpn_session_history
-                 (user_id, username, uuid, started_at, ended_at, duration_sec,
-                  session_up, session_dn, last_ip, last_seen_at, device)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)''',
-            (user_id, username, summary['uuid'],
-             int(started_at), int(ended_at), duration_sec,
-             sess_up, sess_dn, last_ip, last_seen_at),
-        )
-        conn.commit()
-        log.info(
-            f"[traffic-sync] 归档会话: {username} "
-            f"{duration_sec}s ↑{sess_up}/↓{sess_dn} ip={last_ip}"
-        )
-    except Exception as e:
-        log.error(f"[traffic-sync] 归档会话失败 {username}: {e}")
+        try:
+            conn.execute(
+                '''INSERT INTO vpn_session_history
+                     (user_id, username, uuid, started_at, ended_at, duration_sec,
+                      session_up, session_dn, last_ip, last_seen_at, device)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)''',
+                (row['id'], username, summary['uuid'],
+                 int(started_at), int(ended_at), duration_sec,
+                 sess_up, sess_dn, row['last_ip'], row['last_seen_at']),
+            )
+            conn.commit()
+            log.info(
+                f"[traffic-sync] 归档会话: {username} "
+                f"{duration_sec}s ↑{sess_up}/↓{sess_dn} ip={row['last_ip']}"
+            )
+        except sqlite3.IntegrityError as e:
+            # 唯一索引 (username, started_at, ended_at) 撞了 → 多 worker 重复归档。
+            # 这是预期行为（兜底，不是错误），debug 级别即可。
+            log.debug(
+                f"[traffic-sync] 归档 {username} 已被另一 worker 写入，跳过: {e}"
+            )
+        except Exception as e:
+            log.error(f"[traffic-sync] 归档会话失败 {username}: {e}")
     finally:
         conn.close()
     # 触发 LRU 清理
@@ -373,6 +387,100 @@ def evict_session_history_lru():
         return cur.rowcount
     finally:
         conn.close()
+
+
+def _sync_once():
+    """核心同步循环。
+
+    边界判定（修复接入时间跳变 + 归档不触发）：
+    - 离线判定：连续 idle_rounds >= OFFLINE_IDLE_ROUNDS（默认 2 = 120s）才算离线。
+    - 新会话判定：本轮有流量 + (idle_rounds>=1 或 session_start_at is None) → 起新会话。
+    - 在线中：本轮有流量 + 上一轮有流量（idle_rounds=0 + session_start_at 存在）→ 续约旧会话。
+
+    xray 的累计值只在重启时归零，所以客户端下线后 up/dn 不会自己变 0，
+    不能用"up==0 and dn==0"判定离线。改用 idle_rounds：连续 N 轮没新增流量就算离线。
+    """
+    users = _list_vpn_users()
+    active_window = _get_active_window_sec()
+    now = time.time()
+    OFFLINE_IDLE_ROUNDS = 2  # 连续 2 轮（默认 2*60s=120s）无流量 = 离线
+
+    for u in users:
+        if not u["enabled"]:
+            continue
+        try:
+            up, dn = xray_client.query_user_traffic_by_email(u["username"])
+        except Exception as e:
+            log.warning(f"[traffic-sync] 拉取用户 {u['username']} 流量失败: {e}")
+            continue
+
+        username = u["username"]
+        state = _load_state(username)
+        prev_cum_up = state['last_cum_up'] if state else 0
+        prev_cum_dn = state['last_cum_dn'] if state else 0
+        prev_sess_start = state['session_start_at'] if state else None
+        prev_sess_cum_up = state['session_start_cum_up'] if state else None
+        prev_sess_cum_dn = state['session_start_cum_dn'] if state else None
+        prev_idle_rounds = state['idle_rounds'] if state else 0
+
+        # 防御 xray 重启归零：用 max(0, ...) 兜底
+        delta_up = max(0, up - prev_cum_up)
+        delta_dn = max(0, dn - prev_cum_dn)
+        has_traffic_this_round = (delta_up > 0 or delta_dn > 0)
+
+        if not has_traffic_this_round:
+            # 本轮无流量：仅 state 行已存在时累加 idle_rounds（从没建过 state 的用户跳过）。
+            if not state:
+                continue
+            new_idle = prev_idle_rounds + 1
+            _update_state_partial(username, idle_rounds=new_idle)
+            # 连续 idle >= 阈值且之前确实有会话 → 触发归档
+            if new_idle >= OFFLINE_IDLE_ROUNDS and prev_sess_start is not None:
+                _archive_session(username, ended_at=now)
+                # 清掉 session 起点（保留 last_cum_* 给下次"复活"判断）
+                _update_state_partial(
+                    username,
+                    last_seen_at=None,
+                    session_start_at=None,
+                    session_start_cum_up=None,
+                    session_start_cum_dn=None,
+                )
+            continue
+
+        # 本轮有流量：累加 delta 到 traffic 表
+        try:
+            _update_traffic(u["id"], delta_up, delta_dn)
+            if delta_up or delta_dn:
+                log.info(f"[traffic-sync] {username} +↑{delta_up}/+↓{delta_dn}")
+        except Exception as e:
+            log.error(f"[traffic-sync] 写库失败: {e}")
+            # 仍写 state：避免反复触发新会话判定 / 丢失会话起点
+
+        # 新会话判定：idle 复活 或 从未起过会话
+        is_new_session = (prev_idle_rounds >= 1) or (prev_sess_start is None)
+        if is_new_session:
+            new_sess_start = int(now)
+            new_sess_cum_up = up
+            new_sess_cum_dn = dn
+            log.info(
+                f"[traffic-sync] {username} 新会话开始（{new_sess_start}）"
+            )
+        else:
+            new_sess_start = prev_sess_start
+            new_sess_cum_up = prev_sess_cum_up
+            new_sess_cum_dn = prev_sess_cum_dn
+
+        # 写 state：last_cum_* 更新，idle_rounds 归 0，last_seen_at = now
+        _upsert_state(
+            username,
+            last_cum_up=up,
+            last_cum_dn=dn,
+            last_seen_at=int(now),
+            session_start_at=new_sess_start,
+            session_start_cum_up=new_sess_cum_up,
+            session_start_cum_dn=new_sess_cum_dn,
+            idle_rounds=0,
+        )
 
 
 # ===== 启动时同步 =====

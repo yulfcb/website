@@ -88,6 +88,13 @@ def get_db():
     conn.row_factory = sqlite3.Row
     # 让 vpn_users / vpn_traffic_records 的 ON DELETE CASCADE 真正生效
     conn.execute('PRAGMA foreign_keys = ON')
+    # 多 worker 并发写：WAL 让 reader/writer 不互斥；synchronous=NORMAL 折衷安全和性能
+    # PRAGMA journal_mode=WAL 是持久设置（写到文件头），这里每次执行 noop；safe to repeat
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    # 多 worker 同时写同一行时（如 traffic_sync 跨 worker 共享 state），
+    # 让 writer 短暂等待锁而不是立即 SQLITE_BUSY；2s 够短不阻塞用户，够长覆盖一轮
+    conn.execute('PRAGMA busy_timeout=2000')
     return conn
 
 
@@ -226,6 +233,24 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_vpn_ip_geo_last_seen
             ON vpn_ip_geo(last_seen_at)
     ''')
+    # 当前会话状态（traffic_sync 守护进程读/写；gunicorn 多 worker 共享）：
+    # 把之前 4 个内存 dict 沉到表里，跨 worker 看到同一份"在线/会话起点"状态。
+    # 一行 = 一个用户最近一次的累计流量 + 最近活跃时间 + 当前会话起点。
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS vpn_session_state (
+            username TEXT PRIMARY KEY,
+            last_cum_up INTEGER NOT NULL DEFAULT 0,
+            last_cum_dn INTEGER NOT NULL DEFAULT 0,
+            last_seen_at INTEGER,                  -- NULL 或距今 > active window = 不活跃
+            session_start_at INTEGER,              -- 当前活跃会话的起点；NULL = 不在会话中
+            session_start_cum_up INTEGER,          -- 会话开始时 xray 累计 up
+            session_start_cum_dn INTEGER           -- 会话开始时 xray 累计 dn
+        )
+    ''')
+    conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_vpn_session_state_last_seen
+            ON vpn_session_state(last_seen_at)
+    ''')
     # 历史终端：每次"会话刚结束"由 traffic_sync 写一行。供 /vpn/sessions 页面查询、筛选、分页。
     # 上限由 VPN_SESSION_HISTORY_MAX 控制（默认 5000），超限按 ended_at ASC 删最老。
     conn.execute('''
@@ -257,6 +282,23 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_vpn_session_history_ended
             ON vpn_session_history(ended_at)
     ''')
+    # 多 worker 并发归档的去重索引：同一 (username, started_at, ended_at) 唯一
+    # （gunicorn 4 个 worker 各自跑 daemon，多 worker 可能同时尝试插同一会话记录）
+    conn.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS uniq_vpn_session_history_user_session
+            ON vpn_session_history(username, started_at, ended_at)
+    ''')
+    # 兼容老库：vpn_session_state 在前一轮新增了 idle_rounds / last_delta_* 字段。
+    # 用 try/except 跳过已存在的列（重复 ADD COLUMN 会报错）。
+    for col, decl in (
+        ('last_delta_up', 'INTEGER NOT NULL DEFAULT 0'),
+        ('last_delta_dn', 'INTEGER NOT NULL DEFAULT 0'),
+        ('idle_rounds',  'INTEGER NOT NULL DEFAULT 0'),
+    ):
+        try:
+            conn.execute(f'ALTER TABLE vpn_session_state ADD COLUMN {col} {decl}')
+        except Exception:
+            pass  # 已存在
     # 邀请码功能已废弃：清理旧表（幂等，下次启动自动 DROP）
     conn.execute('DROP TABLE IF EXISTS vpn_invite_codes')
     conn.execute('''
