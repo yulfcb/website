@@ -309,6 +309,32 @@ def init_db():
             created_at INTEGER NOT NULL
         )
     ''')
+    # 丝绸之路生日游戏（silk-road）：一次游玩会话
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS game_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT UNIQUE NOT NULL,
+            nickname TEXT,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    # 关卡通关 / 失败复活的元数据日志。
+    # ⚠️ 绝不存女朋友的"秘密"原文：kind='fail_secret' 时只记 message_length（字符数），仅用于去重。
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS game_reward_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            level_id INTEGER NOT NULL,
+            triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            message_length INTEGER,
+            kind TEXT NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_game_reward_log_dedup
+            ON game_reward_log(session_id, level_id, kind)
+    ''')
     conn.execute('PRAGMA foreign_keys = ON')
     conn.commit()
     # 默认设置（仅当 settings 表里没值时插入）
@@ -811,6 +837,148 @@ def send_anniversary_feishu(message_text):
 
 
 # =============================================================================
+# Silk Road Birthday Game — Config & Feishu Reward/Secret Push
+# =============================================================================
+
+GAME_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'data', 'game_config.json'
+)
+
+# 兜底配置：game_config.json 读不到时用（保证路由不 500）
+_GAME_CONFIG_FALLBACK = {
+    'nickname_default': '小卡',
+    'total_reward': 1314.00,
+    'modes': {},
+    'levels': [],
+}
+
+
+def load_game_config():
+    """读取丝绸之路游戏配置（data/game_config.json）。只读，不含敏感信息。"""
+    try:
+        with open(GAME_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        app.logger.error(f"[game] failed to load game config: {e}")
+        return dict(_GAME_CONFIG_FALLBACK)
+
+
+def game_level_by_id(level_id):
+    """按 id 取关卡配置，找不到返回 None。"""
+    try:
+        target = int(level_id)
+    except (TypeError, ValueError):
+        return None
+    for lv in load_game_config().get('levels', []):
+        try:
+            if int(lv.get('id')) == target:
+                return lv
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def send_game_reward_feishu(level_info):
+    """通关奖励推送（礼物专属：不受 FEISHU_NOTIFY_ENABLED 总开关控制）。
+
+    level_info: {nickname, level_title, amount, timestamp, quote}
+    日志中不打印玩家昵称/文案原文，只记结构化状态。
+    """
+    try:
+        webhook_url = get_setting('FEISHU_WEBHOOK_URL', '')
+        if not webhook_url or 'placeholder' in webhook_url:
+            app.logger.warning("[game-reward] webhook url empty/placeholder, skip")
+            return False
+
+        nickname = level_info.get('nickname', '小卡')
+        level_title = level_info.get('level_title', '')
+        amount = level_info.get('amount', 0)
+        timestamp = level_info.get('timestamp') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        quote = level_info.get('quote', '') or '—'
+
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": "🎮 闯关胜利！"},
+                    "template": "pink"
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "fields": [
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**玩家:** {nickname}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**关卡:** {level_title}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**奖励额度:** ¥{amount}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**触发时间:** {timestamp}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**关卡文案:** {quote}"}},
+                        ]
+                    },
+                    {"tag": "note", "elements": [{"tag": "plain_text", "content": "💌 她已过关，请尽快发红包给她"}]}
+                ]
+            }
+        }
+
+        resp = requests.post(webhook_url, json=card, timeout=5)
+        app.logger.info(
+            f"[game-reward] sent: status={resp.status_code} level='{level_title}' amount={amount}"
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        app.logger.error(f"[game-reward] failed to send: {e}")
+        return False
+
+
+def send_game_secret_feishu(secret_info):
+    """失败复活"秘密"推送（礼物专属：不受 FEISHU_NOTIFY_ENABLED 控制）。
+
+    secret_info: {nickname, level_title, secret_text}
+    ⚠️ secret_text 只进飞书卡片，绝不入库、绝不打印明文（日志用 [redacted] + 长度）。
+    """
+    try:
+        webhook_url = get_setting('FEISHU_WEBHOOK_URL', '')
+        if not webhook_url or 'placeholder' in webhook_url:
+            app.logger.warning("[game-secret] webhook url empty/placeholder, skip")
+            return False
+
+        nickname = secret_info.get('nickname', '小卡')
+        level_title = secret_info.get('level_title', '')
+        secret_text = secret_info.get('secret_text', '')
+
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": "💌 她有个秘密"},
+                    "template": "blue"
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "fields": [
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**她:** {nickname}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**关卡:** {level_title}"}},
+                            {"is_short": False, "text": {"tag": "lark_md", "content": f"**内容:**\n> {secret_text}"}},
+                        ]
+                    },
+                    {"tag": "note", "elements": [{"tag": "plain_text", "content": "✨ 仅此一次，不进任何数据库"}]}
+                ]
+            }
+        }
+
+        resp = requests.post(webhook_url, json=card, timeout=5)
+        # 只记状态 + 长度，绝不打印 secret_text 原文
+        app.logger.info(
+            f"[game-secret] sent: status={resp.status_code} level='{level_title}' "
+            f"secret=[redacted] len={len(secret_text)}"
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        app.logger.error(f"[game-secret] failed to send: {e}")
+        return False
+
+
+# =============================================================================
 # Admin Authentication Decorator
 # =============================================================================
 
@@ -1137,6 +1305,197 @@ def mine_leaderboard(difficulty):
         return jsonify(result)
     finally:
         conn.close()
+
+
+# =============================================================================
+# Routes - Silk Road Birthday Game (丝绸之路·回家)
+# =============================================================================
+
+def _game_request_json():
+    """健壮地取请求体：支持 application/json，也支持 curl -d '{...}'（无 content-type）。"""
+    data = request.get_json(silent=True)
+    if data is None:
+        try:
+            data = json.loads(request.get_data(as_text=True) or '{}')
+        except Exception:
+            data = request.form.to_dict() if request.form else {}
+    if not isinstance(data, dict):
+        data = {}
+    return data
+
+
+def _game_clean_nickname(raw, cfg=None):
+    nickname = (raw or '').strip()
+    if not nickname:
+        nickname = (cfg or load_game_config()).get('nickname_default') or '小卡'
+    return nickname[:20]
+
+
+@app.route('/games/silk-road/mode')
+def silk_road_mode():
+    """模式选择页（陆上丝绸之路可玩，海上 / 豪华游 disabled）。"""
+    track_visit()
+    return render_template('silk-road/mode.html', config=load_game_config())
+
+
+@app.route('/games/silk-road/level/<int:n>')
+def silk_road_level(n):
+    """关卡页 0~5（M1 为占位骨架）。"""
+    track_visit()
+    if n < 0 or n > 5:
+        return redirect(url_for('silk_road_mode'))
+    cfg = load_game_config()
+    level = game_level_by_id(n)
+    next_url = url_for('silk_road_end') if n >= 5 else url_for('silk_road_level', n=n + 1)
+    return render_template(
+        f'silk-road/level-{n}.html',
+        config=cfg, level=level, level_id=n, next_url=next_url,
+    )
+
+
+@app.route('/games/silk-road/end')
+def silk_road_end():
+    """终局页：累计奖励总额。"""
+    track_visit()
+    cfg = load_game_config()
+    total = cfg.get('total_reward')
+    if total is None:
+        total = round(sum(float(l.get('reward', 0)) for l in cfg.get('levels', [])), 2)
+    return render_template('silk-road/end.html', config=cfg, total_reward=total)
+
+
+@app.route('/api/game/config')
+def api_game_config():
+    """只读返回关卡/载具/红包配置（不含任何敏感信息）。"""
+    return jsonify(load_game_config())
+
+
+@app.route('/api/game/session', methods=['POST'])
+def api_game_session():
+    """创建一次游玩 session，返回 {session_id, nickname}。"""
+    cfg = load_game_config()
+    data = _game_request_json()
+    nickname = _game_clean_nickname(data.get('nickname'), cfg)
+    session_id = _secrets.token_hex(16)
+    conn = get_db()
+    try:
+        conn.execute(
+            'INSERT INTO game_sessions (session_id, nickname) VALUES (?, ?)',
+            (session_id, nickname),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'session_id': session_id, 'nickname': nickname})
+
+
+@app.route('/api/game/reward/claim', methods=['POST'])
+def api_game_reward_claim():
+    """关卡通关 → 触发 reward webhook。
+
+    去重：同 (session_id, level_id, kind='reward') 只触发一次（防止狂点"已领取"）。
+    body: {session_id, level, nickname}
+    """
+    data = _game_request_json()
+    session_id = (data.get('session_id') or '').strip()
+    nickname = _game_clean_nickname(data.get('nickname'))
+    if not session_id:
+        return jsonify({'success': False, 'error': 'missing session_id'}), 400
+    try:
+        level = int(data.get('level'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'invalid level'}), 400
+    level_cfg = game_level_by_id(level)
+    if not level_cfg:
+        return jsonify({'success': False, 'error': 'unknown level'}), 400
+
+    conn = get_db()
+    try:
+        conn.execute(
+            'UPDATE game_sessions SET last_seen_at=CURRENT_TIMESTAMP, nickname=? WHERE session_id=?',
+            (nickname, session_id),
+        )
+        existing = conn.execute(
+            "SELECT 1 FROM game_reward_log WHERE session_id=? AND level_id=? AND kind='reward'",
+            (session_id, level),
+        ).fetchone()
+        if existing:
+            conn.commit()
+            return jsonify({'success': True, 'duplicate': True, 'triggered': False})
+        # 先落去重行再发 webhook：避免并发双击各发一次
+        conn.execute(
+            "INSERT INTO game_reward_log (session_id, level_id, kind, message_length) "
+            "VALUES (?, ?, 'reward', NULL)",
+            (session_id, level),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    triggered = send_game_reward_feishu({
+        'nickname': nickname,
+        'level_title': level_cfg.get('title', ''),
+        'amount': level_cfg.get('reward', 0),
+        'quote': level_cfg.get('quote', ''),
+        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    })
+    return jsonify({'success': True, 'duplicate': False, 'triggered': triggered})
+
+
+@app.route('/api/game/secret', methods=['POST'])
+def api_game_secret():
+    """失败复活 → 提交"秘密" → 触发 secret webhook。
+
+    ⚠️ secret_text 绝不入库：只把 message_length 写进 game_reward_log 用于去重。
+    body: {session_id, level, nickname, secret_text}
+    """
+    data = _game_request_json()
+    session_id = (data.get('session_id') or '').strip()
+    nickname = _game_clean_nickname(data.get('nickname'))
+    secret_text = (data.get('secret_text') or '').strip()
+    if not session_id:
+        return jsonify({'success': False, 'error': 'missing session_id'}), 400
+    try:
+        level = int(data.get('level'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'invalid level'}), 400
+    if not secret_text:
+        return jsonify({'success': False, 'error': 'empty secret'}), 400
+    if len(secret_text) > 200:
+        secret_text = secret_text[:200]
+
+    level_cfg = game_level_by_id(level)
+    level_title = level_cfg.get('title', '') if level_cfg else f'关卡 {level}'
+    msg_len = len(secret_text)
+
+    conn = get_db()
+    try:
+        conn.execute(
+            'UPDATE game_sessions SET last_seen_at=CURRENT_TIMESTAMP, nickname=? WHERE session_id=?',
+            (nickname, session_id),
+        )
+        existing = conn.execute(
+            "SELECT 1 FROM game_reward_log WHERE session_id=? AND level_id=? AND kind='fail_secret'",
+            (session_id, level),
+        ).fetchone()
+        if not existing:
+            # 仅存元数据长度，绝不存原文
+            conn.execute(
+                "INSERT INTO game_reward_log (session_id, level_id, kind, message_length) "
+                "VALUES (?, ?, 'fail_secret', ?)",
+                (session_id, level, msg_len),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    triggered = send_game_secret_feishu({
+        'nickname': nickname,
+        'level_title': level_title,
+        'secret_text': secret_text,
+    })
+    # 注意：这里以及任何地方都不 log secret_text 原文
+    return jsonify({'success': True, 'triggered': triggered})
 
 
 # =============================================================================

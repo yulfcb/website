@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}丝绸之路 · 回家{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!--
+    M2 关卡引擎接入点：Pixi.js v7 CDN（当前 M1 骨架阶段先注释，避免加载无用脚本）
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+  -->
+  <style>
+    body { background: #1b2135; color: #f4ecd8; }
+    .silk-stage {
+      max-width: 720px; margin: 48px auto; padding: 32px 24px;
+      text-align: center; border-radius: 16px;
+      background: linear-gradient(160deg, #2a2140 0%, #1b2135 100%);
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+    .silk-badge {
+      display: inline-block; padding: 4px 14px; margin-bottom: 12px;
+      border-radius: 999px; font-size: 13px; letter-spacing: 1px;
+      background: #e8b96a; color: #2a2140; font-weight: 700;
+    }
+    .silk-title { font-size: 30px; margin: 8px 0 4px; color: #ffd98a; }
+    .silk-vehicle { font-size: 56px; margin: 12px 0; }
+    .silk-quote { font-size: 15px; color: #a8d8c0; font-style: italic; min-height: 22px; }
+    .silk-placeholder { margin: 20px 0 6px; color: #c9c2d8; }
+    .silk-hint { font-size: 13px; color: #f6b5c8; margin: 0 0 8px; }
+    .silk-next, .silk-back {
+      display: inline-block; margin-top: 20px; padding: 12px 28px;
+      border-radius: 999px; text-decoration: none; font-weight: 700;
+      background: #f6b5c8; color: #2a2140; transition: transform .12s ease;
+    }
+    .silk-next:hover, .silk-back:hover { transform: translateY(-2px); }
+    .silk-back { background: transparent; color: #a8d8c0; border: 1px solid #4a5578; margin-left: 8px; }
+    .silk-total { font-size: 42px; color: #ffd98a; font-weight: 800; margin: 16px 0; }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="silk-stage">
+    {% block content %}{% endblock %}
+    <div><a class="silk-back" href="{{ url_for('silk_road_mode') }}">← 返回模式</a></div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

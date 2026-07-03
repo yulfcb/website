@@ -1,0 +1,17 @@
+{
+  "nickname_default": "小卡",
+  "total_reward": 1314.00,
+  "modes": {
+    "land": {"title": "陆上丝绸之路", "unlocked": true},
+    "sea": {"title": "海上丝绸之路", "unlocked": false},
+    "luxury": {"title": "亚非欧豪华游", "unlocked": false}
+  },
+  "levels": [
+    {"id": 0, "title": "起航·多哈", "reward": 6.66, "can_fail": false, "vehicle": "🛳️", "quote": "从你出发的地方，回到你身边"},
+    {"id": 1, "title": "伊朗·星空", "reward": 13.14, "can_fail": false, "vehicle": "", "quote": "你还记得吗，那晚的沙漠 / 抬头看，整片天都是你的"},
+    {"id": 2, "title": "土耳其·骆驼商队", "reward": 20.20, "can_fail": false, "vehicle": "🐪", "quote": "慢一点也没关系，只要方向是你"},
+    {"id": 3, "title": "哈萨克斯坦·草原骑马", "reward": 88.00, "can_fail": true, "vehicle": "🐎", "quote": "策马穿过草原，只为早一点见你"},
+    {"id": 4, "title": "新疆·雪山滑雪", "reward": 88.00, "can_fail": true, "vehicle": "🏂", "quote": "那片雪，是不是我们踩过的那一片"},
+    {"id": 5, "title": "成都·到家", "reward": 1098.00, "can_fail": false, "vehicle": "", "quote": "回家了 / 所有的路，都是为了走向你"}
+  ]
+}

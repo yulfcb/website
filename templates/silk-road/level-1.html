@@ -1,0 +1,12 @@
+{% extends "silk-road/_level_base.html" %}
+{% block content %}
+  <div class="silk-badge">关卡 {{ level_id }} / 5</div>
+  <h1 class="silk-title">{{ level.title if level else '关卡 ' ~ level_id }}</h1>
+  {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
+  <p class="silk-quote">{{ level.quote if level else '' }}</p>
+  <p class="silk-placeholder">这是关卡 {{ level_id }}（骨架占位 · M2 接入 Pixi.js 玩法）</p>
+  {% if level and level.can_fail %}<p class="silk-hint">（本关 M3 会加入失败 / 复活机制）</p>{% endif %}
+  <a class="silk-next" href="{{ next_url }}">
+    {% if level_id >= 5 %}到家啦 · 查看情书 →{% else %}下一关 →{% endif %}
+  </a>
+{% endblock %}

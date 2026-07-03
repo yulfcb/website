@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>丝绸之路 · 选择路线</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body { background: #1b2135; color: #f4ecd8; }
+    .silk-wrap { max-width: 900px; margin: 40px auto; padding: 0 20px; text-align: center; }
+    .silk-h1 { font-size: 32px; color: #ffd98a; margin-bottom: 4px; }
+    .silk-sub { color: #a8d8c0; margin-bottom: 8px; }
+    .silk-nick { margin: 18px 0 28px; }
+    .silk-nick label { color: #c9c2d8; margin-right: 8px; }
+    .silk-nick input {
+      padding: 8px 14px; border-radius: 999px; border: 1px solid #4a5578;
+      background: #2a2140; color: #ffd98a; font-size: 15px; width: 160px; text-align: center;
+    }
+    .silk-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 10px; }
+    .silk-mode {
+      display: block; text-decoration: none; padding: 28px 20px; border-radius: 16px;
+      background: linear-gradient(160deg, #2a2140 0%, #1b2135 100%);
+      box-shadow: 0 8px 28px rgba(0,0,0,.3); transition: transform .14s ease; color: inherit;
+    }
+    .silk-mode:hover { transform: translateY(-4px); }
+    .silk-mode .icon { font-size: 46px; }
+    .silk-mode .t { font-size: 20px; font-weight: 700; color: #ffd98a; margin: 10px 0 4px; }
+    .silk-mode .badge { display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .silk-mode.playable .badge { background: #a6e3a1; color: #1b2135; }
+    .silk-mode.disabled { opacity: .5; cursor: not-allowed; filter: grayscale(.6); }
+    .silk-mode.disabled .badge { background: #6c7086; color: #eee; }
+  </style>
+</head>
+<body>
+  <div class="silk-wrap">
+    <h1 class="silk-h1">🐫 丝绸之路 · 回家</h1>
+    <p class="silk-sub">从卡塔尔出发，一路向东，回到成都</p>
+
+    <div class="silk-nick">
+      <label for="nickname">你的昵称</label>
+      <input type="text" id="nickname" maxlength="20"
+             value="{{ config.nickname_default or '小卡' }}" placeholder="小卡">
+    </div>
+
+    <div class="silk-modes">
+      <a class="silk-mode playable" href="{{ url_for('silk_road_level', n=0) }}">
+        <div class="icon">🏜️</div>
+        <div class="t">{{ config.modes.land.title if config.modes.land else '陆上丝绸之路' }}</div>
+        <div class="d">6 关闯关 · 一路向家</div>
+        <span class="badge">可玩</span>
+      </a>
+      <div class="silk-mode disabled">
+        <div class="icon">🌊</div>
+        <div class="t">{{ config.modes.sea.title if config.modes.sea else '海上丝绸之路' }}</div>
+        <div class="d">扬帆远航的另一条路</div>
+        <span class="badge">敬请期待</span>
+      </div>
+      <div class="silk-mode disabled">
+        <div class="icon">✈️</div>
+        <div class="t">{{ config.modes.luxury.title if config.modes.luxury else '亚非欧豪华游' }}</div>
+        <div class="d">环游三大洲的浪漫</div>
+        <span class="badge">敬请期待</span>
+      </div>
+    </div>
+
+    <p style="margin-top:28px"><a href="/games" style="color:#a8d8c0">← 返回游戏中心</a></p>
+  </div>
+
+  <script>
+    // M1 骨架：把昵称记到 localStorage，M2 关卡引擎会读它来建 session
+    (function () {
+      var input = document.getElementById('nickname');
+      var saved = localStorage.getItem('silkroad_nickname');
+      if (saved) input.value = saved;
+      input.addEventListener('input', function () {
+        localStorage.setItem('silkroad_nickname', input.value.trim());
+      });
+    })();
+  </script>
+</body>
+</html>
