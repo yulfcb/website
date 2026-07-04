@@ -39,8 +39,9 @@ window.QATAR_LEVEL = {
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park 体育公园' },
   ],
 
-  // 老商人 NPC
-  merchant: { x: 580, y: 320, emoji: '👳', line: '给心上人的礼物，要发自真心。要带走几件，看你的取舍。' },
+  // 老商人 NPC —— 移出 Souq Waqif 区域（避开 gifts[0] 沙漠之眼在 souq_waqif），
+  // 放到地图东北角空白区，玩家要"专门去找"他才能触发对话。
+  merchant: { x: 1080, y: 100, emoji: '👳', line: '给心上人的礼物，要发自真心。要带走几件，看你的取舍。' },
 
   // NPC banner 3 帧文案
   npcFrames: [

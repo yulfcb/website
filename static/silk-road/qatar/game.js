@@ -549,6 +549,8 @@
     showMerchant: function () {
       var self = this;
       if (this.merchantShown) return;
+      // 2.5 秒内不要重复触发（M8.4：避免玩家关掉 modal 立刻又开=体验卡死循环）
+      if (this._merchantCooldownUntil && Date.now() < this._merchantCooldownUntil) return;
       this.merchantShown = true;
       this.modalContainer.removeAll(true);
 
@@ -572,6 +574,8 @@
       var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
       btnZone.on('pointerdown', function () {
         self.modalContainer.setVisible(false);
+        // M8.4：2.5s cool-down，关掉就别立刻又来（player 还停在附近）
+        self._merchantCooldownUntil = Date.now() + 2500;
         self.time.delayedCall(1000, function () { self.merchantShown = false; });
       });
       this.modalContainer.add([btnBg, btnText, btnZone]);
