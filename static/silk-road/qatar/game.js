@@ -43,6 +43,12 @@
   var BootScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
+    preload: function () {
+      // M9.6a: User-provided World Cup trophy (white-bg key-out PNG) loaded once here
+      // so all scenes can reference it by key 'world-cup-trophy'.
+      this.load.image('world-cup-trophy',
+        '/static/vendor/silk-road/trophy/world-cup-trophy-128.png');
+    },
     create: function () {
       var self = this;
       this.cameras.main.setBackgroundColor('#1b2135');
@@ -182,15 +188,34 @@
         self.oasisSprites.push(oasis);
       });
 
-      // —— 6 个礼物 ——
+      // —— 7 个礼物 ——
       this.giftSprites = [];
-      // M9.5g: 给每个 gift 单独构建 sprite. id=6 (大力神杯) 用 graphics 程序画,
-      // 其他 6 个用 emoji (图省事, 都是装饰).
+      // M9.5g: 给每个 gift 单独构建 sprite.
+      // M9.6a: gift 6 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
+      // 其他 6 个保留 emoji (修饰, 省事).
       L.gifts.forEach(function (g) {
         var sprite;
         if (g.id === 6) {
-          // World Cup trophy — 用 graphics 程序画, 不要 emoji
-          sprite = self._buildWorldCupSprite(g);
+          // M9.6a: World Cup trophy — 用 user-provided PNG (key-out 白底).
+          // PNG 128x128 sprite 框内有 sports decoration.
+          // 给我们 gift 大体 64x64 显示 (调 display size).
+          var container = self.add.container(g.x, g.y);
+          // 光晕 (金黄) 跟其他 gift 一致
+          var glow = self.add.graphics();
+          glow.fillStyle(0xFFD98A, 0.4);
+          glow.fillCircle(0, 0, 28);
+          container.add(glow);
+          // 实际杯 (use image)
+          var trophyImg = self.add.image(0, 0, 'world-cup-trophy');
+          trophyImg.setDisplaySize(56, 56);  // 跟其他 gift emoji 38px ~ 一致
+          container.add(trophyImg);
+          // label
+          var label = self.add.text(0, 30, g.name, {
+            fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
+            stroke: '#4A2E1A', strokeThickness: 3,
+          }).setOrigin(0.5);
+          container.add(label);
+          sprite = container;
         } else {
           var glow = self.add.graphics();
           glow.fillStyle(0xFFD98A, 0.35);
