@@ -31,6 +31,9 @@
     <span class="qtr-fs-label">全屏</span>
   </button>
 
+  {# M9.4: 世界地图浮动按钮（关 0 Phaser 专用，放在全屏按钮下方，避免冲突） #}
+  <a id="qatar-fab-map" href="/games/silk-road/world-map" aria-label="世界地图" title="世界地图">🗺️</a>
+
   {# Phaser 3.80.1 —— 本地静态资源，不走任何 CDN #}
   <script src="{{ url_for('static', filename='vendor/phaser-3.80.1.min.js') }}"></script>
 

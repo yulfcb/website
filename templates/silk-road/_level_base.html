@@ -140,10 +140,33 @@
     .slk-pg-count { font-size: 12px; color: #c9c2d8; margin-top: 4px; text-align: center; }
     .slk-pg-count b { color: #ffd98a; font-weight: 700; }
     .slk-pg-count-num { color: #a6e3a1; font-weight: 800; font-size: 13px; }
+
+    /* M9.4 世界地图浮动按钮（关 1-5 通用）*/
+    .silk-fab-map {
+      position: fixed; top: 12px; right: 12px;
+      width: 44px; height: 44px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255, 217, 138, 0.92);
+      color: #2a2140; text-decoration: none;
+      font-size: 20px; line-height: 1;
+      box-shadow: 0 4px 12px rgba(0,0,0,.35);
+      border: 1px solid rgba(255, 217, 138, 0.6);
+      transition: transform .14s ease, background .14s ease;
+      z-index: 1000;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .silk-fab-map:hover { transform: translateY(-2px); background: #ffd98a; }
+    .silk-fab-map:focus { outline: none; box-shadow: 0 4px 12px rgba(0,0,0,.35), 0 0 0 3px rgba(255, 217, 138, .4); }
+    @media (max-width: 480px) {
+      .silk-fab-map { top: 8px; right: 8px; width: 40px; height: 40px; font-size: 18px; }
+    }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  {# M9.4 世界地图浮动按钮（关 1-5 通用）#}
+  <a class="silk-fab-map" href="{{ url_for('silk_road_world_map') }}" aria-label="世界地图" title="世界地图">🗺️</a>
   {# M4 跨关进度条 #}
   <div id="silk-progress-bar-host"></div>
   <div class="silk-stage">

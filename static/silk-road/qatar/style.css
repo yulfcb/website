@@ -127,3 +127,32 @@ html, body {
 :-webkit-full-screen #qatar-fullscreen {
   top: env(safe-area-inset-top, 0);
 }
+
+/* ====== M9.4 世界地图浮动按钮（关 0 Phaser 专用）====== */
+#qatar-fab-map {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 64px);  /* 在 fullscreen 按钮下方 20px */
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(255, 217, 138, 0.92);
+  color: #2a2140;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 217, 138, 0.6);
+  cursor: pointer;
+  z-index: 250;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s ease, background .14s ease;
+}
+#qatar-fab-map:hover { transform: translateY(-2px); background: #ffd98a; }
+@media (max-width: 480px) {
+  #qatar-fab-map { width: 44px; height: 44px; font-size: 20px; }
+}

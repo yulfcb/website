@@ -1364,6 +1364,13 @@ def silk_road_level(n):
     )
 
 
+@app.route('/games/silk-road/world-map')
+def silk_road_world_map():
+    """M9.4 静态世界地图（SVG 6 关路线）。"""
+    track_visit()
+    return render_template('silk-road/world-map.html', config=load_game_config())
+
+
 @app.route('/games/silk-road/end')
 def silk_road_end():
     """终局页：累计奖励总额 + 通关时间（仅渲染模板，不打 webhook）。"""

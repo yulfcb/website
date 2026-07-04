@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>丝绸之路 · 世界地图</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      background: radial-gradient(ellipse at 50% 30%, #2a2140 0%, #14102a 80%);
+      color: #f4ecd8;
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    /* 顶部 bar */
+    .wmp-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 22px; max-width: 1280px; margin: 0 auto;
+    }
+    .wmp-back {
+      color: #a8d8c0; text-decoration: none; font-size: 14px;
+      padding: 8px 14px; border-radius: 999px;
+      border: 1px solid rgba(168, 216, 192, 0.5);
+      transition: background .14s ease;
+    }
+    .wmp-back:hover { background: rgba(168, 216, 192, 0.1); }
+    .wmp-title { font-size: 18px; color: #ffd98a; font-weight: 700; letter-spacing: 1px; }
+    .wmp-cleared { font-size: 13px; color: #c9c2d8; }
+    .wmp-cleared b { color: #ffd98a; }
+
+    /* 主舞台 */
+    .wmp-stage {
+      max-width: 1280px; margin: 12px auto 40px; padding: 0 20px;
+    }
+    .wmp-svg-wrap {
+      width: 100%; aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1b2135 0%, #2a2140 100%);
+      border-radius: 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.4);
+      overflow: hidden;
+      position: relative;
+    }
+    .wmp-svg-wrap svg {
+      display: block; width: 100%; height: 100%;
+    }
+
+    /* marker 样式 */
+    .slk-marker { cursor: pointer; transition: transform .18s ease; transform-origin: center; transform-box: fill-box; }
+    .slk-marker:not(.locked):hover { transform: scale(1.12); }
+    .slk-marker.locked { cursor: not-allowed; }
+    .slk-marker.current .slk-marker-pulse {
+      animation: slk-marker-pulse 1.6s ease-in-out infinite;
+      transform-origin: center; transform-box: fill-box;
+    }
+    @keyframes slk-marker-pulse {
+      0%,100% { opacity: 0.35; r: 26; }
+      50%     { opacity: 0.0;  r: 40; }
+    }
+
+    /* 底部说明条 */
+    .wmp-legend {
+      max-width: 1280px; margin: 18px auto 0; padding: 0 22px;
+      display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+      color: #c9c2d8; font-size: 13px;
+    }
+    .wmp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .wmp-legend-swatch {
+      display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,.4);
+    }
+    .sw-gold   { background: #ffd98a; border: 2px solid #ffb86c; }
+    .sw-blue   { background: #a8d8c0; border: 2px solid #6c9c8e; }
+    .sw-gray   { background: #5d6680; border: 2px solid #3a3f55; }
+    .sw-pulse  { background: #ffd98a; border: 2px solid #ffd98a; box-shadow: 0 0 0 4px rgba(255,217,138,.4); }
+
+    /* 移动端 */
+    @media (max-width: 720px) {
+      .wmp-topbar { padding: 10px 14px; }
+      .wmp-svg-wrap { aspect-ratio: auto; min-height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wmp-topbar">
+    <a class="wmp-back" href="{{ url_for('silk_road_mode') }}">← 返回路线选择</a>
+    <div class="wmp-title">🗺️ 丝绸之路 · 世界地图</div>
+    <div class="wmp-cleared" id="wmp-cleared-count">已通关 <b>0</b> / 6 关</div>
+  </div>
+
+  <div class="wmp-stage">
+    <div class="wmp-svg-wrap">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" id="silkroad-world-map" role="img" aria-label="丝绸之路世界地图 6 关路线">
+        <defs>
+          <!-- 渐变：海洋 -->
+          <radialGradient id="oceanGradient" cx="50%" cy="50%" r="65%">
+            <stop offset="0%"   stop-color="#2d4d6a"/>
+            <stop offset="100%" stop-color="#16263d"/>
+          </radialGradient>
+          <!-- 渐变：陆地 -->
+          <linearGradient id="landGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stop-color="#8a6f4a"/>
+            <stop offset="100%" stop-color="#5d4a30"/>
+          </linearGradient>
+          <!-- 沙漠效果 -->
+          <linearGradient id="desertGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stop-color="#d4a76a"/>
+            <stop offset="100%" stop-color="#a87a40"/>
+          </linearGradient>
+          <!-- 路径阴影 -->
+          <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          <!-- 标记点阴影 -->
+          <filter id="markerShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.5"/>
+          </filter>
+        </defs>
+
+        <!-- 海洋背景 -->
+        <rect x="0" y="0" width="1280" height="720" fill="url(#oceanGradient)"/>
+
+        <!-- 经纬网格 -->
+        <g stroke="#3a5570" stroke-width="0.5" opacity="0.4">
+          {% for lat in range(0, 721, 60) %}
+            <line x1="0" y1="{{ lat }}" x2="1280" y2="{{ lat }}"/>
+          {% endfor %}
+          {% for lon in range(0, 1281, 80) %}
+            <line x1="{{ lon }}" y1="0" x2="{{ lon }}" y2="720"/>
+          {% endfor %}
+        </g>
+        <!-- 经纬标签 -->
+        <g fill="#6c7086" font-size="9" font-family="monospace">
+          <text x="10" y="14">60°N</text>
+          <text x="10" y="354">30°N</text>
+          <text x="10" y="714">赤道</text>
+          <text x="20" y="710" font-size="8">0°</text>
+          <text x="580" y="710" font-size="8">60°E</text>
+          <text x="940" y="710" font-size="8">90°E</text>
+        </g>
+
+        <!-- 世界大陆轮廓（极简化） -->
+        <!-- 非洲 -->
+        <path d="M 530,420 L 580,380 L 640,370 L 700,390 L 720,440 L 700,500 L 660,560 L 600,600 L 540,580 L 510,520 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.85"/>
+        <!-- 欧洲 -->
+        <path d="M 520,200 L 600,180 L 680,170 L 740,180 L 780,210 L 760,250 L 700,270 L 640,265 L 580,260 L 540,240 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.85"/>
+        <!-- 阿拉伯半岛 (关 0 多哈附近) -->
+        <path d="M 700,310 L 760,300 L 800,310 L 820,360 L 800,400 L 750,410 L 720,390 Z"
+              fill="url(#desertGradient)" stroke="#7a5a30" stroke-width="1" opacity="0.95"/>
+        <!-- 中亚/伊朗高原 (关 1, 2) -->
+        <path d="M 770,230 L 850,220 L 920,240 L 950,280 L 920,310 L 860,300 L 800,290 L 780,270 Z"
+              fill="url(#desertGradient)" stroke="#7a5a30" stroke-width="1" opacity="0.95"/>
+        <!-- 哈萨克草原 (关 3) -->
+        <path d="M 880,160 L 980,150 L 1050,170 L 1080,210 L 1040,240 L 960,235 L 900,220 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.85"/>
+        <!-- 新疆/蒙古 (关 4) -->
+        <path d="M 980,210 L 1080,200 L 1140,220 L 1160,270 L 1120,310 L 1050,300 L 990,280 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.85"/>
+        <!-- 中国/东亚 (关 5 成都) -->
+        <path d="M 1050,310 L 1150,295 L 1220,320 L 1240,380 L 1210,440 L 1150,460 L 1080,440 L 1050,390 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.85"/>
+        <!-- 印度（点缀）-->
+        <path d="M 950,360 L 1010,350 L 1050,390 L 1030,440 L 980,440 L 940,410 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.7"/>
+        <!-- 西伯利亚/俄罗斯北部（点缀）-->
+        <path d="M 560,80 L 1280,70 L 1280,140 L 700,160 L 600,140 Z"
+              fill="url(#landGradient)" stroke="#3d2e1c" stroke-width="1" opacity="0.6"/>
+
+        <!-- 海洋标记 -->
+        <text x="60" y="380" fill="#4a7088" font-size="14" font-style="italic" opacity="0.6">大西洋</text>
+        <text x="450" y="540" fill="#4a7088" font-size="14" font-style="italic" opacity="0.6">印度洋</text>
+        <text x="1180" y="540" fill="#4a7088" font-size="12" font-style="italic" opacity="0.6">太平洋</text>
+        <text x="280" y="160" fill="#4a7088" font-size="12" font-style="italic" opacity="0.6">北冰洋</text>
+
+        <!-- 大陆文字标签 -->
+        <text x="650" y="240" fill="#2a1a10" font-size="12" font-weight="bold" opacity="0.7">欧洲</text>
+        <text x="610" y="490" fill="#2a1a10" font-size="14" font-weight="bold" opacity="0.7">非洲</text>
+        <text x="755" y="360" fill="#3a2810" font-size="11" font-weight="bold" opacity="0.9">阿拉伯</text>
+        <text x="830" y="270" fill="#3a2810" font-size="11" font-weight="bold" opacity="0.9">伊朗高原</text>
+        <text x="970" y="200" fill="#2a1a10" font-size="12" font-weight="bold" opacity="0.7">哈萨克草原</text>
+        <text x="1060" y="260" fill="#2a1a10" font-size="11" font-weight="bold" opacity="0.7">新疆</text>
+        <text x="1130" y="385" fill="#2a1a10" font-size="13" font-weight="bold" opacity="0.8">中国</text>
+
+        <!-- 丝绸之路虚线背景 -->
+        <path id="silk-road-bg"
+              d="M 740,360 Q 760,310 810,300 T 880,265 Q 920,250 950,210 T 1010,195 Q 1060,210 1100,250 T 1180,375"
+              fill="none" stroke="#4a4458" stroke-width="6" stroke-dasharray="4 8" opacity="0.5"/>
+
+        <!-- 主路径（金色实线，由 JS 渲染已通关段）-->
+        <path id="silk-road-main"
+              d="M 740,360 Q 760,310 810,300 T 880,265 Q 920,250 950,210 T 1010,195 Q 1060,210 1100,250 T 1180,375"
+              fill="none" stroke="#ffd98a" stroke-width="3.5" filter="url(#routeGlow)" opacity="0"/>
+
+        <!-- ===== 6 个 marker 容器，由 JS 填充 ===== -->
+        <g id="silkroad-markers"></g>
+
+        <!-- ===== 起点装饰 ===== -->
+        <g id="silkroad-start-decor" opacity="0.6">
+          <circle cx="740" cy="360" r="50" fill="none" stroke="#ffd98a" stroke-width="1" stroke-dasharray="2 6" opacity="0.4"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="wmp-legend">
+      <div class="wmp-legend-item"><span class="wmp-legend-swatch sw-gold"></span>已通关</div>
+      <div class="wmp-legend-item"><span class="wmp-legend-swatch sw-blue"></span>当前所在</div>
+      <div class="wmp-legend-item"><span class="wmp-legend-swatch sw-pulse"></span>当前位置</div>
+      <div class="wmp-legend-item"><span class="wmp-legend-swatch sw-gray"></span>未通关</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 关卡定义（与 data/game_config.json + progress.js LEVEL_META 同步） =====
+    // 注意: 关 5 vehicle 在 config 是 ""，这里用 🏠 兜底显示
+    var LEVEL_META = [
+      { id: 0, title: {{ config.levels[0].title | tojson }},     cx: 740, cy: 360, vehicle: {{ (config.levels[0].vehicle or '🛳️') | tojson }}, place: '卡塔尔·多哈' },
+      { id: 1, title: {{ config.levels[1].title | tojson }},     cx: 830, cy: 290, vehicle: {{ (config.levels[1].vehicle or '🐪') | tojson }}, place: '伊朗·沙漠' },
+      { id: 2, title: {{ config.levels[2].title | tojson }},     cx: 920, cy: 230, vehicle: {{ (config.levels[2].vehicle or '🎈') | tojson }}, place: '土耳其' },
+      { id: 3, title: {{ config.levels[3].title | tojson }},     cx: 1000, cy: 195, vehicle: {{ (config.levels[3].vehicle or '🐎') | tojson }}, place: '哈萨克·草原' },
+      { id: 4, title: {{ config.levels[4].title | tojson }},     cx: 1090, cy: 245, vehicle: {{ (config.levels[4].vehicle or '🏂') | tojson }}, place: '新疆·雪山' },
+      { id: 5, title: {{ config.levels[5].title | tojson }},     cx: 1180, cy: 380, vehicle: {{ (config.levels[5].vehicle or '🏠') | tojson }}, place: '成都·到家' },
+    ];
+
+    // 安全转义
+    function esc(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function getCleared() {
+      try { return JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]'); }
+      catch (e) { return []; }
+    }
+    function getCurrentLevel() {
+      if (typeof window.LEVEL_ID === 'number') return window.LEVEL_ID;
+      var m = (window.location.pathname || '').match(/\/level\/(\d+)/);
+      return m ? parseInt(m[1], 10) : null;
+    }
+
+    function renderMarkers() {
+      var cleared = getCleared();
+      var current = getCurrentLevel();
+      var clearedSet = {};
+      cleared.forEach(function (n) { clearedSet[n] = true; });
+
+      var g = document.getElementById('silkroad-markers');
+      if (!g) return;
+
+      // 6 个 marker
+      var svg = '';
+      LEVEL_META.forEach(function (lv) {
+        var clearedLv = !!clearedSet[lv.id];
+        var isCurrent = lv.id === current;
+        // 当前关（lastVisited）也算可点，且高亮
+        var clickable = clearedLv || isCurrent;
+
+        // 路径用：金色实线 = 从第 0 关到所有 [0..maxCleared] 段（如果最大已通关是 n，前 n 段都画）
+        // current 不影响路径颜色，仅用 marker 高亮区分
+        var fill, stroke, strokeOpacity, numColor, numStroke, lockClass;
+        if (isCurrent) {
+          fill = '#a8d8c0'; stroke = '#6c9c8e'; strokeOpacity = 1;
+          numColor = '#1b2135'; numStroke = 'none';
+          lockClass = 'current';
+        } else if (clearedLv) {
+          fill = '#ffd98a'; stroke = '#a87a40'; strokeOpacity = 1;
+          numColor = '#2a2140'; numStroke = 'none';
+          lockClass = '';
+        } else {
+          fill = '#5d6680'; stroke = '#3a3f55'; strokeOpacity = 0.7;
+          numColor = '#c9c2d8'; numStroke = 'none';
+          lockClass = 'locked';
+        }
+
+        var href = clickable ? ('/games/silk-road/level/' + lv.id) : 'javascript:void(0)';
+
+        svg += ''
+          + '<g class="slk-marker ' + lockClass + '" data-level="' + lv.id + '" '
+          +     'data-clickable="' + (clickable ? '1' : '0') + '" '
+          +     'role="link" tabindex="0" aria-label="' + esc('关 ' + lv.id + ' · ' + lv.title) + '">'
+          +   (isCurrent ? '<circle class="slk-marker-pulse" cx="' + lv.cx + '" cy="' + lv.cy + '" r="26" fill="none" stroke="#ffd98a" stroke-width="3"/>' : '')
+          +   '<circle cx="' + lv.cx + '" cy="' + lv.cy + '" r="22" fill="' + fill + '" stroke="' + stroke + '" stroke-width="3" opacity="' + strokeOpacity + '" filter="url(#markerShadow)"/>'
+          +   '<text x="' + lv.cx + '" y="' + (lv.cy + 6) + '" text-anchor="middle" font-size="22" font-family="-apple-system, sans-serif">' + esc(lv.vehicle) + '</text>'
+          +   '<text x="' + lv.cx + '" y="' + (lv.cy - 26) + '" text-anchor="middle" font-size="13" font-weight="800" fill="' + numColor + '" stroke="' + numStroke + '" paint-order="stroke" stroke-width="2">' + '关 ' + lv.id + '</text>'
+          +   '<text x="' + lv.cx + '" y="' + (lv.cy + 42) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#ffd98a" stroke="#1b2135" stroke-width="3" paint-order="stroke">' + esc(lv.title) + '</text>'
+          +   '<text x="' + lv.cx + '" y="' + (lv.cy + 58) + '" text-anchor="middle" font-size="11" fill="#a8d8c0" stroke="#1b2135" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>'
+          +   (clearedLv ? '<text x="' + (lv.cx + 16) + '" y="' + (lv.cy - 14) + '" text-anchor="middle" font-size="16">✅</text>' : '')
+          + '</g>';
+      });
+
+      g.innerHTML = svg;
+
+      // 路径：金色实线段 = 关 0 到最大已通关关 之间
+      var maxCleared = -1;
+      cleared.forEach(function (n) { if (n > maxCleared) maxCleared = n; });
+      // 当前关位置也接着画实线
+      var maxDrawn = Math.max(maxCleared, current != null ? current : -1);
+      var mainPath = document.getElementById('silk-road-main');
+      if (mainPath && maxDrawn >= 0 && LEVEL_META.length >= 2) {
+        // 用多个连续 path，逐段画
+        var fullD = mainPath.getAttribute('d');
+        // 用 stroke-dasharray + stroke-dashoffset 实现"渐显"。但更简单的:
+        // 既然只有一个 path，我们用 dasharray=pathLength 方法。
+        // 但更稳：分段拼接 path。前 maxDrawn 段实线，后面虚线沿用 silk-road-bg。
+        // 由于 SVG getPointAtLength 复杂，我们直接用 dasharray 法。
+        var len = mainPath.getTotalLength ? mainPath.getTotalLength() : 0;
+        if (len > 0) {
+          // 比例：maxDrawn >= 5 = 全部, maxDrawn = 0 = 只有第一段到第一 marker
+          // 总共 5 段连接 6 个 marker
+          var totalSegs = LEVEL_META.length - 1;  // = 5
+          var drawSegs = Math.max(0, Math.min(totalSegs, maxDrawn));  // 0..5
+          var ratio = drawSegs / totalSegs;
+          mainPath.style.opacity = '1';
+          mainPath.setAttribute('stroke-dasharray', len);
+          mainPath.setAttribute('stroke-dashoffset', String(len * (1 - ratio)));
+        }
+      }
+
+      // 绑定 click（对 locked 友好：显示 toast）
+      var allM = document.querySelectorAll('#silkroad-markers .slk-marker');
+      allM.forEach(function (m) {
+        var lv = parseInt(m.getAttribute('data-level'), 10);
+        var clickable = m.getAttribute('data-clickable') === '1';
+        if (clickable) {
+          m.addEventListener('click', function () {
+            window.location.href = '/games/silk-road/level/' + lv;
+          });
+          m.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              window.location.href = '/games/silk-road/level/' + lv;
+            }
+          });
+        } else {
+          m.addEventListener('click', function (e) {
+            e.preventDefault();
+            // 简单动效：抖一下
+            m.style.transition = 'transform .1s ease';
+            m.setAttribute('transform', 'translate(2 0)');
+            setTimeout(function () { m.setAttribute('transform', 'translate(-2 0)'); }, 80);
+            setTimeout(function () { m.setAttribute('transform', 'translate(0 0)'); }, 160);
+          });
+        }
+      });
+
+      // 已通关计数
+      var cc = document.getElementById('wmp-cleared-count');
+      if (cc) cc.innerHTML = '已通关 <b>' + cleared.length + '</b> / 6 关';
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderMarkers);
+    } else {
+      renderMarkers();
+    }
+    // 同一会话多 tab 同步
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'silkroad_cleared_levels') renderMarkers();
+    });
+  </script>
+</body>
+</html>
