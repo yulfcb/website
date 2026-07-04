@@ -22,6 +22,18 @@
 {% endblock %}
 
 {% block scripts %}
+  {# M11 part 4 — 关 0→关 1 gating: 直接 URL 访问 /level/1 但未通关关 0 时, 弹引导 + 跳关 0 #}
+  <script>
+    (function() {
+      try {
+        var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
+        if (!cleared.includes(0)) {
+          document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1b2135;color:#ffd98a;font-size:18px;text-align:center;padding:40px">🎁 请先通关关 0 → 点击<a href="/games/silk-road/level/0" style="color:#FFD98A;text-decoration:underline;margin-left:8px">关 0 · 卡塔尔</a> 进入</div>';
+          setTimeout(function() { window.location.href = '/games/silk-road/level/0'; }, 2500);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <script>
     window.LEVEL_ID = 1;
   </script>
