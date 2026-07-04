@@ -253,7 +253,11 @@
 
       // —— 虚拟方向键（左下 Phaser Container）——
       this.keys = { up: false, down: false, left: false, right: false };
-      this.joystickContainer = this.add.container(180, 600);
+      // M9.5a: dpad 缩小到 0.6 倍 + 半透明 + 推到左下 (110, 620), 不挡场景
+      this.joystickContainer = this.add.container(110, 620);
+      this.joystickContainer.setAlpha(0.72);                 // 半透明 — 玩家仍能看见自己 + 场景
+      this.joystickContainer.setScale(0.6);                  // 缩小 60%
+      this.joystickContainer.setDepth(500);                  // 在场景之上, 在 modal(2000) 之下
 
       var dpadBg = this.add.graphics();
       dpadBg.fillStyle(0x4A2E1A, 0.55);
@@ -295,11 +299,15 @@
       this.events.on('update', this._movementUpdate, this);
 
       // —— 拾起/确认按钮（右下）——
-      var actBg = this.add.circle(1100, 600, 48, 0xFFD98A, 1)
+      // M9.5a: 拾起按钮缩到 0.6 倍 + 半透明 — 不挡右下场景
+      var actBg = this.add.circle(1100, 620, 48, 0xFFD98A, 1)
         .setStrokeStyle(2, 0xFFE9B0);
-      var actText = this.add.text(1100, 600, '🆗', { fontSize: '32px' }).setOrigin(0.5);
-      var actZone = this.add.zone(1100, 600, 96, 96).setInteractive({ useHandCursor: true });
+      var actText = this.add.text(1100, 620, '🆗', { fontSize: '32px' }).setOrigin(0.5);
+      var actZone = this.add.zone(1100, 620, 96, 96).setInteractive({ useHandCursor: true });
       this.actionContainer = this.add.container(0, 0, [actBg, actText, actZone]);
+      this.actionContainer.setAlpha(0.85);
+      this.actionContainer.setScale(0.6);
+      this.actionContainer.setDepth(500);
       actZone.on('pointerdown', function () { self.tryActionPickup(); });
 
       // —— 暂停按钮（左上 Phaser Zone）——
