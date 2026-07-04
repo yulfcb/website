@@ -31,8 +31,8 @@
     <span class="qtr-fs-label">全屏</span>
   </button>
 
-  {# Phaser 3.80.1 —— CDN 接入，不走 npm/grunt/webpack #}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.80.1/phaser.min.js"></script>
+  {# Phaser 3.80.1 —— 本地静态资源，不走任何 CDN #}
+  <script src="{{ url_for('static', filename='vendor/phaser-3.80.1.min.js') }}"></script>
 
   {# 关卡数据 → game.js #}
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
