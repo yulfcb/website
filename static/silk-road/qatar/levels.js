@@ -68,7 +68,7 @@ window.QATAR_LEVEL = {
 
   // 关 0 移动 / 资源常量
   STEP_PX: 24,                // 每次按键移动 24 像素
-  MOVE_COOLDOWN_MS: 300,      // 按键冷却
+  MOVE_COOLDOWN_MS: 220,      // 按键冷却（M9.2：按住持续走时调短）
   WATER_PER_STEP: 0.1,        // 每步 -0.1
   WATER_BOUNDARY_HIT: 0.5,    // 撞边界 -0.5
   WATER_OASIS_REWARD: 2,      // 绿洲 +2

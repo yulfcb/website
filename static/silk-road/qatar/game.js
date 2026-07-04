@@ -93,37 +93,39 @@
         fontSize: '14px', color: '#A8D8C0',
       }).setOrigin(0.5);
 
-      // ===== M8.5 关卡叙事卡 =====
-      // 关 0 主要目标：在多哈攒钱 → 凑够船票 → 关 1 坐船去伊朗
-      // 这一关没有骆驼，玩家徒步在沙海上找 6 件礼物换成路费
-      var storyCard = this.add.rectangle(640, 410, 880, 100, 0x2A1F18, 0.78)
-        .setStrokeStyle(1, 0xC49A5E, 0.6);
-      this.add.text(640, 372, '🧳 关卡目标', {
-        fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      this.add.text(640, 402, '我在多哈。下一站伊朗，要坐船。', {
-        fontSize: '16px', color: '#F4ECD8',
-      }).setOrigin(0.5);
-      this.add.text(640, 432, '徒步收集 6 件礼物 → 凑船票 → 关 1 港口上船（找到 3 件以上可结算）', {
-        fontSize: '13px', color: '#C9B89A',
+      // ===== M9.1 角色选择面板 =====
+      // 4 个造型：阿拉伯男女 / 中国男女
+      // 玩家在 IntroScene 一开始就要选自己形象，存 localStorage['silkroad_avatar']
+      // 选完后点"开 始"才进 PlayScene
+      this._selectedAvatar = localStorage.getItem('silkroad_avatar') || 'malay';
+      if (!['malay','fala','cn_m','cn_f'].includes(this._selectedAvatar)) this._selectedAvatar = 'malay';
+      // 4 个 label 在 (640, 530), avatar cards 在 (640, 590) 130 high = 525-655
+      this._renderAvatarPicker(640, 590);
+
+      // 关卡任务说明 - 在 NPC banner 与 avatar picker 之间
+      // M9.1: 不做 narrative card 改做一行显眼的小卡
+      this.add.text(640, 485, '🧳 任务：在沙海收集 6 件礼物，徒步步行，不靠骆驼', {
+        fontSize: '16px', color: '#F4ECD8', fontStyle: 'italic', wordWrap: { width: 1000 },
       }).setOrigin(0.5);
 
-      // 开始按钮
-      var btnBg = this.add.rectangle(640, 500, 280, 80, 0xFFD98A, 1)
+      // 开始按钮 - 下移避开 avatar picker
+      var btnBg = this.add.rectangle(640, 680, 280, 80, 0xFFD98A, 1)
         .setStrokeStyle(2, 0xFFE9B0);
-      this.add.text(640, 500, '开 始', {
+      this.add.text(640, 680, '开 始', {
         fontSize: '32px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
-      var btnZone = this.add.zone(640, 500, 280, 80).setInteractive({ useHandCursor: true });
+      var btnZone = this.add.zone(640, 680, 280, 80).setInteractive({ useHandCursor: true });
       var self = this;
       btnZone.on('pointerdown', function () {
+        // M9.1: 把选好的 avatar 也带到 PlayScene
         self.scene.start('PlayScene', {
           sessionId: self.sessionId, nickname: self.nickname,
+          avatar: self._selectedAvatar,
         });
       });
 
       // 底部提示
-      this.add.text(640, 640, '提示：触屏使用左下方向键 · 键盘使用方向键或 WASD', {
+      this.add.text(640, 750, '提示：触屏使用左下方向键 · 键盘使用方向键或 WASD', {
         fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
     },
@@ -134,6 +136,7 @@
     Extends: Phaser.Scene,
     initialize: function PlayScene() { Phaser.Scene.call(this, { key: 'PlayScene' }); },
     init: function (data) {
+      this.initData = data || {};   // M9.1: 把 introScene 传过来的 data 存住
       this.sessionId = (data && data.sessionId) || SESSION_ID;
       this.nickname = (data && data.nickname) || nickname;
     },
@@ -203,13 +206,19 @@
       var mEmoji = this.add.text(0, 0, L.merchant.emoji, { fontSize: '28px' }).setOrigin(0.5);
       this.merchantSprite = this.add.container(L.merchant.x, L.merchant.y, [mBg, mEmoji]);
 
-      // —— 玩家：徒步小人（脚沾地走）——
-      // (M8.5) 关 0 没骆驼，关 1 才有船。这一关玩家双脚走在沙地上
-      var elf = this.add.text(0, 0, '🚶', { fontSize: '44px' }).setOrigin(0.5);
+      // —— 玩家：造型小人（脚沾地走）——
+      // (M8.5) 没骆驼；(M9.1) 玩家造型选自 IntroScene（4 个 emoji）
+      // avatar: 'malay'=🧔 / 'fala'=🧕 / 'cn_m'=👨 / 'cn_f'=👩
+      // facing: -1 左 / 1 右 — flipX 镜像 emoji
+      var avatarId = (this.initData && this.initData.avatar) || localStorage.getItem('silkroad_avatar') || 'malay';
+      if (!window.QATAR_AVATARS[avatarId]) avatarId = 'malay';
+      this._avatar = avatarId;
+      var avatarEmoji = window.QATAR_AVATARS[avatarId];
+      var elf = this.add.text(0, 0, avatarEmoji, { fontSize: '44px' }).setOrigin(0.5);
       // 影子圆让它"踩地"
       var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
       this.playerContainer = this.add.container(L.start.x, L.start.y, [shadow, elf]);
-      this.playerSprite = { shadow: shadow, elf: elf };
+      this.playerSprite = { shadow: shadow, elf: elf, avatarId: avatarId };
 
       // —— 状态 ——
       this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
@@ -279,6 +288,10 @@
       makeDpadBtn('◀', -75, 0, 'left');
       makeDpadBtn('▶', 75, 0, 'right');
 
+      // M9.2: 按住持续走 update loop - 自动 walk tick
+      // 通过 this.scene.events 在 update cycle 检查 self.keys[key]
+      this.events.on('update', this._movementUpdate, this);
+
       // —— 拾起/确认按钮（右下）——
       var actBg = this.add.circle(1100, 600, 48, 0xFFD98A, 1)
         .setStrokeStyle(2, 0xFFE9B0);
@@ -300,16 +313,26 @@
       this.modalContainer.setDepth(2000);
       this.modalContainer.setVisible(false);
 
-      // —— Keyboard 监听 ——
-      this.input.keyboard.on('keydown-UP',    function () { self.tryMove('up'); });
-      this.input.keyboard.on('keydown-DOWN',  function () { self.tryMove('down'); });
-      this.input.keyboard.on('keydown-LEFT',  function () { self.tryMove('left'); });
-      this.input.keyboard.on('keydown-RIGHT', function () { self.tryMove('right'); });
-      this.input.keyboard.on('keydown-W',     function () { self.tryMove('up'); });
-      this.input.keyboard.on('keydown-A',     function () { self.tryMove('left'); });
-      this.input.keyboard.on('keydown-S',     function () { self.tryMove('down'); });
-      this.input.keyboard.on('keydown-D',     function () { self.tryMove('right'); });
-      // keyup 不需要 —— tryMove 用 cooldown + 一按一走
+      // —— Keyboard 监听 (M9.2: 按住持续走) ——
+      // keydown 设 keys[key]=true；keyup 设 false；update 循环读 keys 决定是否 tryMove
+      var onKeyDown = function (k) { return function () { self.keys[k] = true; } };
+      var onKeyUp = function (k) { return function () { self.keys[k] = false; } };
+      this.input.keyboard.on('keydown-UP',    onKeyDown('up'));
+      this.input.keyboard.on('keydown-DOWN',  onKeyDown('down'));
+      this.input.keyboard.on('keydown-LEFT',  onKeyDown('left'));
+      this.input.keyboard.on('keydown-RIGHT', onKeyDown('right'));
+      this.input.keyboard.on('keydown-W',     onKeyDown('up'));
+      this.input.keyboard.on('keydown-A',     onKeyDown('left'));
+      this.input.keyboard.on('keydown-S',     onKeyDown('down'));
+      this.input.keyboard.on('keydown-D',     onKeyDown('right'));
+      this.input.keyboard.on('keyup-UP',      onKeyUp('up'));
+      this.input.keyboard.on('keyup-DOWN',    onKeyUp('down'));
+      this.input.keyboard.on('keyup-LEFT',    onKeyUp('left'));
+      this.input.keyboard.on('keyup-RIGHT',   onKeyUp('right'));
+      this.input.keyboard.on('keyup-W',       onKeyUp('up'));
+      this.input.keyboard.on('keyup-A',       onKeyUp('left'));
+      this.input.keyboard.on('keyup-S',       onKeyUp('down'));
+      this.input.keyboard.on('keyup-D',       onKeyUp('right'));
 
       // —— 全屏按钮 DOM（Phaser 之外，与 M5/M6 一致）——
       // 不在 scene 内创建，模板里已经有 #qatar-fullscreen —— scene 外
@@ -367,6 +390,14 @@
     },
 
     // ==================== 移动 ====================
+    _movementUpdate: function () {
+      // M9.2: 按住持续走 — update 每一帧检查 keys，按下则 tryMove
+      if (this.state !== 'PLAYING' || this.paused) return;
+      if (this.keys.up)    this.tryMove('up');
+      if (this.keys.down)  this.tryMove('down');
+      if (this.keys.left)  this.tryMove('left');
+      if (this.keys.right) this.tryMove('right');
+    },
     tryMove: function (key) {
       if (this.state !== 'PLAYING' || this.paused) return;
       var now = Date.now();
@@ -391,6 +422,14 @@
       this.player.lastMoveAt = now;
       this.playerContainer.x = nx;
       this.playerContainer.y = ny;
+      // M9.1：玩家朝向跟随左/右键方向
+      if (this.playerSprite && this.playerSprite.elf) {
+        if (this.player.facing === -1) {
+          this.playerSprite.elf.setFlipX(true);
+        } else if (this.player.facing === 1) {
+          this.playerSprite.elf.setFlipX(false);
+        }
+      }
 
       this.moveCount++;
       this.changeWater(-L.WATER_PER_STEP);
@@ -1043,6 +1082,68 @@
     },
     scene: [BootScene, IntroScene, PlayScene, ResultScene],
   });
+
+  // ==================== M9.1 角色选择面板 ====================
+  // 在 IntroScene 自定义原型上挂方法。Phaser Class 自创建后 add 方法
+  IntroScene.prototype._renderAvatarPicker = function (cx, cy) {
+    var self = this;
+    this._avatarCards = [];
+    var avatars = [
+      { id: 'malay', label: '阿拉伯男', emoji: '🧔', sub: 'كبير' },
+      { id: 'fala',  label: '阿拉伯女', emoji: '🧕', sub: '巾帕' },
+      { id: 'cn_m',  label: '中国男',   emoji: '👨', sub: '黑发' },
+      { id: 'cn_f',  label: '中国女',   emoji: '👩', sub: '长发' },
+    ];
+    var gap = 130;
+    var startX = cx - ((avatars.length - 1) * gap) / 2;
+    var labelY = cy - 75;
+    this.add.text(cx, labelY, '👤 选择你的造型', {
+      fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    for (var i = 0; i < avatars.length; i++) {
+      var av = avatars[i];
+      var x = startX + i * gap;
+      // 背景 card
+      var bg = this.add.rectangle(x, cy, 110, 130, 0x2A1F18, 0.85);
+      // 选中高亮
+      var hl = this.add.rectangle(x, cy, 110, 130, 0xFFD98A, 0);
+      hl.setStrokeStyle(2, 0xFFD98A, 0);
+      // emoji
+      var emoji = this.add.text(x, cy - 16, av.emoji, { fontSize: '50px' }).setOrigin(0.5);
+      var label = this.add.text(x, cy + 30, av.label, {
+        fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var sub = this.add.text(x, cy + 48, av.sub, {
+        fontSize: '11px', color: '#A8D8C0',
+      }).setOrigin(0.5);
+      // hit zone
+      var zone = this.add.zone(x, cy, 110, 130).setInteractive({ useHandCursor: true });
+      zone.on('pointerdown', (function (id, _bg, _hl) {
+        return function () {
+          self._selectedAvatar = id;
+          localStorage.setItem('silkroad_avatar', id);
+          for (var j = 0; j < self._avatarCards.length; j++) {
+            self._avatarCards[j].hl.setStrokeStyle(2, 0xFFD98A, j === avatars.findIndex(function(a){return a.id===id}) ? 0.95 : 0);
+            self._avatarCards[j].bg.setFillStyle(0x2A1F18, j === avatars.findIndex(function(a){return a.id===id}) ? 0.95 : 0.65);
+          }
+        };
+      })(av.id, bg, hl));
+      this._avatarCards.push({ id: av.id, bg: bg, hl: hl });
+    }
+    // 渲染初始选中
+    var selIdx = avatars.findIndex(function(a){return a.id===self._selectedAvatar;});
+    if (selIdx < 0) selIdx = 0;
+    self._avatarCards[selIdx].hl.setStrokeStyle(2, 0xFFD98A, 0.95);
+    self._avatarCards[selIdx].bg.setFillStyle(0x2A1F18, 0.95);
+  };
+
+  // Avatar emoji map 给 PlayScene 用
+  window.QATAR_AVATARS = {
+    malay: '🧔',
+    fala:  '🧕',
+    cn_m:  '👨',
+    cn_f:  '👩',
+  };
 
   // 暴露给离线/调试用
   window.QATAR_GAME = game;
