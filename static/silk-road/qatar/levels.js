@@ -45,9 +45,12 @@ window.QATAR_LEVEL = {
     { id: 'lusail_stadium',  x: 880,  y: 180, label: 'Lusail Stadium' },
   ],
 
-  // 老商人 NPC —— 移出 Souq Waqif 区域（避开 gifts[0] 沙漠之眼在 souq_waqif），
-  // 放到地图东北角空白区，玩家要"专门去找"他才能触发对话。
-  merchant: { x: 1080, y: 100, emoji: '👳', line: '给心上人的礼物，要发自真心。要带走几件，看你的取舍。' },
+  // 老商人 NPC —— M11 改为港口 NPC (Mesaieed Port 梅赛伊德港)
+  // 港口是卡塔尔最大货运港, 也是去伊朗的传统航线起点.
+  // emoji ⚓ 海蓝主题 (L.port), 位置挪到 (280, 660) 下方避 dpad 区域.
+  // 玩家拾满 6 件后来此兑换船票.
+  port: { x: 280, y: 660, emoji: '⚓', name: 'Mesaieed Port 梅赛伊德港',
+         line: '梅赛伊德港是卡塔尔最大的货运港口, 也是去伊朗的传统航线起点. 带上你的礼物来兑换船票吧. ⚓' },
 
   // NPC banner 4 帧文案（最后一帧是找到 Lusail Stadium 触发的 World Cup 文案）
   npcFrames: [

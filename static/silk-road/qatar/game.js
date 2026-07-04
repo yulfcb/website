@@ -79,12 +79,12 @@
       grad.fillGradientStyle(0xC49A5E, 0xC49A5E, 0x6B4423, 0x6B4423, 1);
       grad.fillRect(0, 0, 1280, 60);
 
-      // NPC banner
+      // NPC banner — M11: 港口 ⚓ 替换老商人 👳
       var card = this.add.rectangle(640, 280, 880, 220, 0x4A2E1A, 0.95)
         .setStrokeStyle(2, 0xFFD98A, 0.5);
-      this.add.text(360, 280, '👳', { fontSize: '64px' }).setOrigin(0.5);
-      this.add.text(640, 240, '老商人 · 帧 1', {
-        fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+      this.add.text(360, 280, L.port.emoji, { fontSize: '64px' }).setOrigin(0.5);
+      this.add.text(640, 240, L.port.name, {
+        fontSize: '12px', color: '#5fb3a0', fontStyle: 'bold',
       }).setOrigin(0.5);
       this.add.text(720, 300, L.npcFrames[0], {
         fontSize: '18px', color: '#F4ECD8', fontStyle: 'italic',
@@ -232,12 +232,13 @@
         self.giftSprites.push(sprite);
       });
 
-      // —— 老商人 NPC ——
+      // —— 港口 NPC (M11: 老商人 → 港口 ⚓) ——
+      // 海蓝主题圆 + ⚓ 锚图标
       var mBg = this.add.graphics();
-      mBg.fillStyle(0x8B4513, 0.3);
-      mBg.fillCircle(0, 0, 18);
-      var mEmoji = this.add.text(0, 0, L.merchant.emoji, { fontSize: '28px' }).setOrigin(0.5);
-      this.merchantSprite = this.add.container(L.merchant.x, L.merchant.y, [mBg, mEmoji]);
+      mBg.fillStyle(0x5fb3a0, 0.45);
+      mBg.fillCircle(0, 0, 22);
+      var mEmoji = this.add.text(0, 0, L.port.emoji, { fontSize: '34px' }).setOrigin(0.5);
+      this.merchantSprite = this.add.container(L.port.x, L.port.y, [mBg, mEmoji]);
 
       // —— 玩家：造型小人（有身体）——
       // M9.3b：不只用 emoji 脸——用 Phaser.Graphics 程序画 4 个有身体的造型。
@@ -423,14 +424,13 @@
         this.playerSprite.elf.y = 0;
       }
 
-      // 老商人距离检测 —— M9.3a 用"真状态机"代替"1s 延迟 reset"
-      // 老商人逻辑：玩家进 50px 触发；触发后必须走开 200px 才算"用完一次对话"。
-      // 这就避免了"站在 NPC 旁边"1s 后再弹、卡死的体验。
-      var dx = this.player.x - L.merchant.x;
-      var dy = this.player.y - L.merchant.y;
+      // 港口 NPC 距离检测 —— M11 用 L.port.x/y (老商人位置已废弃)
+      // 触发规则：玩家进 50px 触发；触发后必须走开 200px 才算"用完一次对话"。
+      var dx = this.player.x - L.port.x;
+      var dy = this.player.y - L.port.y;
       var merchantDist = Math.sqrt(dx * dx + dy * dy);
       if (merchantDist < 50 && !this.merchantShown) {
-        this.showMerchant();
+        this.showPort();
       } else if (merchantDist > 200 && this.merchantShown) {
         this.merchantShown = false;   // 走远才放行下次触发
       }
@@ -650,8 +650,8 @@
       this.closeGiftModal();
     },
 
-    // ==================== 老商人 popup ====================
-    showMerchant: function () {
+    // ==================== 港口 NPC popup (M11: 老商人 → 港口 ⚓) ====================
+    showPort: function () {
       var self = this;
       if (this.merchantShown) return;
       // 2.5 秒内不要重复触发（M8.4：避免玩家关掉 modal 立刻又开=体验卡死循环）
@@ -659,52 +659,52 @@
       this.merchantShown = true;
       this.modalContainer.removeAll(true);
 
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 透明度 0.78->0.45
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);  // M11 海蓝主题 (跟港口 ocean 同色)
       // M8.5：backdrop 不该 interactive！之前 setInteractive 把所有点击截了，
       // 玩家以为点的是按钮实际点中了 backdrop → 关不掉 modal
       this.modalContainer.add(backdrop);
 
-      var card = this.add.rectangle(0, 0, 420, 300, 0x6B4423, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      var card = this.add.rectangle(0, 0, 460, 360, 0x1B3A5E, 1)
+        .setStrokeStyle(2, 0x5fb3a0, 0.7);
       this.modalContainer.add(card);
 
-      // M9.5d: 老商人=船票兑换 NPC。
+      // M9.5d: 港口=船票兑换 NPC。
       // 拾够 6 件 → 显示"兑换船票"按钮（豪华升级 modal） → 点后弹船票 get 模态。
       // 拾不够 6 件 → 只显示"知道了"按钮（普通对话）。
       var hasAllGifts = this.pickupCount >= 6;
 
-      this.modalContainer.add(this.add.text(0, -90, L.merchant.emoji, { fontSize: '48px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, 10, L.merchant.line, {
-        fontSize: '15px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 360 },
+      this.modalContainer.add(this.add.text(0, -130, L.port.emoji, { fontSize: '52px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -90, L.port.name, {
+        fontSize: '14px', color: '#5fb3a0', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -50, L.port.line, {
+        fontSize: '13px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
       if (hasAllGifts) {
-        // 拾满 6: 升级 modal — 顶部大字标, 2 个按钮
-        this.modalContainer.add(this.add.text(0, -120, '🎫 老商人 · 船票兑换', {
-          fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-        }).setOrigin(0.5));
+        // 拾满 6: 升级 modal — 2 个按钮
         this.modalContainer.add(this.add.text(0, 60, '好！礼物都齐了，我给你一张去伊朗的船票 🚢', {
           fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
         // "兑换船票" 主按钮
-        var ticketBg = this.add.rectangle(-100, 115, 180, 50, 0xFFD98A, 1);
-        var ticketText = this.add.text(-100, 115, '🎫 兑换船票', {
-          fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
+        var ticketBg = this.add.rectangle(-100, 130, 180, 56, 0x5fb3a0, 1);
+        var ticketText = this.add.text(-100, 130, '🎫 兑换船票', {
+          fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
         }).setOrigin(0.5);
-        var ticketZone = this.add.zone(-100, 115, 180, 50).setInteractive({ useHandCursor: true });
+        var ticketZone = this.add.zone(-100, 130, 180, 56).setInteractive({ useHandCursor: true });
         ticketZone.on('pointerdown', function () {
           self._ticketExchanged = true;
           self._showTicketModal();
         });
 
         // "暂时不要" 次按钮
-        var laterBg = this.add.rectangle(100, 115, 140, 50, 0x6B4423, 1)
-          .setStrokeStyle(1, 0xFFD98A, 0.4);
-        var laterText = this.add.text(100, 115, '暂时不要', {
-          fontSize: '14px', color: '#F4ECD8', fontStyle: 'bold',
+        var laterBg = this.add.rectangle(100, 130, 140, 56, 0x1B3A5E, 1)
+          .setStrokeStyle(1, 0x5fb3a0, 0.6);
+        var laterText = this.add.text(100, 130, '暂时不要', {
+          fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
         }).setOrigin(0.5);
-        var laterZone = this.add.zone(100, 115, 140, 50).setInteractive({ useHandCursor: true });
+        var laterZone = this.add.zone(100, 130, 140, 56).setInteractive({ useHandCursor: true });
         laterZone.on('pointerdown', function () {
           // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
@@ -716,18 +716,15 @@
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
       } else {
         // 没拾满: 普通对话 — 1 个按钮
-        this.modalContainer.add(this.add.text(0, -120, '老商人', {
-          fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-        }).setOrigin(0.5));
         this.modalContainer.add(this.add.text(0, 60, '礼物还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
-          fontSize: '12px', color: '#C9B89A', wordWrap: { width: 380 },
+          fontSize: '12px', color: '#A8D8C0', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
-        var btnBg = this.add.rectangle(0, 110, 160, 50, 0xFFD98A, 1);
-        var btnText = this.add.text(0, 110, '知道了', {
-          fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
+        var btnBg = this.add.rectangle(0, 130, 160, 56, 0x5fb3a0, 1);
+        var btnText = this.add.text(0, 130, '知道了', {
+          fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
         }).setOrigin(0.5);
-        var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
+        var btnZone = this.add.zone(0, 130, 160, 56).setInteractive({ useHandCursor: true });
         btnZone.on('pointerdown', function () {
           // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
@@ -745,30 +742,34 @@
     },
 
     // M9.5d: 兑换船票 modal — 显示船票 get 模态, 关闭后如果全拾齐则进入 result.
+    // M11: 海蓝港口主题 (跟 port NPC 一致)
     _showTicketModal: function () {
       var self = this;
       this.modalContainer.removeAll(true);
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
       this.modalContainer.add(backdrop);
 
-      var card = this.add.rectangle(0, 0, 420, 320, 0x6B4423, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      var card = this.add.rectangle(0, 0, 460, 340, 0x1B3A5E, 1)
+        .setStrokeStyle(2, 0x5fb3a0, 0.7);
       this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -120, '🎫', { fontSize: '52px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -50, '船票已兑换！', {
+      this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -75, 'Mesaieed Port 梅赛伊德港', {
+        fontSize: '14px', color: '#5fb3a0', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -35, '船票已兑换！', {
         fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -10, '波斯湾之旅已开启\n下一站: 伊朗 🐪', {
+      this.modalContainer.add(this.add.text(0, 5, '波斯湾之旅已开启\n下一站: 伊朗 🐪', {
         fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 360 },
       }).setOrigin(0.5));
 
       // 大按钮 "起航前往伊朗 →"
-      var goBg = this.add.rectangle(0, 90, 280, 56, 0xFFD98A, 1);
-      var goText = this.add.text(0, 90, '起航前往伊朗 →', {
-        fontSize: '16px', color: '#2A190E', fontStyle: 'bold',
+      var goBg = this.add.rectangle(0, 100, 300, 60, 0x5fb3a0, 1);
+      var goText = this.add.text(0, 100, '起航前往伊朗 →', {
+        fontSize: '17px', color: '#0E2A47', fontStyle: 'bold',
       }).setOrigin(0.5);
-      var goZone = this.add.zone(0, 90, 280, 56).setInteractive({ useHandCursor: true });
+      var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
       goZone.on('pointerdown', function () {
         self.modalContainer.setVisible(false);
         // 接 #5: 船动画过渡到 level/1. 不过渡 = 当前 RESULT
