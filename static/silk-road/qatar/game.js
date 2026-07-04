@@ -44,14 +44,16 @@
     Extends: Phaser.Scene,
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
     create: function () {
+      var self = this;
       this.cameras.main.setBackgroundColor('#1b2135');
       this.add.text(640, 360, '加载中…', {
         fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       // 短暂延迟 → IntroScene（保留 0 ms 也行；这里 30 ms 让浏览器渲一帧）
+      // 用闭包 self 引 BootScene，避免 time.delayedCall 把 args 当 this（Phaser 3 API）
       this.time.delayedCall(30, function () {
-        this.scene.start('IntroScene', { sessionId: SESSION_ID, nickname: nickname });
-      }, this);
+        self.scene.start('IntroScene', { sessionId: SESSION_ID, nickname: nickname });
+      });
     },
   });
 
