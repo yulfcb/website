@@ -134,9 +134,6 @@ html, body {
   0%, 100% { transform: rotate(0deg); }
   50%      { transform: rotate(360deg); }
 }
-/* 早期检测（DOM ready 前就加 html.qtr-portrait-early） */
-html.qtr-portrait-early #orientation-lock { display: flex; }
-
 /* ====== 顶部 HUD ====== */
 #qatar-hud {
   position: fixed;

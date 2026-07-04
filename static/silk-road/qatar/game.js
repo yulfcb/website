@@ -531,6 +531,8 @@
         lock.classList.remove('show');
         document.documentElement.classList.remove('qtr-portrait');
       }
+      // M7: 安全网 —— 清掉早期 body::before 遮挡层（即使早期 script 已删，仍兜底）
+      document.documentElement.classList.remove('qtr-portrait-early');
     };
 
     apply();
