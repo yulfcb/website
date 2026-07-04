@@ -429,13 +429,15 @@
       this.player.lastMoveAt = now;
       this.playerContainer.x = nx;
       this.playerContainer.y = ny;
-      // M9.1：玩家朝向跟随左/右键方向
-      if (this.playerSprite && this.playerSprite.elf) {
-        if (this.player.facing === -1) {
-          this.playerSprite.elf.setFlipX(true);
-        } else if (this.player.facing === 1) {
-          this.playerSprite.elf.setFlipX(false);
-        }
+      // M9.3b-fix: Graphics + Container 都没有 setFlipX 走 transform。
+      // 直接 set scaleX=-1 镜像（含影子椭圆——圆形镜像仍是圆形，无视觉差）。
+      // 注意：Phaser GameObject base 上 `flipX` 属性本身有效（无报错），
+      // 但 transform pipeline 要 `hasTransformComponent` 才生效（这是 M8.5 状态机的潜规则）。
+      if (this.playerContainer) {
+        var sx = this.player.facing === -1 ? -1 : 1;
+        // 镜像符号翻转，但保持绝对 scale 增量
+        var baseScale = 1; // 未来如果有 ±scale 动画再乘
+        this.playerContainer.scaleX = sx * baseScale;
       }
 
       this.moveCount++;
