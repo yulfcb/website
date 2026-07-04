@@ -1,31 +1,15 @@
-/* 卡塔尔·多哈·沙海寻路 —— 关 0 专属样式（M5 + M6）
-   风格：沙漠色 + 椰枣金 + 深沙棕。毛笔字体仅用于水分数字。
-   M6 新增：手机横屏全屏 + 虚拟方向键 + 触屏支持 + safe-area-inset。
-
-   关键结构：
-     <body>
-       #orientation-lock    竖屏全屏遮挡
-       .silk-stage          _level_base 提供
-       #silk-progress-bar-host  _level_base 提供
-       #qatar-hud           顶部水分/拾起/行李
-       #qatar-npc-banner    右上 NPC
-       #qatar-fullscreen    M6 顶部全屏按钮
-       #qatar-pause         M6 顶部暂停按钮 (50×50)
-       #qatar-hint          左下方向键提示 (3 步后淡出)
-       .qatar-canvas-wrap   M6 canvas 容器 (跟随 resizeTo)
-         └─ #qatar-canvas   Pixi canvas
-       .qatar-joystick      M6 虚拟方向键覆盖层
-         └─ .qtr-dpad       上/下/左/右 4 个独立圆按钮
-         └─ .qtr-action     右下拾起/确认按钮
-       #qatar-gift-modal    礼物选择 modal
-       #qatar-merchant-popup 老商人 popup
-       #qatar-result-modal  结果 modal
-       #silk-win            通关面板 (复用)
-       #silk-revive         复活 modal (复用 _revive_modal.html)
-   ========================================================================== */
+/* 卡塔尔·多哈·沙海寻路 —— 关 0 样式（M8 Phaser 3 重做版）
+   极简版：Phaser 自己管 scene 内所有 UI（HUD、joystick、modal）。
+   这里只保留 Phaser 容器之外必需的 3 样东西：
+     1. #qatar-game —— Phaser parent，挂 canvas
+     2. #orientation-lock —— 竖屏提示（CSS overlay）
+     3. #qatar-fullscreen —— 全屏按钮（DOM 按钮，scene 外）
+   ====================================================================== */
 
 /* ====== 强禁止滚动 / 双击缩放 ====== */
 html, body {
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
@@ -33,61 +17,29 @@ html, body {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  background: #1b2135;
+  color: #f4ecd8;
+  font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 }
 
-/* ====== 关 0 全屏 / 横屏 ====== */
-.silk-stage {
-  /* M6: 占满全屏，去掉 720 像素 max-width 限制（在 base 是 max-width:720） */
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-  height: 100vh;
-  height: 100dvh;          /* 动态视口高度（iOS Safari） */
-  width: 100vw;
-  width: 100dvw;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  overflow: hidden;
-}
-
-/* ====== Canvas 容器（M6 包装层） ====== */
-.qatar-canvas-wrap {
-  position: absolute;
+/* ====== Phaser 容器 ====== */
+#qatar-game {
+  position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;            /* 动态视口高度（iOS Safari） */
+  width: 100dvw;
+  background: #1b2135;
   z-index: 1;
-  /* iOS safe-area */
-  padding-top: env(safe-area-inset-top, 0);
-  padding-left: env(safe-area-inset-left, 0);
-  padding-right: env(safe-area-inset-right, 0);
-  /* 不要 padding-bottom —— 留给虚拟键 */
-  background: #E8C282;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
 }
-
-#qatar-canvas {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  overflow: hidden;
-  background: #E8C282;
-}
-#qatar-canvas canvas {
+#qatar-game canvas {
   display: block;
-  /* letterbox: 保持 16:9 缩放居中 */
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain;
-  max-width: 100%;
-  max-height: 100%;
+  margin: 0 auto;
+  background: #E8C282;
 }
 
-/* ====== 横屏强制提示（竖屏时遮挡） ====== */
+/* ====== 竖屏强制提示（CSS overlay，竖屏时遮挡） ====== */
 #orientation-lock {
   display: none;
   position: fixed;
@@ -107,7 +59,6 @@ html, body {
   font-size: 96px;
   line-height: 1;
   animation: rotate-phone 1.5s ease-in-out infinite;
-  /* emoji 不能直接 rotate 90°，用容器旋转 */
   display: inline-block;
 }
 @keyframes rotate-phone {
@@ -134,84 +85,8 @@ html, body {
   0%, 100% { transform: rotate(0deg); }
   50%      { transform: rotate(360deg); }
 }
-/* ====== 顶部 HUD ====== */
-#qatar-hud {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 12px);
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 18px;
-  z-index: 200;
-  pointer-events: none;
-  gap: 12px;
-}
-#qatar-hud > div { pointer-events: auto; }
-.qatar-hud-chip {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  background: rgba(74, 46, 26, 0.85);
-  color: #FFD98A;
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  white-space: nowrap;
-}
-.qatar-hud-chip b {
-  color: #FFE9B0;
-  font-weight: 800;
-}
-.qatar-water-warn {
-  animation: qatar-water-flash 0.2s ease 2;
-}
-@keyframes qatar-water-flash {
-  0%, 100% { background: rgba(74, 46, 26, 0.85); }
-  50%      { background: rgba(248, 113, 113, 0.85); }
-}
-.qatar-water-low {
-  background: rgba(248, 113, 113, 0.85) !important;
-  border-color: rgba(255, 200, 200, 0.6) !important;
-}
 
-/* ====== NPC banner 右上 ====== */
-#qatar-npc-banner {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0) + 64px);
-  right: 18px;
-  width: 280px;
-  max-width: calc(100vw - 36px);
-  padding: 12px 14px;
-  background: linear-gradient(160deg, rgba(74, 46, 26, 0.95) 0%, rgba(42, 25, 14, 0.95) 100%);
-  border-radius: 14px;
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-  z-index: 200;
-}
-.qatar-npc-avatar {
-  font-size: 28px;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-#qatar-npc-text {
-  font-size: 13px;
-  line-height: 1.5;
-  color: #F4ECD8;
-  margin: 0;
-  font-style: italic;
-}
-.qatar-npc-tag {
-  font-size: 10px;
-  color: #FFD98A;
-  margin-top: 4px;
-  letter-spacing: 1px;
-  font-weight: 700;
-}
-
-/* ====== M6 全屏按钮 (顶部右上) ====== */
+/* ====== 全屏按钮（DOM，scene 外） ====== */
 #qatar-fullscreen {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0) + 12px);
@@ -231,6 +106,10 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s ease;
+  font-family: inherit;
 }
 #qatar-fullscreen:hover { transform: translateY(-2px); }
 #qatar-fullscreen .qtr-fs-icon { font-size: 18px; line-height: 1; }
@@ -243,381 +122,8 @@ html, body {
   }
 }
 
-/* ====== 暂停按钮 (M6 改为左上 50×50) ====== */
-#qatar-pause {
-  position: fixed;
-  left: 12px;
-  top: calc(env(safe-area-inset-top, 0) + 12px);
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 217, 138, 0.6);
-  background: rgba(74, 46, 26, 0.92);
-  color: #FFD98A;
-  font-weight: 700;
-  font-size: 18px;
-  cursor: pointer;
-  z-index: 250;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-#qatar-pause:hover { transform: translateY(-2px); }
-
-/* ====== 方向键提示 (PC 提示，手机隐藏) ====== */
-#qatar-hint {
-  position: fixed;
-  left: 18px;
-  bottom: calc(env(safe-area-inset-bottom, 0) + 110px);
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(74, 46, 26, 0.85);
-  color: #FFD98A;
-  font-size: 12px;
-  line-height: 1.6;
-  z-index: 200;
-  border: 1px solid rgba(255, 217, 138, 0.4);
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-}
-#qatar-hint.qatar-hidden { opacity: 0; pointer-events: none; }
-#qatar-hint .key {
-  display: inline-block;
-  padding: 1px 6px;
-  margin: 0 2px;
-  border-radius: 4px;
-  background: rgba(255, 217, 138, 0.2);
-  font-family: monospace;
-  font-weight: 700;
-}
-/* 手机上不显示 PC 方向键提示（有虚拟键） */
-@media (max-width: 768px), (hover: none) {
-  #qatar-hint { display: none !important; }
-}
-
-/* ====== M6 虚拟方向键 ====== */
-.qatar-joystick {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9998;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0) + 24px);
-  padding-left: calc(env(safe-area-inset-left, 0) + 24px);
-  padding-right: calc(env(safe-area-inset-right, 0) + 24px);
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  pointer-events: none;          /* 外层不拦截 */
-  -webkit-user-select: none;
-  user-select: none;
-  touch-action: manipulation;
-}
-/* PC 上不显示虚拟键 */
-@media (hover: hover) and (min-width: 1024px) {
-  .qatar-joystick { display: none; }
-}
-
-.qtr-dpad {
-  position: relative;
-  width: 200px;
-  height: 200px;
-  pointer-events: auto;
-}
-
-/* 4 个独立圆按钮 —— ↑↓←→ 排成田字形（非十字）*/
-.qtr-btn.qtr-up,
-.qtr-btn.qtr-down,
-.qtr-btn.qtr-left,
-.qtr-btn.qtr-right {
-  position: absolute;
-  width: 60px;
-  height: 60px;
-  margin: 0;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 217, 138, 0.7);
-  background: rgba(74, 46, 26, 0.85);
-  color: #FFD98A;
-  font-size: 20px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  transition: transform 0.08s ease, background 0.12s ease;
-  touch-action: manipulation;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  padding: 0;
-  line-height: 1;
-}
-.qtr-btn.qtr-up    { left: 70px;  top: 0;    }
-.qtr-btn.qtr-down  { left: 70px;  top: 140px; }
-.qtr-btn.qtr-left  { left: 0;     top: 70px; }
-.qtr-btn.qtr-right { left: 140px; top: 70px; }
-.qtr-btn.qtr-up:active,
-.qtr-btn.qtr-down:active,
-.qtr-btn.qtr-left:active,
-.qtr-btn.qtr-right:active,
-.qtr-btn.qtr-up.qtr-pressed,
-.qtr-btn.qtr-down.qtr-pressed,
-.qtr-btn.qtr-left.qtr-pressed,
-.qtr-btn.qtr-right.qtr-pressed {
-  background: rgba(255, 217, 138, 0.95);
-  color: #2A190E;
-  transform: scale(0.9);
-}
-
-/* 拾起 / 确认 按钮 —— 80×80 黄色大按钮 */
-.qtr-btn.qtr-action {
-  pointer-events: auto;
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  border: 2px solid #FFD98A;
-  background: linear-gradient(160deg, #f6b5c8 0%, #ffd98a 100%);
-  color: #2A190E;
-  font-size: 28px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 18px rgba(246, 181, 200, 0.55);
-  touch-action: manipulation;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.08s ease, background 0.12s ease;
-  padding: 0;
-  line-height: 1;
-}
-.qtr-btn.qtr-action:active,
-.qtr-btn.qtr-action.qtr-pressed {
-  background: linear-gradient(160deg, #ffd98a 0%, #f6b5c8 100%);
-  transform: scale(0.9);
-}
-
-/* ====== 礼物 modal ====== */
-#qatar-gift-modal {
-  position: fixed; inset: 0;
-  background: rgba(20, 12, 6, 0.78);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9990;
-  padding: 16px;
-}
-.qatar-gift-modal-card {
-  width: 100%; max-width: 440px;
-  padding: 28px 24px;
-  border-radius: 18px;
-  background: linear-gradient(160deg, #4A2E1A 0%, #2A190E 100%);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  color: #F4ECD8;
-  text-align: center;
-}
-.qatar-gift-emoji {
-  font-size: 56px;
-  line-height: 1;
-  margin-bottom: 8px;
-}
-#qatar-gift-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #FFD98A;
-  margin: 0 0 6px;
-}
-#qatar-gift-sub {
-  font-size: 13px;
-  color: #C9B89A;
-  margin: 0 0 18px;
-  line-height: 1.5;
-}
-.qatar-gift-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.qatar-gift-btn {
-  padding: 14px 18px;        /* M6 手机上稍大 */
-  border-radius: 12px;
-  border: 1px solid rgba(255, 217, 138, 0.4);
-  background: rgba(74, 46, 26, 0.6);
-  color: #F4ECD8;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: left;
-  transition: transform 0.12s ease, background 0.12s ease;
-  touch-action: manipulation;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.qatar-gift-btn:hover { background: rgba(107, 68, 35, 0.85); transform: translateY(-1px); }
-.qatar-gift-btn.primary {
-  background: linear-gradient(160deg, #FFD98A 0%, #E8B96A 100%);
-  color: #2A190E;
-  border-color: #FFD98A;
-}
-.qatar-gift-btn.primary:hover {
-  background: linear-gradient(160deg, #FFE9B0 0%, #F4C97A 100%);
-}
-.qatar-gift-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.qatar-gift-btn .small {
-  display: block;
-  font-size: 11px;
-  font-weight: 400;
-  margin-top: 2px;
-  opacity: 0.8;
-}
-
-/* ====== 老商人 popup ====== */
-#qatar-merchant-popup {
-  position: fixed; inset: 0;
-  background: rgba(20, 12, 6, 0.78);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9980;
-  padding: 16px;
-}
-.qatar-merchant-card {
-  width: 100%; max-width: 380px;
-  padding: 24px 22px;
-  border-radius: 16px;
-  background: linear-gradient(160deg, #6B4423 0%, #2A190E 100%);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
-  color: #F4ECD8;
-  text-align: center;
-}
-.qatar-merchant-emoji {
-  font-size: 48px;
-  line-height: 1;
-  margin-bottom: 6px;
-}
-.qatar-merchant-line {
-  font-size: 14px;
-  line-height: 1.6;
-  font-style: italic;
-  color: #FFE9B0;
-  margin: 0 0 14px;
-}
-#qatar-merchant-close {
-  padding: 10px 22px;       /* M6 手机上稍大 */
-  border-radius: 999px;
-  border: none;
-  background: #FFD98A;
-  color: #2A190E;
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ====== 结果 modal ====== */
-#qatar-result-modal {
-  position: fixed; inset: 0;
-  background: rgba(20, 12, 6, 0.82);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9970;
-  padding: 16px;
-}
-.qatar-result-card {
-  width: 100%; max-width: 460px;
-  padding: 30px 26px;
-  border-radius: 20px;
-  background: linear-gradient(160deg, #6B4423 0%, #2A190E 100%);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
-  color: #F4ECD8;
-  text-align: center;
-}
-#qatar-result-tier {
-  font-size: 28px;
-  font-weight: 800;
-  color: #FFD98A;
-  margin: 0 0 6px;
-}
-#qatar-result-quote {
-  font-size: 16px;
-  font-style: italic;
-  color: #A8D8C0;
-  margin: 0 0 16px;
-  line-height: 1.6;
-}
-#qatar-result-stats {
-  font-size: 13px;
-  color: #C9B89A;
-  margin: 0 0 20px;
-  letter-spacing: 1px;
-}
-#qatar-result-continue {
-  padding: 14px 32px;       /* M6 手机上稍大 */
-  border-radius: 999px;
-  border: none;
-  background: #FFD98A;
-  color: #2A190E;
-  font-weight: 700;
-  font-size: 16px;
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ====== M6 复活 modal 在手机上加大输入框 ====== */
-@media (max-width: 768px), (hover: none) {
-  .slk-revive-modal {
-    max-width: 92vw !important;
-    padding: 24px 20px !important;
-  }
-  .slk-revive-title { font-size: 20px !important; }
-  #silk-revive-text {
-    min-height: 140px !important;   /* M6 spec: 调到 200 类似大小 */
-    font-size: 16px !important;
-  }
-  .slk-revive-send,
-  .slk-revive-giveup {
-    padding: 12px 24px !important;
-    font-size: 15px !important;
-    min-height: 44px;
-  }
-  .slk-revive-modal .close {
-    width: 56px !important;          /* M6 spec: × 按钮 56×56 */
-    height: 56px !important;
-    font-size: 26px !important;
-  }
-}
-
-/* ====== 隐藏默认 silk-start（关 0 不再"出发"） ====== */
-#silk-start { display: none !important; }
-
-/* 关 0 主背景变暖一点，配合沙漠色 */
-.silk-stage { background: linear-gradient(160deg, #C49A5E 0%, #6B4423 100%) !important; }
-
-/* ====== M6 关 0 全屏模式下的微调 ====== */
-:fullscreen .silk-stage,
-:-webkit-full-screen .silk-stage {
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-}
-:fullscreen #qatar-hud,
-:-webkit-full-screen #qatar-hud {
-  top: env(safe-area-inset-top, 0);
-}
+/* ====== 全屏模式下的微调 ====== */
 :fullscreen #qatar-fullscreen,
 :-webkit-full-screen #qatar-fullscreen {
-  top: env(safe-area-inset-top, 0);
-}
-:fullscreen #qatar-pause,
-:-webkit-full-screen #qatar-pause {
   top: env(safe-area-inset-top, 0);
 }

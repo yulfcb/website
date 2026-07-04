@@ -1,6 +1,6 @@
-{% extends "silk-road/_level_base.html" %}
-{# M6: 覆盖 _level_base.html 提供的 viewport meta —— 横竖屏 + 全屏支持 #}
-{% block head_extra %}
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -9,12 +9,15 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
   <meta name="msapplication-tap-highlight" content="no">
+  <title>关卡 0 · 起航·多哈沙海</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='silk-road/qatar/style.css') }}">
-  {# M7: 早期 body::before 遮挡层已移除 —— bindOrientationLock() 接管竖屏提示，避免永久遮挡游戏 #}
-{% endblock %}
-{% block title %}关卡 0 · 起航·多哈沙海{% endblock %}
-{% block content %}
-  {# M6 强制横屏提示 —— 竖屏时全屏遮挡 #}
+</head>
+<body>
+
+  {# M8: Phaser 容器 —— game.js 在这里挂 canvas #}
+  <div id="qatar-game"></div>
+
+  {# M8: 竖屏提示 overlay —— CSS 控制，竖屏时显示 #}
   <div id="orientation-lock" aria-hidden="true">
     <div class="rotate-icon" aria-hidden="true">📱</div>
     <div class="rotate-title">请横屏以获得最佳体验</div>
@@ -22,21 +25,20 @@
     <div class="rotate-arrow">↻</div>
   </div>
 
-  <div class="silk-badge">关卡 0 / 5</div>
-  <h1 class="silk-title">{{ level.title if level else '起航·多哈' }}</h1>
-  {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
+  {# M8: 全屏按钮 —— DOM 按钮，game.js 里 bindFullscreenDom 接管 #}
+  <button type="button" id="qatar-fullscreen" aria-label="全屏">
+    <span class="qtr-fs-icon">⛶</span>
+    <span class="qtr-fs-label">全屏</span>
+  </button>
 
-  {% include "silk-road/_level_qatar.html" %}
-{% endblock %}
+  {# Phaser 3.80.1 —— CDN 接入，不走 npm/grunt/webpack #}
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 
-{% block scripts %}
-  <script>
-    window.LEVEL_ID = 0;
-    // M5 标记：level-engine.js 看到这个就走 qatar 分支
-    window.QATAR_MODE = true;
-  </script>
-  <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
-  <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
+  {# 关卡数据 → game.js #}
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
+
+  {# Phaser 引擎 —— Boot → Intro → Play → Result → window.location 跳关 #}
   <script src="{{ url_for('static', filename='silk-road/qatar/game.js') }}"></script>
-{% endblock %}
+
+</body>
+</html>

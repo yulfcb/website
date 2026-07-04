@@ -1,1045 +1,1022 @@
-// 卡塔尔·多哈·沙海寻路 —— 游戏引擎（M5）
+// 卡塔尔·多哈·沙海寻路 —— 游戏引擎（M8 Phaser 3 重做）
 //
-// 状态机：INTRO → PLAYING → PICKUP_MODAL × N → RESULT → claimReward / claimSecret
+// 重做原因（M5/M6/M7 Pixi 实现反复"卡屏 / 方向键无反应 / z-index 混乱"）：
+//   Phaser 自带 scene manager + Arcade physics + 标准 virtual joystick 模式
+//   + 内置 touch/keyboard + 内置 scene 容器 z-order，
+//   从根上避免 Pixi DOM overlay 与 canvas z-index 冲突。
 //
-// 与 level-engine.js 不同：本文件**完全自管 UI**。M2 的 silk-start/clickN 次 那条路不走。
-// 关 0 通关判定 = 玩家拾取 ≥ 3 件礼物（且全部 6 件走完或渴死）。
+// 状态机：Boot → Intro → Play (PLAYING|PICKUP|RESULT|DEAD) → Result → 跳转 level/1
 //
-// 真实接口（不改动）：
-//   /api/game/reward/claim —— 通关领奖（4 档之一）
+// 真实接口（与 M5 一致，不改动）：
+//   /api/game/reward/claim —— 通关领奖（PERFECT/NORMAL/HARD 三档）
 //   /api/game/secret      —— 渴死复活（只发秘密，不调 reward）
 //   /api/game/session     —— session 兜底
 //
-// 暴露给 level-engine.js 的钩子：window.SLK_QATAR_INIT() 被外部调起。
+// 关 0 → 关 1：HTML 跳（window.location.href），不用 Phaser 控制 URL。
 
 (function () {
   'use strict';
 
-  // —— DOM 引用 ——
-  var stageEl = document.getElementById('qatar-canvas');
-  var waterEl = document.getElementById('qatar-water-value');
-  var pickupEl = document.getElementById('qatar-pickup-value');
-  var luggageEl = document.getElementById('qatar-luggage-value');
-  var npcBanner = document.getElementById('qatar-npc-banner');
-  var npcText = document.getElementById('qatar-npc-text');
-  var pauseBtn = document.getElementById('qatar-pause');
-  var hintEl = document.getElementById('qatar-hint');
-  var winPanel = document.getElementById('silk-win');
-  var quoteText = document.getElementById('silk-quote');
-  var rewardText = document.getElementById('silk-reward');
-  var nextBtn = document.getElementById('silk-next');
-  var statusEl = document.getElementById('silk-webhook-status');
-
-  // 礼物 modal 元素（_level_qatar.html 提供）
-  var giftModal = document.getElementById('qatar-gift-modal');
-  var giftTitle = document.getElementById('qatar-gift-title');
-  var giftSub = document.getElementById('qatar-gift-sub');
-  var giftBucketBtn = document.getElementById('qatar-gift-bucket');
-  var giftStayBtn = document.getElementById('qatar-gift-stay');
-  var giftDropBtn = document.getElementById('qatar-gift-drop');
-
-  // 老商人 popup
-  var merchantPopup = document.getElementById('qatar-merchant-popup');
-  var merchantCloseBtn = document.getElementById('qatar-merchant-close');
-
-  // 结果 modal（RESULT 档位展示）
-  var resultModal = document.getElementById('qatar-result-modal');
-  var resultTier = document.getElementById('qatar-result-tier');
-  var resultQuote = document.getElementById('qatar-result-quote');
-  var resultStats = document.getElementById('qatar-result-stats');
-  var resultContinueBtn = document.getElementById('qatar-result-continue');
-
-  // 复活 modal 容器（page-level，模板会 include 现有的 _revive_modal.html）
-  // 复用 _revive_modal.html 的元素
-  var reviveModal = document.getElementById('silk-revive');
-  var reviveText = document.getElementById('silk-revive-text');
-  var reviveSendBtn = document.getElementById('slk-revive-send');
-  var reviveGiveupBtn = document.getElementById('slk-revive-giveup');
-  var reviveStatus = document.getElementById('slk-revive-status');
-
-  if (!stageEl) {
-    console.error('[qatar] #qatar-canvas missing, abort');
-    return;
-  }
-
-  var LEVEL_ID = 0;
+  // —— 静态数据 ——
   var L = window.QATAR_LEVEL;
   if (!L) {
-    console.error('[qatar] window.QATAR_LEVEL missing, abort');
+    console.error('[qatar-m8] window.QATAR_LEVEL missing, abort');
     return;
   }
+  var LEVEL_ID = 0;
 
-  // 4 档奖励映射（M5 spec：所有 amount 在前端 game.js 里查表）
+  // 4 档奖励（前端查表；金额与服务端 QATAR_REWARD_TIERS 一致）
   var QATAR_REWARD_TIERS = {
-    PERFECT: 20.20,    // 6 件全收 + 水分 > 5
-    NORMAL:  13.14,    // 4-5 件收 + 水分 > 0
-    HARD:    6.66,     // 3 件 + 水分 > 0
-    DEAD:    0,        // 渴死（不调 reward/claim，只调 secret）
+    PERFECT: 20.20,
+    NORMAL:  13.14,
+    HARD:    6.66,
+    DEAD:    0,
   };
 
-  // —— 状态 ——
+  // —— session / nickname ——
   var nickname = (localStorage.getItem('silkroad_nickname') || '小卡').slice(0, 20);
   var SESSION_ID = localStorage.getItem('silkroad_session_id') || '';
-  var claimedKey = 'silkroad_claimed_' + SESSION_ID + '_' + LEVEL_ID;
-  var alreadyClaimed = !!SESSION_ID && localStorage.getItem(claimedKey) === '1';
+  var alreadyClaimed = !!SESSION_ID &&
+    localStorage.getItem('silkroad_claimed_' + SESSION_ID + '_' + LEVEL_ID) === '1';
 
-  var STATE = { INTRO: 0, PLAYING: 1, PICKUP: 2, RESULT: 3, DEAD: 4 };
-  var state = STATE.INTRO;
+  // ==================== BootScene ====================
+  var BootScene = new Phaser.Class({
+    Extends: Phaser.Scene,
+    initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
+    create: function () {
+      this.cameras.main.setBackgroundColor('#1b2135');
+      this.add.text(640, 360, '加载中…', {
+        fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      // 短暂延迟 → IntroScene（保留 0 ms 也行；这里 30 ms 让浏览器渲一帧）
+      this.time.delayedCall(30, function () {
+        this.scene.start('IntroScene', { sessionId: SESSION_ID, nickname: nickname });
+      }, this);
+    },
+  });
 
-  // —— 玩家 ——
-  var player = {
-    x: L.start.x,
-    y: L.start.y,
-    lastMoveAt: 0,
-    walkPhase: 0,
-    facing: 1, // 1=right, -1=left
-  };
+  // ==================== IntroScene ====================
+  var IntroScene = new Phaser.Class({
+    Extends: Phaser.Scene,
+    initialize: function IntroScene() { Phaser.Scene.call(this, { key: 'IntroScene' }); },
+    init: function (data) {
+      this.sessionId = (data && data.sessionId) || SESSION_ID;
+      this.nickname = (data && data.nickname) || nickname;
+    },
+    create: function () {
+      this.cameras.main.setBackgroundColor('#1b2135');
 
-  // —— 资源 ——
-  var water = L.WATER_MAX;
-  var pickupCount = 0;        // 拾取动作总数（包含放弃的）
-  var luggageCount = 0;       // 装进行李的件数
-  var giftBuckets = {};       // gift_id → 'bucket' | 'stay' | 'drop'
-  var currentGiftId = null;   // 弹 modal 时锁定的礼物 id
+      // 沙金渐变条
+      var grad = this.add.graphics();
+      grad.fillGradientStyle(0xC49A5E, 0xC49A5E, 0x6B4423, 0x6B4423, 1);
+      grad.fillRect(0, 0, 1280, 60);
 
-  // —— Pixi 应用 ——
-  var app = null;
-  var bgLayer = null;
-  var midLayer = null;
-  var fgLayer = null;     // 玩家 / 礼物 / 绿洲
-  var placeTexts = [];    // 6 个地名 chip
-  var giftSprites = [];
-  var oasisSprites = [];
-  var playerSprite = null;
-  var merchantSprite = null;
-  var dustTrail = [];
+      // NPC banner
+      var card = this.add.rectangle(640, 280, 880, 220, 0x4A2E1A, 0.95)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.add.text(360, 280, '👳', { fontSize: '64px' }).setOrigin(0.5);
+      this.add.text(640, 240, '老商人 · 帧 1', {
+        fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.add.text(720, 300, L.npcFrames[0], {
+        fontSize: '18px', color: '#F4ECD8', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5);
 
-  // —— NPC banner 帧控制 ——
-  var npcFrame = 0;
-  var npcShownPickup3 = false;
+      // 标题
+      this.add.text(640, 100, '关卡 0 · 起航·多哈沙海', {
+        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.add.text(640, 140, '丝绸之路 · 陆上', {
+        fontSize: '14px', color: '#A8D8C0',
+      }).setOrigin(0.5);
 
-  // —— 暂停 ——
-  var paused = false;
+      // 开始按钮
+      var btnBg = this.add.rectangle(640, 500, 280, 80, 0xFFD98A, 1)
+        .setStrokeStyle(2, 0xFFE9B0);
+      this.add.text(640, 500, '开 始', {
+        fontSize: '32px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var btnZone = this.add.zone(640, 500, 280, 80).setInteractive({ useHandCursor: true });
+      var self = this;
+      btnZone.on('pointerdown', function () {
+        self.scene.start('PlayScene', {
+          sessionId: self.sessionId, nickname: self.nickname,
+        });
+      });
 
-  // —— 移动步数（淡出方向键提示）——
-  var moveCount = 0;
-  var hintHidden = false;
+      // 底部提示
+      this.add.text(640, 640, '提示：触屏使用左下方向键 · 键盘使用方向键或 WASD', {
+        fontSize: '13px', color: '#C9B89A',
+      }).setOrigin(0.5);
+    },
+  });
 
-  // ==================== 初始化 ====================
+  // ==================== PlayScene ====================
+  var PlayScene = new Phaser.Class({
+    Extends: Phaser.Scene,
+    initialize: function PlayScene() { Phaser.Scene.call(this, { key: 'PlayScene' }); },
+    init: function (data) {
+      this.sessionId = (data && data.sessionId) || SESSION_ID;
+      this.nickname = (data && data.nickname) || nickname;
+    },
+    create: function () {
+      var self = this;
 
-  function initPixi() {
-    // M6: 跟随 .qatar-canvas-wrap 容器 resize（横竖屏切换自动缩放）
-    var canvasWrap = document.querySelector('.qatar-canvas-wrap') || stageEl;
-    app = new PIXI.Application({
-      width: L.CANVAS_W,
-      height: L.CANVAS_H,
-      backgroundColor: 0xE8C282,
-      antialias: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
-      autoDensity: true,
-      resizeTo: canvasWrap,
-    });
-    stageEl.appendChild(app.view);
+      // —— 沙金背景 ——
+      this.cameras.main.setBackgroundColor('#E8C282');
 
-    bgLayer = new PIXI.Container();
-    midLayer = new PIXI.Container();
-    fgLayer = new PIXI.Container();
-    app.stage.addChild(bgLayer);
-    app.stage.addChild(midLayer);
-    app.stage.addChild(fgLayer);
+      // —— 沙丘（远景 3 层，用 Graphics 模拟）——
+      this.drawDunes(0xD4A86A, 360, 40);
+      this.drawDunes(0xC49A5E, 460, 60);
+      this.drawDunes(0xB58A55, 560, 90);
 
-    // 顶部沙金 → 底部深沙 渐变背景（模拟沙漠日落）
-    var bg = new PIXI.Graphics();
-    bg.beginFill(0xC49A5E);
-    bg.drawRect(0, 0, L.CANVAS_W, L.CANVAS_H * 0.4);
-    bg.endFill();
-    bg.beginFill(0xE8C282);
-    bg.drawRect(0, L.CANVAS_H * 0.4, L.CANVAS_W, L.CANVAS_H * 0.6);
-    bg.endFill();
-    bgLayer.addChild(bg);
+      // —— 6 个地名 chip ——
+      this.placeSprites = [];
+      L.places.forEach(function (p) {
+        var w = Math.max(140, p.label.length * 9 + 24);
+        var bg = self.add.graphics();
+        bg.fillStyle(0xFFFFFF, 0.92);
+        bg.fillRoundedRect(-w / 2, -16, w, 32, 6);
+        bg.fillStyle(0x4A2E1A, 0.15);
+        bg.fillRoundedRect(-w / 2, 14, w, 2, 1);
+        var t = self.add.text(0, 0, p.label, {
+          fontSize: '12px', color: '#4A2E1A', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var chip = self.add.container(p.x, p.y, [bg, t]);
+        self.placeSprites.push(chip);
+      });
 
-    // 远景沙丘（3 层 parallax 0.3x）—— 用简单半透明白曲线
-    drawDunes(bgLayer, 0xD4A86A, 0.30, 40);
-    drawDunes(bgLayer, 0xC49A5E, 0.45, 60);
-    drawDunes(bgLayer, 0xB58A55, 0.60, 90);
+      // —— 2 个绿洲 ——
+      this.oasisSprites = [];
+      L.oases.forEach(function (o) {
+        var halo = self.add.graphics();
+        halo.fillStyle(0x6EC1E4, 0.35);
+        halo.fillCircle(0, 0, 26);
+        var palm = self.add.text(0, 0, '🌴', { fontSize: '32px' }).setOrigin(0.5);
+        var label = self.add.text(0, 22, o.label, {
+          fontSize: '11px', color: '#FFFFFF', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var oasis = self.add.container(o.x, o.y, [halo, palm, label]);
+        oasis.oasisData = o;
+        self.oasisSprites.push(oasis);
+      });
 
-    // 地名 chip（6 个）—— 放 midLayer
-    L.places.forEach(function (p) {
-      var chip = makePlaceChip(p);
-      midLayer.addChild(chip);
-      placeTexts.push(chip);
-    });
+      // —— 6 个礼物 ——
+      this.giftSprites = [];
+      L.gifts.forEach(function (g) {
+        var glow = self.add.graphics();
+        glow.fillStyle(0xFFD98A, 0.35);
+        glow.fillCircle(0, 0, 22);
+        var bag = self.add.text(0, 0, g.emoji, { fontSize: '32px' }).setOrigin(0.5);
+        var label = self.add.text(0, 22, g.name, {
+          fontSize: '11px', color: '#4A2E1A', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var sprite = self.add.container(g.x, g.y, [glow, bag, label]);
+        sprite.giftData = g;
+        sprite.collected = false;
+        sprite.bobPhase = Math.random() * Math.PI * 2;
+        self.giftSprites.push(sprite);
+      });
 
-    // 绿洲（2 个）
-    L.oases.forEach(function (o) {
-      var oasis = makeOasisSprite(o);
-      fgLayer.addChild(oasis);
-      oasisSprites.push(oasis);
-    });
+      // —— 老商人 NPC ——
+      var mBg = this.add.graphics();
+      mBg.fillStyle(0x8B4513, 0.3);
+      mBg.fillCircle(0, 0, 18);
+      var mEmoji = this.add.text(0, 0, L.merchant.emoji, { fontSize: '28px' }).setOrigin(0.5);
+      this.merchantSprite = this.add.container(L.merchant.x, L.merchant.y, [mBg, mEmoji]);
 
-    // 礼物（6 个）
-    L.gifts.forEach(function (g) {
-      var sp = makeGiftSprite(g);
-      fgLayer.addChild(sp);
-      giftSprites.push(sp);
-    });
+      // —— 玩家 ——
+      var camel = this.add.text(-30, 5, '🐪', { fontSize: '38px' }).setOrigin(0.5);
+      var elf = this.add.text(0, 0, '🧝', { fontSize: '44px' }).setOrigin(0.5);
+      this.playerContainer = this.add.container(L.start.x, L.start.y, [camel, elf]);
+      this.playerSprite = { camel: camel, elf: elf };
 
-    // 老商人 NPC（Souq Waqif 位置）
-    var merchant = makeMerchantSprite(L.merchant);
-    fgLayer.addChild(merchant);
-    merchantSprite = merchant;
+      // —— 状态 ——
+      this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
+      this.water = L.WATER_MAX;
+      this.pickupCount = 0;
+      this.luggageCount = 0;
+      this.giftBuckets = {};
+      this.currentGiftId = null;
+      this.state = 'PLAYING';          // PLAYING | PICKUP | RESULT | DEAD
+      this.paused = false;
+      this.moveCount = 0;
+      this.merchantShown = false;
+      this.npcFrame = 0;
+      this.npcShownPickup3 = false;
 
-    // 玩家 = 🧝 + 🐪 在身后（小驼队）
-    var camel = new PIXI.Text('🐪', {
-      fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
-      fontSize: 38,
-    });
-    camel.anchor.set(0.5);
-    camel.x = player.x - 30;
-    camel.y = player.y + 5;
-    fgLayer.addChild(camel);
+      // —— HUD（顶部条 + NPC 文字）——
+      var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x4A2E1A, 0.92);
+      this.waterText = this.add.text(180, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.pickupText = this.add.text(640, 30, '🎁 拾起 ' + this.pickupCount + ' / 6', {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.luggageText = this.add.text(1100, 30, '🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX, {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.npcText = this.add.text(640, 80, L.npcFrames[0], {
+        fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
+      }).setOrigin(0.5);
 
-    var elf = new PIXI.Text('🧝', {
-      fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
-      fontSize: 44,
-    });
-    elf.anchor.set(0.5);
-    elf.x = player.x;
-    elf.y = player.y;
-    fgLayer.addChild(elf);
-    playerSprite = { elf: elf, camel: camel, dust: null };
-  }
+      // —— 虚拟方向键（左下 Phaser Container）——
+      this.keys = { up: false, down: false, left: false, right: false };
+      this.joystickContainer = this.add.container(180, 600);
 
-  function drawDunes(layer, color, baseY, amplitude) {
-    var g = new PIXI.Graphics();
-    g.beginFill(color, 0.6);
-    g.moveTo(0, baseY);
-    for (var x = 0; x <= L.CANVAS_W; x += 30) {
-      var peak = Math.sin(x * 0.013) * amplitude + Math.cos(x * 0.027) * (amplitude / 2);
-      g.lineTo(x, baseY - peak);
-    }
-    g.lineTo(L.CANVAS_W, L.CANVAS_H);
-    g.lineTo(0, L.CANVAS_H);
-    g.endFill();
-    layer.addChild(g);
-  }
+      var dpadBg = this.add.graphics();
+      dpadBg.fillStyle(0x4A2E1A, 0.55);
+      dpadBg.fillCircle(0, 0, 115);
+      this.joystickContainer.add(dpadBg);
 
-  function makePlaceChip(place) {
-    var container = new PIXI.Container();
-    var padX = 10, padY = 6;
-    // 用 Text 测宽度
-    var text = new PIXI.Text(place.label, {
-      fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
-      fontSize: 12,
-      fontWeight: '600',
-      fill: 0x4A2E1A,
-    });
-    var w = text.width + padX * 2;
-    var h = text.height + padY * 2;
-    var bg = new PIXI.Graphics();
-    bg.beginFill(0xFFFFFF, 0.92);
-    bg.drawRoundedRect(-w / 2, -h / 2, w, h, 6);
-    bg.endFill();
-    bg.beginFill(0x4A2E1A, 0.15);
-    bg.drawRoundedRect(-w / 2, h / 2 - 1, w, 1, 0);
-    bg.endFill();
-    container.addChild(bg);
-    container.addChild(text);
-    container.x = place.x;
-    container.y = place.y;
-    container.placeData = place;
-    return container;
-  }
+      this.joystickBtns = {};
+      var makeDpadBtn = function (txt, dx, dy, key) {
+        var bg = self.add.circle(dx, dy, 40, 0x4A2E1A, 0.85)
+          .setStrokeStyle(2, 0xFFD98A, 0.7);
+        var arrow = self.add.text(dx, dy, txt, {
+          fontSize: '30px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var zone = self.add.zone(dx, dy, 80, 80).setInteractive({ useHandCursor: true });
+        var press = function () {
+          self.keys[key] = true;
+          bg.setFillStyle(0xFFD98A, 0.95);
+          arrow.setColor('#2A190E');
+          self.tryMove(key);
+        };
+        var release = function () {
+          self.keys[key] = false;
+          bg.setFillStyle(0x4A2E1A, 0.85);
+          arrow.setColor('#FFD98A');
+        };
+        zone.on('pointerdown', press);
+        zone.on('pointerup', release);
+        zone.on('pointerout', release);
+        self.joystickContainer.add([bg, arrow, zone]);
+        self.joystickBtns[key] = { bg: bg, arrow: arrow };
+      };
+      makeDpadBtn('▲', 0, -75, 'up');
+      makeDpadBtn('▼', 0, 75, 'down');
+      makeDpadBtn('◀', -75, 0, 'left');
+      makeDpadBtn('▶', 75, 0, 'right');
 
-  function makeOasisSprite(o) {
-    var c = new PIXI.Container();
-    var halo = new PIXI.Graphics();
-    halo.beginFill(0x6EC1E4, 0.35);
-    halo.drawCircle(0, 0, 26);
-    halo.endFill();
-    c.addChild(halo);
-    var palm = new PIXI.Text('🌴', {
-      fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
-      fontSize: 32,
-    });
-    palm.anchor.set(0.5);
-    c.addChild(palm);
-    var label = new PIXI.Text(o.label, {
-      fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
-      fontSize: 11,
-      fill: 0xFFFFFF,
-      fontWeight: '600',
-    });
-    label.anchor.set(0.5);
-    label.y = 22;
-    c.addChild(label);
-    c.x = o.x;
-    c.y = o.y;
-    c.oasisData = o;
-    return c;
-  }
+      // —— 拾起/确认按钮（右下）——
+      var actBg = this.add.circle(1100, 600, 48, 0xFFD98A, 1)
+        .setStrokeStyle(2, 0xFFE9B0);
+      var actText = this.add.text(1100, 600, '🆗', { fontSize: '32px' }).setOrigin(0.5);
+      var actZone = this.add.zone(1100, 600, 96, 96).setInteractive({ useHandCursor: true });
+      this.actionContainer = this.add.container(0, 0, [actBg, actText, actZone]);
+      actZone.on('pointerdown', function () { self.tryActionPickup(); });
 
-  function makeGiftSprite(g) {
-    var c = new PIXI.Container();
-    var glow = new PIXI.Graphics();
-    glow.beginFill(0xFFD98A, 0.35);
-    glow.drawCircle(0, 0, 22);
-    glow.endFill();
-    c.addChild(glow);
-    var bag = new PIXI.Text('🎁', {
-      fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
-      fontSize: 32,
-    });
-    bag.anchor.set(0.5);
-    c.addChild(bag);
-    var label = new PIXI.Text(g.name, {
-      fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
-      fontSize: 11,
-      fill: 0x4A2E1A,
-      fontWeight: '600',
-    });
-    label.anchor.set(0.5);
-    label.y = 22;
-    c.addChild(label);
-    c.x = g.x;
-    c.y = g.y;
-    c.giftData = g;
-    c.collected = false;
-    c.bobPhase = Math.random() * Math.PI * 2;
-    return c;
-  }
+      // —— 暂停按钮（左上 Phaser Zone）——
+      var pauseBg = this.add.circle(60, 100, 24, 0x4A2E1A, 0.92)
+        .setStrokeStyle(2, 0xFFD98A, 0.6);
+      this.pauseBtnText = this.add.text(60, 100, '⏸', { fontSize: '20px' }).setOrigin(0.5);
+      var pauseZone = this.add.zone(60, 100, 48, 48).setInteractive({ useHandCursor: true });
+      pauseZone.on('pointerdown', function () { self.togglePause(); });
+      this.pauseContainer = this.add.container(0, 0, [pauseBg, this.pauseBtnText, pauseZone]);
 
-  function makeMerchantSprite(m) {
-    var c = new PIXI.Container();
-    var bg = new PIXI.Graphics();
-    bg.beginFill(0x8B4513, 0.3);
-    bg.drawCircle(0, 0, 18);
-    bg.endFill();
-    c.addChild(bg);
-    var emoji = new PIXI.Text(m.emoji, {
-      fontFamily: 'Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif',
-      fontSize: 28,
-    });
-    emoji.anchor.set(0.5);
-    c.addChild(emoji);
-    c.x = m.x;
-    c.y = m.y;
-    return c;
-  }
+      // —— Modal 容器（礼物 modal / 老商人 popup / 复活 modal 共用）——
+      this.modalContainer = this.add.container(640, 360);
+      this.modalContainer.setDepth(2000);
+      this.modalContainer.setVisible(false);
 
-  // ==================== 主循环 ====================
+      // —— Keyboard 监听 ——
+      this.input.keyboard.on('keydown-UP',    function () { self.tryMove('up'); });
+      this.input.keyboard.on('keydown-DOWN',  function () { self.tryMove('down'); });
+      this.input.keyboard.on('keydown-LEFT',  function () { self.tryMove('left'); });
+      this.input.keyboard.on('keydown-RIGHT', function () { self.tryMove('right'); });
+      this.input.keyboard.on('keydown-W',     function () { self.tryMove('up'); });
+      this.input.keyboard.on('keydown-A',     function () { self.tryMove('left'); });
+      this.input.keyboard.on('keydown-S',     function () { self.tryMove('down'); });
+      this.input.keyboard.on('keydown-D',     function () { self.tryMove('right'); });
+      // keyup 不需要 —— tryMove 用 cooldown + 一按一走
 
-  function startTicker() {
-    app.ticker.add(function () {
+      // —— 全屏按钮 DOM（Phaser 之外，与 M5/M6 一致）——
+      // 不在 scene 内创建，模板里已经有 #qatar-fullscreen —— scene 外
+      this.bindFullscreenDom();
+      this.bindOrientationLock();
+
+      // —— 兜底建 session ——
+      if (!this.sessionId) this.ensureSession();
+    },
+
+    // ==================== 沙丘 ====================
+    drawDunes: function (color, baseY, amplitude) {
+      var g = this.add.graphics();
+      g.fillStyle(color, 0.6);
+      g.beginPath();
+      g.moveTo(0, baseY);
+      for (var x = 0; x <= L.CANVAS_W; x += 30) {
+        var peak = Math.sin(x * 0.013) * amplitude + Math.cos(x * 0.027) * (amplitude / 2);
+        g.lineTo(x, baseY - peak);
+      }
+      g.lineTo(L.CANVAS_W, L.CANVAS_H);
+      g.lineTo(0, L.CANVAS_H);
+      g.closePath();
+      g.fillPath();
+    },
+
+    // ==================== 主循环 ====================
+    update: function (time, delta) {
+      if (this.state !== 'PLAYING' || this.paused) return;
+
       // 礼物 bob 动画
-      giftSprites.forEach(function (sp) {
-        if (sp.collected) return;
+      for (var i = 0; i < this.giftSprites.length; i++) {
+        var sp = this.giftSprites[i];
+        if (sp.collected) continue;
         sp.bobPhase += 0.04;
-        sp.children[1].y = Math.sin(sp.bobPhase) * 2;
-      });
-
-      // 玩家走动画（切换 emoji 偏移）
-      if (state === STATE.PLAYING && !paused) {
-        if (Date.now() - player.lastMoveAt < 200) {
-          player.walkPhase += 0.2;
-          if (playerSprite) {
-            playerSprite.elf.y = player.y + Math.sin(player.walkPhase) * 1.5;
-            playerSprite.camel.y = player.y + 5 + Math.sin(player.walkPhase) * 1.5;
-          }
-        } else {
-          if (playerSprite) {
-            playerSprite.elf.y = player.y;
-            playerSprite.camel.y = player.y + 5;
-          }
-        }
-
-        // 老商人距离检测（走到 Souq Waqif chip 附近显示 popup）
-        var dx = player.x - L.merchant.x;
-        var dy = player.y - L.merchant.y;
-        if (Math.sqrt(dx * dx + dy * dy) < 50 && merchantPopup) {
-          showMerchant();
-        }
+        sp.list[1].y = Math.sin(sp.bobPhase) * 2;   // bag
       }
 
-      // 沙尘尾巴粒子
-      for (var i = dustTrail.length - 1; i >= 0; i--) {
-        var p = dustTrail[i];
-        p.alpha -= 0.04;
-        p.y += 0.5;
-        if (p.alpha <= 0) {
-          fgLayer.removeChild(p);
-          p.destroy();
-          dustTrail.splice(i, 1);
+      // 走动画
+      if (Date.now() - this.player.lastMoveAt < 200) {
+        this.player.walkPhase += 0.2;
+        if (this.playerSprite) {
+          this.playerSprite.elf.y = Math.sin(this.player.walkPhase) * 1.5;
+          this.playerSprite.camel.y = 5 + Math.sin(this.player.walkPhase) * 1.5;
         }
+      } else if (this.playerSprite) {
+        this.playerSprite.elf.y = 0;
+        this.playerSprite.camel.y = 5;
       }
-    });
-  }
 
-  function spawnDust() {
-    var p = new PIXI.Text('·', {
-      fontFamily: 'sans-serif',
-      fontSize: 18,
-      fill: 0xB58A55,
-    });
-    p.anchor.set(0.5);
-    p.x = player.x + (Math.random() - 0.5) * 16;
-    p.y = player.y + 10;
-    p.alpha = 0.7;
-    fgLayer.addChild(p);
-    dustTrail.push(p);
-  }
-
-  // ==================== 输入 ====================
-
-  function bindInput() {
-    var keys = {
-      ArrowUp: 0, ArrowDown: 0, ArrowLeft: 0, ArrowRight: 0,
-      w: 0, a: 0, s: 0, d: 0, W: 0, A: 0, S: 0, D: 0,
-    };
-
-    // M6: 抽象按键处理函数 —— 键盘 / 虚拟键都走这个
-    var onKey = function (key, isDown) {
-      if (keys.hasOwnProperty(key)) {
-        if (isDown) {
-          if (keys[key] === 0) tryMove(key);
-          keys[key] = 1;
-        } else {
-          keys[key] = 0;
-        }
+      // 老商人距离检测
+      var dx = this.player.x - L.merchant.x;
+      var dy = this.player.y - L.merchant.y;
+      if (Math.sqrt(dx * dx + dy * dy) < 50 && !this.merchantShown) {
+        this.showMerchant();
       }
-    };
+    },
 
-    // 键盘监听
-    document.addEventListener('keydown', function (e) {
-      if (keys.hasOwnProperty(e.key)) {
-        onKey(e.key, true);
-        e.preventDefault();
-      }
-    });
-    document.addEventListener('keyup', function (e) {
-      if (keys.hasOwnProperty(e.key)) {
-        onKey(e.key, false);
-        e.preventDefault();
-      }
-    });
+    // ==================== 移动 ====================
+    tryMove: function (key) {
+      if (this.state !== 'PLAYING' || this.paused) return;
+      var now = Date.now();
+      if (now - this.player.lastMoveAt < L.MOVE_COOLDOWN_MS) return;
 
-    // M6: 虚拟键绑定 —— 用 touch 事件（更灵敏）+ 鼠标兜底
-    var virtualBtns = document.querySelectorAll('.qtr-btn[data-key]');
-    virtualBtns.forEach(function (btn) {
-      var k = btn.dataset.key;
+      var dx = 0, dy = 0;
+      if (key === 'up') dy = -L.STEP_PX;
+      else if (key === 'down') dy = L.STEP_PX;
+      else if (key === 'left') { dx = -L.STEP_PX; this.player.facing = -1; }
+      else if (key === 'right') { dx = L.STEP_PX; this.player.facing = 1; }
 
-      // touchstart —— 按下
-      btn.addEventListener('touchstart', function (e) {
-        e.preventDefault();
-        btn.classList.add('qtr-pressed');
-        onKey(k, true);
-      }, { passive: false });
-
-      // touchend —— 抬起
-      btn.addEventListener('touchend', function (e) {
-        e.preventDefault();
-        btn.classList.remove('qtr-pressed');
-        onKey(k, false);
-      }, { passive: false });
-
-      // touchcancel —— 取消（系统手势拦截）
-      btn.addEventListener('touchcancel', function (e) {
-        btn.classList.remove('qtr-pressed');
-        onKey(k, false);
-      }, { passive: false });
-
-      // 鼠标兜底（PC 调试）
-      btn.addEventListener('mousedown', function (e) {
-        e.preventDefault();
-        btn.classList.add('qtr-pressed');
-        onKey(k, true);
-      });
-      btn.addEventListener('mouseup', function (e) {
-        e.preventDefault();
-        btn.classList.remove('qtr-pressed');
-        onKey(k, false);
-      });
-      btn.addEventListener('mouseleave', function (e) {
-        if (btn.classList.contains('qtr-pressed')) {
-          btn.classList.remove('qtr-pressed');
-          onKey(k, false);
-        }
-      });
-
-      // 阻止 contextmenu 长按菜单
-      btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    });
-  }
-
-  // ==================== M6 全屏 / 横竖屏切换 ====================
-
-  function bindFullscreen() {
-    var fsBtn = document.getElementById('qatar-fullscreen');
-    var fsIcon = fsBtn ? fsBtn.querySelector('.qtr-fs-icon') : null;
-    var fsLabel = fsBtn ? fsBtn.querySelector('.qtr-fs-label') : null;
-
-    var updateFsLabel = function () {
-      var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-      if (fsIcon) fsIcon.textContent = isFs ? '✕' : '⛶';
-      if (fsLabel) fsLabel.textContent = isFs ? '退出' : '全屏';
-    };
-
-    if (fsBtn) {
-      fsBtn.addEventListener('click', function () {
-        var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        try {
-          if (!isFs) {
-            var el = document.documentElement;
-            var req = el.requestFullscreen || el.webkitRequestFullscreen;
-            if (req) {
-              var p = req.call(el);
-              if (p && typeof p.catch === 'function') p.catch(function () {});
-            }
-          } else {
-            var exit = document.exitFullscreen || document.webkitExitFullscreen;
-            if (exit) {
-              var p2 = exit.call(document);
-              if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
-            }
-          }
-        } catch (e) { /* 静默 */ }
-      });
-    }
-
-    document.addEventListener('fullscreenchange', updateFsLabel);
-    document.addEventListener('webkitfullscreenchange', updateFsLabel);
-    updateFsLabel();
-  }
-
-  function bindOrientationLock() {
-    var lock = document.getElementById('orientation-lock');
-    if (!lock) return;
-
-    var apply = function () {
-      var isPortrait = false;
-      try {
-        if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) {
-          isPortrait = true;
-        }
-      } catch (e) {}
-      // fallback: 比 width/height
-      if (!isPortrait && window.innerHeight > window.innerWidth) isPortrait = true;
-      if (isPortrait) {
-        lock.classList.add('show');
-        document.documentElement.classList.add('qtr-portrait');
-      } else {
-        lock.classList.remove('show');
-        document.documentElement.classList.remove('qtr-portrait');
-      }
-      // M7: 安全网 —— 清掉早期 body::before 遮挡层（即使早期 script 已删，仍兜底）
-      document.documentElement.classList.remove('qtr-portrait-early');
-    };
-
-    apply();
-    if (window.matchMedia) {
-      var mql = window.matchMedia('(orientation: portrait)');
-      var mqHandler = function () { apply(); };
-      if (mql.addEventListener) mql.addEventListener('change', mqHandler);
-      else if (mql.addListener) mql.addListener(mqHandler);
-    }
-    window.addEventListener('resize', apply);
-    window.addEventListener('orientationchange', function () { setTimeout(apply, 100); });
-  }
-
-  function tryMove(key) {
-    if (state !== STATE.PLAYING) return;
-    if (paused) return;
-    var now = Date.now();
-    if (now - player.lastMoveAt < L.MOVE_COOLDOWN_MS) return;
-    var dx = 0, dy = 0;
-    if (key === 'ArrowUp' || key === 'w' || key === 'W') dy = -L.STEP_PX;
-    else if (key === 'ArrowDown' || key === 's' || key === 'S') dy = L.STEP_PX;
-    else if (key === 'ArrowLeft' || key === 'a' || key === 'A') { dx = -L.STEP_PX; player.facing = -1; }
-    else if (key === 'ArrowRight' || key === 'd' || key === 'D') { dx = L.STEP_PX; player.facing = 1; }
-    var nx = player.x + dx;
-    var ny = player.y + dy;
-    // 边界检测
-    if (nx < 30 || nx > L.CANVAS_W - 30 || ny < 30 || ny > L.CANVAS_H - 30) {
-      hitBoundary();
-      return;
-    }
-    player.x = nx;
-    player.y = ny;
-    player.lastMoveAt = now;
-    if (playerSprite) {
-      playerSprite.elf.x = player.x;
-      playerSprite.elf.y = player.y;
-      playerSprite.camel.x = player.x - 30 * player.facing;
-      playerSprite.camel.y = player.y + 5;
-    }
-    spawnDust();
-    moveCount += 1;
-    if (!hintHidden && moveCount >= 3 && hintEl) {
-      hintEl.classList.add('qatar-hidden');
-      hintHidden = true;
-    }
-    // 水分 -0.1
-    changeWater(-L.WATER_PER_STEP);
-    // 检查绿洲 / 礼物碰撞
-    checkOasisCollision();
-    checkGiftCollision();
-  }
-
-  function hitBoundary() {
-    changeWater(-L.WATER_BOUNDARY_HIT);
-    // 短哔提示：浏览器 beep 限制多，跳过音，改 UI 闪烁
-    flashWaterUI();
-  }
-
-  function flashWaterUI() {
-    if (!waterEl) return;
-    waterEl.parentElement.classList.add('qatar-water-warn');
-    setTimeout(function () {
-      waterEl.parentElement.classList.remove('qatar-water-warn');
-    }, 200);
-  }
-
-  function changeWater(delta) {
-    water = Math.max(0, Math.min(L.WATER_MAX, +(water + delta).toFixed(2)));
-    if (waterEl) waterEl.textContent = water.toFixed(1) + ' / ' + L.WATER_MAX;
-    if (water <= 0 && state === STATE.PLAYING) {
-      // 进入 DEAD 流程
-      dieFromThirst();
-    } else if (water <= 3 && waterEl) {
-      waterEl.parentElement.classList.add('qatar-water-low');
-    } else {
-      if (waterEl) waterEl.parentElement.classList.remove('qatar-water-low');
-    }
-  }
-
-  function checkOasisCollision() {
-    for (var i = 0; i < L.oases.length; i++) {
-      var o = L.oases[i];
-      var dx = player.x - o.x;
-      var dy = player.y - o.y;
-      if (Math.sqrt(dx * dx + dy * dy) < 40) {
-        // 简单防抖：每步都检测，只在第一次触发时弹文字
-        if (!o._lastTouch || Date.now() - o._lastTouch > 2000) {
-          o._lastTouch = Date.now();
-          changeWater(L.WATER_OASIS_REWARD);
-          flashWaterUI();
-        }
-      }
-    }
-  }
-
-  function checkGiftCollision() {
-    for (var i = 0; i < giftSprites.length; i++) {
-      var sp = giftSprites[i];
-      if (sp.collected) continue;
-      var dx = player.x - sp.x;
-      var dy = player.y - sp.y;
-      if (Math.sqrt(dx * dx + dy * dy) < 36) {
-        openGiftModal(sp.giftData);
-        sp.collected = true;
-        sp.visible = false;
+      var nx = this.player.x + dx;
+      var ny = this.player.y + dy;
+      if (nx < 30 || nx > L.CANVAS_W - 30 || ny < 30 || ny > L.CANVAS_H - 30) {
+        this.changeWater(-L.WATER_BOUNDARY_HIT);
+        this.flashWaterUI();
         return;
       }
-    }
-  }
 
-  // ==================== 礼物 modal ====================
+      this.player.x = nx;
+      this.player.y = ny;
+      this.player.lastMoveAt = now;
+      this.playerContainer.x = nx;
+      this.playerContainer.y = ny;
 
-  function openGiftModal(g) {
-    state = STATE.PICKUP;
-    currentGiftId = g.id;
-    if (giftTitle) giftTitle.textContent = '你拾起了「' + g.name + '」';
-    if (giftSub) giftSub.textContent = g.hint;
-    if (giftModal) giftModal.style.display = 'flex';
-    // 装进按钮在装满后禁用
-    if (giftBucketBtn) {
-      giftBucketBtn.disabled = luggageCount >= L.LUGGAGE_MAX;
-      giftBucketBtn.textContent = luggageCount >= L.LUGGAGE_MAX
-        ? '🧳 行李满' : '🧳 装进 (' + luggageCount + '/' + L.LUGGAGE_MAX + ')';
-    }
-  }
+      this.moveCount++;
+      this.changeWater(-L.WATER_PER_STEP);
+      this.checkOasisCollision();
+      this.checkGiftCollision();
+    },
 
-  function closeGiftModal() {
-    if (giftModal) giftModal.style.display = 'none';
-    currentGiftId = null;
-    state = STATE.PLAYING;
-    // 检查是否完成 6 件或仍可继续
-    pickupCount += 1;
-    if (pickupEl) pickupEl.textContent = pickupCount + ' / 6';
-    // NPC 第 3 件切换到帧 2
-    if (!npcShownPickup3 && pickupCount >= 3) {
-      npcShownPickup3 = true;
-      setNpcFrame(1);
-    }
-    // 完成 6 件 → 进入 RESULT
-    if (pickupCount >= 6) {
-      enterResult();
-    }
-  }
-
-  function decideGift(choice) {
-    if (currentGiftId === null) return;
-    giftBuckets[currentGiftId] = choice;
-    if (choice === 'bucket') {
-      luggageCount += 1;
-      if (luggageEl) luggageEl.textContent = luggageCount + ' / ' + L.LUGGAGE_MAX;
-    }
-    closeGiftModal();
-  }
-
-  if (giftBucketBtn) giftBucketBtn.addEventListener('click', function () { decideGift('bucket'); });
-  if (giftStayBtn) giftStayBtn.addEventListener('click', function () { decideGift('stay'); });
-  if (giftDropBtn) giftDropBtn.addEventListener('click', function () { decideGift('drop'); });
-
-  // ==================== 老商人 popup ====================
-
-  var merchantShown = false;
-  function showMerchant() {
-    if (merchantShown || !merchantPopup) return;
-    merchantShown = true;
-    merchantPopup.style.display = 'flex';
-  }
-  if (merchantCloseBtn) merchantCloseBtn.addEventListener('click', function () {
-    if (merchantPopup) merchantPopup.style.display = 'none';
-    setTimeout(function () { merchantShown = false; }, 1000);
-  });
-
-  // ==================== NPC banner ====================
-
-  function setNpcFrame(idx) {
-    npcFrame = idx;
-    if (npcText) npcText.textContent = L.npcFrames[idx];
-  }
-  setNpcFrame(0);
-
-  // ==================== 暂停 ====================
-
-  if (pauseBtn) {
-    pauseBtn.addEventListener('click', function () {
-      paused = !paused;
-      pauseBtn.textContent = paused ? '▶ 继续' : '⏸ 暂停';
-    });
-  }
-
-  // ==================== 结果 4 档 ====================
-
-  function determineTier() {
-    // dead 优先（water=0 时已经在 dieFromThirst 走完）
-    var bucket = Object.keys(giftBuckets).filter(function (k) { return giftBuckets[k] === 'bucket'; }).length;
-    var allPicked = pickupCount >= 6;
-    if (allPicked && water > 5) return 'PERFECT';
-    if ((bucket >= 4 || allPicked) && water > 0) return 'NORMAL';
-    if (bucket >= 3 || pickupCount >= 3) {
-      if (water > 0) return 'HARD';
-      return 'DEAD';
-    }
-    // pickupCount < 3 → 不准调 reward，弹 modal 继续
-    return null;
-  }
-
-  function enterResult() {
-    state = STATE.RESULT;
-    var tier = determineTier();
-    if (tier === null) {
-      // 礼物不够 → 弹 modal 让玩家继续收集
-      alert('礼物还不够（至少 3 件），继续走走吧 🌵');
-      state = STATE.PLAYING;
-      return;
-    }
-    renderResultModal(tier);
-  }
-
-  function renderResultModal(tier) {
-    var amount = L.rewardTiers[tier];
-    var quote = L.tierQuotes[tier];
-    var bucketCount = Object.keys(giftBuckets).filter(function (k) { return giftBuckets[k] === 'bucket'; }).length;
-    if (resultTier) resultTier.textContent =
-      tier === 'PERFECT' ? '🌟 完美'
-      : tier === 'NORMAL' ? '☀️ 普通'
-      : tier === 'HARD' ? '🌾 勉强'
-      : '🏜️ 渴死';
-    if (resultQuote) resultQuote.textContent = quote;
-    if (resultStats) resultStats.textContent =
-      '收 ' + bucketCount + ' 件 · 拾 ' + pickupCount + ' / 6 · 水分 ' + water.toFixed(1) + ' / ' + L.WATER_MAX;
-    if (resultModal) resultModal.style.display = 'flex';
-    setNpcFrame(2);
-    // 调用后端
-    if (tier === 'DEAD') {
-      // 渴死档：只调 secret，不调 reward
-      showReviveForQatar();
-    } else {
-      claimRewardForQatar(amount, tier);
-    }
-  }
-
-  if (resultContinueBtn) resultContinueBtn.addEventListener('click', function () {
-    if (resultModal) resultModal.style.display = 'none';
-    if (nextBtn) nextBtn.style.display = 'inline-block';
-  });
-
-  // ==================== reward/claim ====================
-
-  function claimRewardForQatar(amount, tier) {
-    if (!SESSION_ID) {
-      ensureSession().then(function () {
-        if (SESSION_ID) claimRewardForQatar(amount, tier);
-      });
-      return;
-    }
-    if (alreadyClaimed) {
-      renderRewardUI(amount, tier, '本关已领取（前端去重命中）', true, false);
-      return;
-    }
-    fetch('/api/game/reward/claim', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: SESSION_ID,
-        level: LEVEL_ID,
-        nickname: nickname,
-      }),
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data && data.success) {
-          localStorage.setItem(claimedKey, '1');
-          var msg = data.duplicate
-            ? '已领取过（服务端去重）'
-            : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
-          renderRewardUI(amount, tier, msg, true, !!data.duplicate);
-        } else {
-          renderRewardUI(amount, tier, '领取失败：' + (data && data.error ? data.error : '未知错误'), false, false);
-        }
-      })
-      .catch(function (err) {
-        renderRewardUI(amount, tier, '网络错误：' + err.message, false, false);
-      });
-  }
-
-  function renderRewardUI(amount, tier, statusMsg, ok, duplicate) {
-    // 主页面 silk-win 也展示（关 0 复用 M2 的样式）
-    if (winPanel) winPanel.style.display = 'block';
-    if (rewardText) rewardText.textContent = '+¥' + amount.toFixed(2) + ' · ' + (
-      tier === 'PERFECT' ? '🌟 完美档' :
-      tier === 'NORMAL' ? '☀️ 普通档' :
-      '🌾 勉强档'
-    );
-    if (quoteText) quoteText.textContent = L.tierQuotes[tier];
-    if (statusEl) {
-      statusEl.textContent = statusMsg;
-      statusEl.style.color = ok ? '#a8d8c0' : '#f6b5c8';
-    }
-    if (nextBtn) {
-      nextBtn.style.display = 'inline-block';
-      nextBtn.href = '/games/silk-road/level/1';
-    }
-    // 写入通关列表
-    try {
-      var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
-      if (cleared.indexOf(LEVEL_ID) === -1) {
-        cleared.push(LEVEL_ID);
-        localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
+    tryActionPickup: function () {
+      if (this.state !== 'PLAYING' || this.paused) return;
+      var nearest = null;
+      var minDist = 60;
+      for (var i = 0; i < this.giftSprites.length; i++) {
+        var sp = this.giftSprites[i];
+        if (sp.collected) continue;
+        var dx = this.player.x - sp.x;
+        var dy = this.player.y - sp.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minDist) { nearest = sp; minDist = d; }
       }
-    } catch (e) {}
-  }
-
-  // ==================== 渴死 / 复活 ====================
-
-  function dieFromThirst() {
-    state = STATE.DEAD;
-    // 停 Pixi 输入
-    paused = true;
-    if (pauseBtn) pauseBtn.textContent = '▶ 继续';
-    // 立即弹复活 modal（_revive_modal.html）
-    if (pickupCount >= 3) {
-      // 拾够 3 件 → 复活成功仍可领奖
-      showReviveForQatar();
-    } else {
-      // 没拾够 3 件 → 复活后强制再走
-      showReviveForQatar(true);
-    }
-  }
-
-  function showReviveForQatar(forceRestart) {
-    if (!reviveModal) {
-      // 没 modal 兜底：直接放弃
-      giveUpQatar();
-      return;
-    }
-    reviveModal.style.display = 'flex';
-    if (reviveText) {
-      reviveText.value = '';
-      reviveText.disabled = false;
-      setTimeout(function () { reviveText.focus(); }, 50);
-    }
-    if (reviveSendBtn) {
-      reviveSendBtn.disabled = false;
-      reviveSendBtn.textContent = forceRestart ? '发送 · 然后继续沙海' : '发送 · 复活继续';
-    }
-    if (reviveStatus) reviveStatus.textContent = '';
-    // 绑定一次性回调（绑定多次会重复发）
-    reviveSendBtn.onclick = function () { submitSecretForQatar(forceRestart); };
-    reviveGiveupBtn.onclick = giveUpQatar;
-  }
-
-  function submitSecretForQatar(forceRestart) {
-    if (!reviveText) return;
-    var text = (reviveText.value || '').trim();
-    if (!text) {
-      if (reviveStatus) {
-        reviveStatus.textContent = '先写点什么吧…';
-        reviveStatus.style.color = '#f6b5c8';
+      if (nearest) {
+        this.openGiftModal(nearest.giftData);
+        nearest.collected = true;
+        nearest.setVisible(false);
       }
-      return;
-    }
-    if (reviveSendBtn) reviveSendBtn.disabled = true;
-    if (reviveText) reviveText.disabled = true;
-    if (reviveStatus) {
-      reviveStatus.textContent = '发送中…';
-      reviveStatus.style.color = '#a8d8c0';
-    }
-    if (!SESSION_ID) {
-      ensureSession().then(function () {
-        if (SESSION_ID) submitSecretForQatar(forceRestart);
-        else {
-          if (reviveStatus) reviveStatus.textContent = 'session 创建失败，请重试';
-          if (reviveSendBtn) reviveSendBtn.disabled = false;
-          if (reviveText) reviveText.disabled = false;
-        }
-      });
-      return;
-    }
-    fetch('/api/game/secret', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: SESSION_ID,
-        level: LEVEL_ID,
-        secret_text: text,
-        nickname: nickname,
-      }),
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data && data.success) {
-          if (reviveStatus) {
-            reviveStatus.textContent = '已发送 ❤️';
-            reviveStatus.style.color = '#a8d8c0';
+    },
+
+    // ==================== 暂停 ====================
+    togglePause: function () {
+      this.paused = !this.paused;
+      this.pauseBtnText.setText(this.paused ? '▶' : '⏸');
+    },
+
+    // ==================== 水分 ====================
+    changeWater: function (delta) {
+      this.water = Math.max(0, Math.min(L.WATER_MAX, +(this.water + delta).toFixed(2)));
+      this.waterText.setText('💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX);
+      if (this.water <= 0 && this.state === 'PLAYING') {
+        this.dieFromThirst();
+      } else if (this.water <= 3) {
+        this.waterText.setColor('#FF6B6B');
+      } else {
+        this.waterText.setColor('#FFD98A');
+      }
+    },
+    flashWaterUI: function () {
+      var prev = this.waterText.style.color;
+      this.waterText.setColor('#FFE9B0');
+      var self = this;
+      this.time.delayedCall(200, function () { self.waterText.setColor(prev); });
+    },
+
+    // ==================== 碰撞 ====================
+    checkOasisCollision: function () {
+      for (var i = 0; i < L.oases.length; i++) {
+        var o = L.oases[i];
+        var dx = this.player.x - o.x;
+        var dy = this.player.y - o.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 40) {
+          if (!o._lastTouch || Date.now() - o._lastTouch > 2000) {
+            o._lastTouch = Date.now();
+            this.changeWater(L.WATER_OASIS_REWARD);
+            this.flashWaterUI();
           }
-          setTimeout(function () {
-            hideRevive();
-            if (forceRestart) {
-              // 没拾够 3 件 → 复活 +1 滴回原点重走
-              water = 1;
-              player.x = L.start.x;
-              player.y = L.start.y;
-              if (playerSprite) {
-                playerSprite.elf.x = player.x;
-                playerSprite.elf.y = player.y;
-                playerSprite.camel.x = player.x - 30;
-                playerSprite.camel.y = player.y + 5;
-              }
-              if (waterEl) waterEl.textContent = water.toFixed(1) + ' / ' + L.WATER_MAX;
-              paused = false;
-              if (pauseBtn) pauseBtn.textContent = '⏸ 暂停';
-              state = STATE.PLAYING;
-            } else {
-              // 已拾够 3 件 → 复活后直接领奖（DEAD 档 amount=0 但按 spec 不调 reward）
-              // spec: dead 档永远不要调 reward/claim，只调 secret
-              // 因此 DEAD 档只能放弃或重走（已经在 forceRestart 路径）
-              giveUpQatar();
-            }
-          }, 1500);
-        } else {
-          if (reviveStatus) {
-            reviveStatus.textContent = '发送失败：' + (data && data.error ? data.error : '未知错误');
-            reviveStatus.style.color = '#f6b5c8';
-          }
-          if (reviveSendBtn) reviveSendBtn.disabled = false;
-          if (reviveText) reviveText.disabled = false;
         }
-      })
-      .catch(function (err) {
-        if (reviveStatus) {
-          reviveStatus.textContent = '网络错误：' + err.message;
-          reviveStatus.style.color = '#f6b5c8';
-        }
-        if (reviveSendBtn) reviveSendBtn.disabled = false;
-        if (reviveText) reviveText.disabled = false;
-      });
-  }
-
-  function hideRevive() {
-    if (reviveModal) reviveModal.style.display = 'none';
-  }
-
-  function giveUpQatar() {
-    hideRevive();
-    if (nextBtn) {
-      nextBtn.textContent = '已放弃 → 下一关';
-      nextBtn.style.display = 'inline-block';
-      nextBtn.href = '/games/silk-road/level/1';
-    }
-    if (winPanel) {
-      winPanel.style.display = 'block';
-      if (quoteText) quoteText.textContent = '沙海暂时不适合你，下一关再见 🌵';
-      if (rewardText) rewardText.textContent = '';
-      if (statusEl) {
-        statusEl.textContent = '未通关，没领奖（放弃了复活）';
-        statusEl.style.color = '#c9c2d8';
       }
-    }
-  }
+    },
+    checkGiftCollision: function () {
+      for (var i = 0; i < this.giftSprites.length; i++) {
+        var sp = this.giftSprites[i];
+        if (sp.collected) continue;
+        var dx = this.player.x - sp.x;
+        var dy = this.player.y - sp.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 36) {
+          this.openGiftModal(sp.giftData);
+          sp.collected = true;
+          sp.setVisible(false);
+          return;
+        }
+      }
+    },
 
-  // ==================== session 兜底 ====================
+    // ==================== 礼物 modal ====================
+    openGiftModal: function (g) {
+      var self = this;
+      this.state = 'PICKUP';
+      this.currentGiftId = g.id;
+      this.modalContainer.removeAll(true);
 
-  function ensureSession() {
-    if (SESSION_ID) return Promise.resolve();
-    return fetch('/api/game/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'land', nickname: nickname }),
-    })
+      // 背景遮罩（吸收点击，不响应回调）
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
+      backdrop.setInteractive({ useHandCursor: false });
+      this.modalContainer.add(backdrop);
+
+      var card = this.add.rectangle(0, 0, 460, 420, 0x4A2E1A, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      this.modalContainer.add(this.add.text(0, -150, g.emoji, { fontSize: '56px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -80, '你拾起了「' + g.name + '」', {
+        fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -40, g.hint, {
+        fontSize: '13px', color: '#C9B89A', wordWrap: { width: 400 },
+      }).setOrigin(0.5));
+
+      var isFull = this.luggageCount >= L.LUGGAGE_MAX;
+      var makeModalBtn = function (txt, subTxt, dy, isPrimary, callback) {
+        var color = isPrimary ? 0xFFD98A : 0x6B4423;
+        var textColor = isPrimary ? '#2A190E' : '#F4ECD8';
+        var bg = self.add.rectangle(0, dy, 380, 56, color, 1)
+          .setStrokeStyle(1, 0xFFD98A, 0.4);
+        var label = self.add.text(0, dy - 8, txt, {
+          fontSize: '15px', color: textColor, fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var subT = self.add.text(0, dy + 12, subTxt, {
+          fontSize: '11px', color: '#C9B89A',
+        }).setOrigin(0.5);
+        var zone = self.add.zone(0, dy, 380, 56).setInteractive({ useHandCursor: true });
+        zone.on('pointerdown', callback);
+        return [bg, label, subT, zone];
+      };
+
+      var bucketTxt = isFull ? '🧳 行李满' : '🧳 装进 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')';
+      var bucket = makeModalBtn(bucketTxt, '占 1 行李位', 30, !isFull, function () { self.decideGift('bucket'); });
+      var stay = makeModalBtn('⏳ 留后', '留到后面买（不占位）', 100, false, function () { self.decideGift('stay'); });
+      var drop = makeModalBtn('❌ 放弃', '这条路不带', 170, false, function () { self.decideGift('drop'); });
+
+      this.modalContainer.add(bucket);
+      this.modalContainer.add(stay);
+      this.modalContainer.add(drop);
+
+      // 隐藏 joystick / action / pause —— 避免 modal 打开时还能点
+      this.joystickContainer.setVisible(false);
+      this.actionContainer.setVisible(false);
+      this.pauseContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+    },
+
+    closeGiftModal: function () {
+      this.modalContainer.setVisible(false);
+      this.currentGiftId = null;
+      this.state = 'PLAYING';
+      this.pickupCount++;
+      this.pickupText.setText('🎁 拾起 ' + this.pickupCount + ' / 6');
+
+      if (!this.npcShownPickup3 && this.pickupCount >= 3) {
+        this.npcShownPickup3 = true;
+        this.setNpcFrame(1);
+      }
+      if (this.pickupCount >= 6) {
+        this.enterResult();
+        return;
+      }
+      // 恢复 joystick / action / pause
+      this.joystickContainer.setVisible(true);
+      this.actionContainer.setVisible(true);
+      this.pauseContainer.setVisible(true);
+    },
+
+    decideGift: function (choice) {
+      if (this.currentGiftId === null) return;
+      this.giftBuckets[this.currentGiftId] = choice;
+      if (choice === 'bucket') {
+        this.luggageCount++;
+        this.luggageText.setText('🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX);
+      }
+      this.closeGiftModal();
+    },
+
+    // ==================== 老商人 popup ====================
+    showMerchant: function () {
+      var self = this;
+      if (this.merchantShown) return;
+      this.merchantShown = true;
+      this.modalContainer.removeAll(true);
+
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
+      backdrop.setInteractive({ useHandCursor: false });
+      this.modalContainer.add(backdrop);
+
+      var card = this.add.rectangle(0, 0, 420, 300, 0x6B4423, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      this.modalContainer.add(this.add.text(0, -90, L.merchant.emoji, { fontSize: '48px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, 10, L.merchant.line, {
+        fontSize: '15px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 360 },
+      }).setOrigin(0.5));
+
+      var btnBg = this.add.rectangle(0, 110, 160, 50, 0xFFD98A, 1);
+      var btnText = this.add.text(0, 110, '知道了', {
+        fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
+      btnZone.on('pointerdown', function () {
+        self.modalContainer.setVisible(false);
+        self.time.delayedCall(1000, function () { self.merchantShown = false; });
+      });
+      this.modalContainer.add([btnBg, btnText, btnZone]);
+
+      this.joystickContainer.setVisible(false);
+      this.actionContainer.setVisible(false);
+      this.pauseContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+    },
+
+    setNpcFrame: function (idx) {
+      this.npcFrame = idx;
+      this.npcText.setText(L.npcFrames[idx]);
+    },
+
+    // ==================== 渴死 / 复活 ====================
+    dieFromThirst: function () {
+      this.state = 'DEAD';
+      this.paused = true;
+      this.setNpcFrame(2);
+      this.showReviveModal(this.pickupCount >= 3);
+    },
+
+    showReviveModal: function (forceRestart) {
+      var self = this;
+      this.modalContainer.removeAll(true);
+
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.85);
+      backdrop.setInteractive({ useHandCursor: false });
+      this.modalContainer.add(backdrop);
+
+      var card = this.add.rectangle(0, 0, 500, 380, 0x3A2140, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      this.modalContainer.add(this.add.text(0, -140, '💌 时间到啦', {
+        fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -100, '输入你最想告诉我的话\n（一句话秘密，不存在数据库，只发飞书）', {
+        fontSize: '13px', color: '#C9B89A', align: 'center', wordWrap: { width: 420 },
+      }).setOrigin(0.5));
+
+      // DOM textarea 覆盖在 Phaser canvas 上 —— Phaser 没有原生 text input
+      var ta = this.getOrCreateTextarea();
+
+      var sendBg = this.add.rectangle(-100, 110, 160, 50, 0xF6B5C8, 1);
+      var sendText = this.add.text(-100, 110, forceRestart ? '发送·继续' : '发送·复活', {
+        fontSize: '14px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var sendZone = this.add.zone(-100, 110, 160, 50).setInteractive({ useHandCursor: true });
+      sendZone.on('pointerdown', function () { self.submitSecret(forceRestart, ta); });
+
+      var giveupBg = this.add.rectangle(100, 110, 160, 50, 0x2A2140, 1)
+        .setStrokeStyle(1, 0x4A5578);
+      var giveupText = this.add.text(100, 110, '放弃', {
+        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var giveupZone = this.add.zone(100, 110, 160, 50).setInteractive({ useHandCursor: true });
+      giveupZone.on('pointerdown', function () { self.giveUp(); });
+
+      this.modalContainer.add([sendBg, sendText, sendZone, giveupBg, giveupText, giveupZone]);
+
+      this.joystickContainer.setVisible(false);
+      this.actionContainer.setVisible(false);
+      this.pauseContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+
+      // 自动聚焦
+      this.time.delayedCall(50, function () { ta.focus(); });
+    },
+
+    getOrCreateTextarea: function () {
+      var ta = document.getElementById('phaser-revive-text');
+      if (!ta) {
+        ta = document.createElement('textarea');
+        ta.id = 'phaser-revive-text';
+        ta.maxLength = 500;
+        ta.style.cssText = [
+          'position:fixed',
+          'left:50%', 'top:54%',
+          'transform:translate(-50%,-50%)',
+          'width:min(420px,90vw)',
+          'min-height:120px',
+          'padding:10px 14px',
+          'border-radius:12px',
+          'border:1px solid #4a5578',
+          'background:#2a2140',
+          'color:#f4ecd8',
+          'font-size:15px',
+          'font-family:inherit',
+          'resize:vertical',
+          'z-index:99999',
+          'display:none',
+        ].join(';');
+        document.body.appendChild(ta);
+      }
+      ta.value = '';
+      ta.disabled = false;
+      ta.style.display = 'block';
+      return ta;
+    },
+
+    hideRevive: function () {
+      this.modalContainer.setVisible(false);
+      var ta = document.getElementById('phaser-revive-text');
+      if (ta) ta.style.display = 'none';
+      this.joystickContainer.setVisible(true);
+      this.actionContainer.setVisible(true);
+      this.pauseContainer.setVisible(true);
+    },
+
+    submitSecret: async function (forceRestart, ta) {
+      var text = (ta.value || '').trim();
+      if (!text) return;
+      ta.disabled = true;
+
+      if (!this.sessionId) {
+        await this.ensureSession();
+      }
+      if (!this.sessionId) {
+        ta.disabled = false;
+        return;
+      }
+      try {
+        var r = await fetch('/api/game/secret', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: this.sessionId,
+            level: LEVEL_ID,
+            secret_text: text,
+            nickname: this.nickname,
+          }),
+        });
+        var data = await r.json();
+        if (data && data.success) {
+          this.hideRevive();
+          if (forceRestart) {
+            // 没拾够 3 件 → 复活 +1 滴回原点
+            this.water = 1;
+            this.player.x = L.start.x;
+            this.player.y = L.start.y;
+            this.playerContainer.x = L.start.x;
+            this.playerContainer.y = L.start.y;
+            this.changeWater(0);
+            this.paused = false;
+            this.state = 'PLAYING';
+          } else {
+            // 已拾够 3 件 → DEAD 档不调 reward，直接放弃
+            this.giveUp();
+          }
+        } else {
+          ta.disabled = false;
+        }
+      } catch (e) {
+        ta.disabled = false;
+      }
+    },
+
+    giveUp: function () {
+      this.hideRevive();
+      this.scene.start('ResultScene', {
+        tier: 'DEAD',
+        picked: this.pickupCount,
+        water: this.water,
+        bucket: this.bucketCount(),
+        given: true,
+      });
+    },
+
+    bucketCount: function () {
+      var n = 0;
+      var keys = Object.keys(this.giftBuckets);
+      for (var i = 0; i < keys.length; i++) {
+        if (this.giftBuckets[keys[i]] === 'bucket') n++;
+      }
+      return n;
+    },
+
+    // ==================== 4 档判定 ====================
+    determineTier: function () {
+      var bucket = this.bucketCount();
+      var allPicked = this.pickupCount >= 6;
+      if (allPicked && this.water > 5) return 'PERFECT';
+      if ((bucket >= 4 || allPicked) && this.water > 0) return 'NORMAL';
+      if (bucket >= 3 || this.pickupCount >= 3) {
+        if (this.water > 0) return 'HARD';
+        return 'DEAD';
+      }
+      return null;
+    },
+
+    enterResult: function () {
+      var tier = this.determineTier();
+      if (tier === null) {
+        // 礼物不够 → Phaser Text 提示
+        var warn = this.add.text(640, 360,
+          '礼物还不够（至少 3 件），继续走吧 🌵', {
+          fontSize: '18px', color: '#FFD98A',
+          backgroundColor: '#4A2E1A', padding: { x: 16, y: 8 },
+        }).setOrigin(0.5).setDepth(3000);
+        var self = this;
+        this.time.delayedCall(2000, function () { warn.destroy(); });
+        this.state = 'PLAYING';
+        return;
+      }
+      if (tier === 'DEAD') {
+        // 渴死档 → 弹复活 modal
+        this.dieFromThirst();
+        return;
+      }
+      this.scene.start('ResultScene', {
+        tier: tier,
+        picked: this.pickupCount,
+        water: this.water,
+        bucket: this.bucketCount(),
+        given: false,
+      });
+    },
+
+    // ==================== session ====================
+    ensureSession: function () {
+      var self = this;
+      return fetch('/api/game/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'land', nickname: this.nickname }),
+      })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.session_id) {
+          self.sessionId = data.session_id;
           SESSION_ID = data.session_id;
-          localStorage.setItem('silkroad_session_id', SESSION_ID);
-          claimedKey = 'silkroad_claimed_' + SESSION_ID + '_' + LEVEL_ID;
-          alreadyClaimed = localStorage.getItem(claimedKey) === '1';
+          localStorage.setItem('silkroad_session_id', data.session_id);
         }
       })
       .catch(function () {});
-  }
+    },
 
-  // ==================== 启动 ====================
+    // ==================== 全屏 / 横屏（DOM 辅助）====================
+    bindFullscreenDom: function () {
+      var fsBtn = document.getElementById('qatar-fullscreen');
+      var fsIcon = fsBtn ? fsBtn.querySelector('.qtr-fs-icon') : null;
+      var fsLabel = fsBtn ? fsBtn.querySelector('.qtr-fs-label') : null;
+      var update = function () {
+        var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        if (fsIcon) fsIcon.textContent = isFs ? '✕' : '⛶';
+        if (fsLabel) fsLabel.textContent = isFs ? '退出' : '全屏';
+      };
+      if (fsBtn) {
+        fsBtn.addEventListener('click', function () {
+          var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          try {
+            if (!isFs) {
+              var el = document.documentElement;
+              var req = el.requestFullscreen || el.webkitRequestFullscreen;
+              if (req) {
+                var p = req.call(el);
+                if (p && typeof p.catch === 'function') p.catch(function () {});
+              }
+            } else {
+              var exit = document.exitFullscreen || document.webkitExitFullscreen;
+              if (exit) {
+                var p2 = exit.call(document);
+                if (p2 && typeof p.catch === 'function') p2.catch(function () {});
+              }
+            }
+          } catch (e) {}
+        });
+      }
+      document.addEventListener('fullscreenchange', update);
+      document.addEventListener('webkitfullscreenchange', update);
+      update();
+    },
 
-  function start() {
-    initPixi();
-    bindInput();
-    bindFullscreen();        // M6
-    bindOrientationLock();   // M6
-    startTicker();
-    state = STATE.PLAYING;
-    // 写 localStorage flag —— 标记 M5 启用
-    localStorage.setItem('silkroad_qatar_v2', '1');
-    // 兜底建 session
-    ensureSession();
-  }
+    bindOrientationLock: function () {
+      var lock = document.getElementById('orientation-lock');
+      if (!lock) return;
+      var apply = function () {
+        var isPortrait = false;
+        try {
+          if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) {
+            isPortrait = true;
+          }
+        } catch (e) {}
+        if (!isPortrait && window.innerHeight > window.innerWidth) isPortrait = true;
+        if (isPortrait) lock.classList.add('show');
+        else lock.classList.remove('show');
+      };
+      apply();
+      if (window.matchMedia) {
+        var mql = window.matchMedia('(orientation: portrait)');
+        if (mql.addEventListener) mql.addEventListener('change', apply);
+        else if (mql.addListener) mql.addListener(apply);
+      }
+      window.addEventListener('resize', apply);
+      window.addEventListener('orientationchange', function () { setTimeout(apply, 100); });
+    },
+  });
 
-  // 已通关：直接展示通关态
-  if (alreadyClaimed) {
-    // 等 Pixi 起来后展示
-    setTimeout(function () {
-      var lastTier = localStorage.getItem('silkroad_qatar_last_tier') || 'HARD';
-      renderRewardUI(L.rewardTiers[lastTier] || 6.66, lastTier, '本关已通关（前端去重命中）', true, true);
-    }, 100);
-  }
+  // ==================== ResultScene ====================
+  var ResultScene = new Phaser.Class({
+    Extends: Phaser.Scene,
+    initialize: function ResultScene() { Phaser.Scene.call(this, { key: 'ResultScene' }); },
+    init: function (data) {
+      this.tier = data.tier;
+      this.picked = data.picked;
+      this.water = data.water;
+      this.bucket = data.bucket || 0;
+      this.given = !!data.given;
+      this.sessionId = data.sessionId || SESSION_ID;
+      this.nickname = data.nickname || nickname;
+    },
+    create: function () {
+      var self = this;
+      this.cameras.main.setBackgroundColor('#1b2135');
 
-  // 等 DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start);
-  } else {
-    start();
-  }
+      var amount = QATAR_REWARD_TIERS[this.tier];
+      var quote = L.tierQuotes[this.tier];
+      var tierEmoji = this.tier === 'PERFECT' ? '🌟 完美' :
+                      this.tier === 'NORMAL' ? '☀️ 普通' :
+                      this.tier === 'HARD' ? '🌾 勉强' : '🏜️ 渴死';
+
+      // 卡片
+      var card = this.add.rectangle(640, 320, 540, 460, 0x6B4423, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.add.text(640, 180, tierEmoji, {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.add.text(640, 240, quote, {
+        fontSize: '16px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 460 },
+      }).setOrigin(0.5);
+      this.add.text(640, 320, '收 ' + this.bucket + ' 件 · 拾 ' + this.picked + ' / 6 · 水分 ' +
+        this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
+        fontSize: '13px', color: '#C9B89A',
+      }).setOrigin(0.5);
+      this.add.text(640, 380, '+¥' + amount.toFixed(2), {
+        fontSize: '38px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      // 状态
+      this.statusText = this.add.text(640, 430, this.given ? '已放弃复活' : '推送中…', {
+        fontSize: '14px', color: '#A8D8C0',
+      }).setOrigin(0.5);
+
+      // 继续按钮 —— HTML 跳关，不用 Phaser 控制 URL
+      var nextBg = this.add.rectangle(640, 510, 280, 70, 0xFFD98A, 1);
+      var nextText = this.add.text(640, 510, '继续下一关 →', {
+        fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var nextZone = this.add.zone(640, 510, 280, 70).setInteractive({ useHandCursor: true });
+      nextZone.on('pointerdown', function () {
+        window.location.href = '/games/silk-road/level/1';
+      });
+
+      // 调用 webhook
+      if (this.given) {
+        this.statusText.setText('未通关，没领奖（放弃了复活）');
+        this.statusText.setColor('#C9C2D8');
+      } else if (this.tier === 'DEAD') {
+        this.statusText.setText('渴死档 —— 不调 reward，只调 secret（已发送）');
+        this.statusText.setColor('#C9B89A');
+      } else {
+        this.claimReward(amount);
+      }
+    },
+
+    claimReward: async function (amount) {
+      var self = this;
+      if (!this.sessionId) {
+        await this.ensureSession();
+      }
+      if (!this.sessionId) {
+        this.statusText.setText('session 创建失败，请重试');
+        this.statusText.setColor('#F6B5C8');
+        return;
+      }
+      try {
+        var r = await fetch('/api/game/reward/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: this.sessionId,
+            level: LEVEL_ID,
+            amount: amount,
+            nickname: this.nickname,
+          }),
+        });
+        var data = await r.json();
+        if (data && data.success) {
+          localStorage.setItem('silkroad_claimed_' + this.sessionId + '_' + LEVEL_ID, '1');
+          var msg = data.duplicate
+            ? '已领取过（服务端去重）'
+            : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
+          this.statusText.setText(msg);
+          this.statusText.setColor('#A8D8C0');
+          try {
+            var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
+            if (cleared.indexOf(LEVEL_ID) === -1) {
+              cleared.push(LEVEL_ID);
+              localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
+            }
+          } catch (e) {}
+        } else {
+          this.statusText.setText('领取失败：' + (data && data.error ? data.error : '未知错误'));
+          this.statusText.setColor('#F6B5C8');
+        }
+      } catch (err) {
+        this.statusText.setText('网络错误：' + err.message);
+        this.statusText.setColor('#F6B5C8');
+      }
+    },
+
+    ensureSession: function () {
+      var self = this;
+      return fetch('/api/game/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'land', nickname: this.nickname }),
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.session_id) {
+          self.sessionId = data.session_id;
+          SESSION_ID = data.session_id;
+          localStorage.setItem('silkroad_session_id', data.session_id);
+        }
+      })
+      .catch(function () {});
+    },
+  });
+
+  // ==================== Start Phaser game ====================
+  var game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: 'qatar-game',
+    width: 1280,
+    height: 720,
+    backgroundColor: '#E8C282',
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
+    scene: [BootScene, IntroScene, PlayScene, ResultScene],
+  });
+
+  // 暴露给离线/调试用
+  window.QATAR_GAME = game;
+  window.QATAR_REWARD_TIERS = QATAR_REWARD_TIERS;
 })();
