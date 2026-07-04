@@ -629,13 +629,56 @@
         this.npcShownPickup3 = true;
         this.setNpcFrame(1);
       }
-      // M11: 拾满 6 不再直接 enterResult —— 必须走到港口 NPC 兑换船票 (新弹 modal).
-      // 旧逻辑备份：if (this.pickupCount >= 6) { this.enterResult(); return; }
-      // 新逻辑在后面 commit 里补 (port NPC 兑换分支 + 弹 pickup-done modal).
+      // M11: 拾满 6 弹 pickup-done modal —— 提示玩家去港口兑换船票 (不再直接 enterResult).
+      if (this.pickupCount >= 6) {
+        this._showPickupMaxedModal();
+        return;
+      }
       // 恢复 joystick / action / pause
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
       this.pauseContainer.setVisible(true);
+    },
+
+    // M11 part 3: 拾满 6 件 → 弹 pickup-done modal, 提示去港口兑换船票
+    _showPickupMaxedModal: function () {
+      var self = this;
+      this.modalContainer.removeAll(true);
+
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
+      this.modalContainer.add(backdrop);
+
+      var card = this.add.rectangle(0, 0, 460, 320, 0x1B3A5E, 1)
+        .setStrokeStyle(2, 0x5fb3a0, 0.7);
+      this.modalContainer.add(card);
+
+      this.modalContainer.add(this.add.text(0, -110, '🎁', { fontSize: '52px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -55, '礼物都拾齐了！', {
+        fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -15, '去港口 ⚓ 兑换船票\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
+        fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 380 },
+      }).setOrigin(0.5));
+
+      // "知道了" 按钮
+      var btnBg = this.add.rectangle(0, 100, 200, 56, 0x5fb3a0, 1);
+      var btnText = this.add.text(0, 100, '知道了', {
+        fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var btnZone = this.add.zone(0, 100, 200, 56).setInteractive({ useHandCursor: true });
+      btnZone.on('pointerdown', function () {
+        self.modalContainer.setVisible(false);
+        self.joystickContainer.setVisible(true);
+        self.actionContainer && self.actionContainer.setVisible(true);
+        self.pauseContainer.setVisible(true);
+      });
+
+      this.modalContainer.add([btnBg, btnText, btnZone]);
+      // 不显示 dpad (玩家需要走去港口)
+      this.joystickContainer.setVisible(true);
+      (this.actionContainer && this.actionContainer.setVisible(true));
+      this.pauseContainer.setVisible(true);
+      this.modalContainer.setVisible(true);
     },
 
     decideGift: function (choice) {
@@ -668,10 +711,15 @@
         .setStrokeStyle(2, 0x5fb3a0, 0.7);
       this.modalContainer.add(card);
 
-      // M9.5d: 港口=船票兑换 NPC。
-      // 拾够 6 件 → 显示"兑换船票"按钮（豪华升级 modal） → 点后弹船票 get 模态。
-      // 拾不够 6 件 → 只显示"知道了"按钮（普通对话）。
+      // M11 part 3: 港口船票兑换条件
+      //   - 拾满 6 件 (pickupCount >= 6)
+      //   - 行李装够 MIN_LUGGAGE_TO_BOARD 件 (默认 5)
+      //   - 行李总价 >= PORT_TICKET_PRICE_THRESHOLD (默认 ¥170)
       var hasAllGifts = this.pickupCount >= 6;
+      var totalPrice = this.totalLuggagePrice();
+      var canAfford = totalPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
+      var enoughLuggage = this.luggageCount >= L.MIN_LUGGAGE_TO_BOARD;
+      var canExchange = hasAllGifts && canAfford && enoughLuggage;
 
       this.modalContainer.add(this.add.text(0, -130, L.port.emoji, { fontSize: '52px' }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, -90, L.port.name, {
@@ -681,13 +729,12 @@
         fontSize: '13px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
-      if (hasAllGifts) {
-        // 拾满 6: 升级 modal — 2 个按钮
-        this.modalContainer.add(this.add.text(0, 60, '好！礼物都齐了，我给你一张去伊朗的船票 🚢', {
+      if (hasAllGifts && canExchange) {
+        // ✅ 全部满足 → 兑换船票主按钮 (可点)
+        this.modalContainer.add(this.add.text(0, 30, '好！礼物都齐了，我给你一张去伊朗的船票 🚢', {
           fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
-        // "兑换船票" 主按钮
         var ticketBg = this.add.rectangle(-100, 130, 180, 56, 0x5fb3a0, 1);
         var ticketText = this.add.text(-100, 130, '🎫 兑换船票', {
           fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
@@ -698,7 +745,6 @@
           self._showTicketModal();
         });
 
-        // "暂时不要" 次按钮
         var laterBg = this.add.rectangle(100, 130, 140, 56, 0x1B3A5E, 1)
           .setStrokeStyle(1, 0x5fb3a0, 0.6);
         var laterText = this.add.text(100, 130, '暂时不要', {
@@ -706,7 +752,6 @@
         }).setOrigin(0.5);
         var laterZone = this.add.zone(100, 130, 140, 56).setInteractive({ useHandCursor: true });
         laterZone.on('pointerdown', function () {
-          // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
@@ -714,6 +759,37 @@
         });
 
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
+      } else if (hasAllGifts && !canExchange) {
+        // ⚠️ 拾满 6 但不满足兑换条件 → 灰色禁用按钮 + 提示缺啥
+        var reasons = [];
+        if (!enoughLuggage) reasons.push('行李不足 ' + this.luggageCount + '/' + L.MIN_LUGGAGE_TO_BOARD);
+        if (!canAfford) reasons.push('总价 ¥' + totalPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD);
+        this.modalContainer.add(this.add.text(0, 30, '礼物都齐了！但还差一点点:\n' + reasons.join(' · '), {
+          fontSize: '12px', color: '#F6B5C8', align: 'center', wordWrap: { width: 380 },
+        }).setOrigin(0.5));
+
+        // 禁用按钮 (灰色)
+        var disabledBg = this.add.rectangle(-100, 130, 180, 56, 0x4A4A4A, 0.6)
+          .setStrokeStyle(1, 0x888888, 0.4);
+        var disabledText = this.add.text(-100, 130, '🎫 兑换船票', {
+          fontSize: '15px', color: '#888888', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        // 不挂 interactive, 点了不响应
+
+        var laterBg2 = this.add.rectangle(100, 130, 140, 56, 0x1B3A5E, 1)
+          .setStrokeStyle(1, 0x5fb3a0, 0.6);
+        var laterText2 = this.add.text(100, 130, '知道了', {
+          fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var laterZone2 = this.add.zone(100, 130, 140, 56).setInteractive({ useHandCursor: true });
+        laterZone2.on('pointerdown', function () {
+          self.modalContainer.setVisible(false);
+          self.joystickContainer.setVisible(true);
+          self.actionContainer && self.actionContainer.setVisible(true);
+          self.pauseContainer.setVisible(true);
+        });
+
+        this.modalContainer.add([disabledBg, disabledText, laterBg2, laterText2, laterZone2]);
       } else {
         // 没拾满: 普通对话 — 1 个按钮
         this.modalContainer.add(this.add.text(0, 60, '礼物还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
@@ -726,7 +802,6 @@
         }).setOrigin(0.5);
         var btnZone = this.add.zone(0, 130, 160, 56).setInteractive({ useHandCursor: true });
         btnZone.on('pointerdown', function () {
-          // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
@@ -772,12 +847,15 @@
       var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
       goZone.on('pointerdown', function () {
         self.modalContainer.setVisible(false);
-        // 接 #5: 船动画过渡到 level/1. 不过渡 = 当前 RESULT
-        // 第一步: enterResult() 跟原来一样触发 reward webhook.
-        if (self.pickupCount >= 6) {
+        // M11 part 3: 兑换船票 → 必须在 canExchange 前提下才能 enterResult.
+        // canExchange = hasAllGifts && enoughLuggage && canAfford (跟 showPort 同步).
+        var canExchangeNow = self.pickupCount >= 6
+          && self.luggageCount >= L.MIN_LUGGAGE_TO_BOARD
+          && self.totalLuggagePrice() >= L.PORT_TICKET_PRICE_THRESHOLD;
+        if (canExchangeNow) {
           self.enterResult();
         } else {
-          // 拾不够 6 不能通关 — 关闭 modal 给玩家继续走
+          // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
           self.pauseContainer.setVisible(true);

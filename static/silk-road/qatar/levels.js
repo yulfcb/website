@@ -87,6 +87,10 @@ window.QATAR_LEVEL = {
   // 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 6 但行李只装 5 件是合法的.
   LUGGAGE_MAX: 5,
   MIN_PICKUPS_TO_CLAIM: 3,    // 至少拾取 3 件才能领奖
+  // M11: 港口船票兑换阈值 — 玩家必须带够 ¥170 价值的礼物才能换船票
+  PORT_TICKET_PRICE_THRESHOLD: 170,
+  // M11: 至少带多少件礼物才能上船 (跟 LUGGAGE_MAX 配合 — 要全装满)
+  MIN_LUGGAGE_TO_BOARD: 5,
   CANVAS_W: 1280,
   CANVAS_H: 720,
 };
