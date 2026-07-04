@@ -636,26 +636,114 @@
         .setStrokeStyle(2, 0xFFD98A, 0.5);
       this.modalContainer.add(card);
 
+      // M9.5d: 老商人=船票兑换 NPC。
+      // 拾够 6 件 → 显示"兑换船票"按钮（豪华升级 modal） → 点后弹船票 get 模态。
+      // 拾不够 6 件 → 只显示"知道了"按钮（普通对话）。
+      var hasAllGifts = this.pickupCount >= 6;
+
       this.modalContainer.add(this.add.text(0, -90, L.merchant.emoji, { fontSize: '48px' }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, 10, L.merchant.line, {
         fontSize: '15px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 360 },
       }).setOrigin(0.5));
 
-      var btnBg = this.add.rectangle(0, 110, 160, 50, 0xFFD98A, 1);
-      var btnText = this.add.text(0, 110, '知道了', {
-        fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
-      btnZone.on('pointerdown', function () {
-        self.modalContainer.setVisible(false);
-        // M9.3a：移走 1s reset，靠 update 检测玩家距离 > 200px 才放行（真状态）
-        // 移走 _merchantCooldownUntil — 它跟新机制冲突，玩家走远即可触发
-      });
-      this.modalContainer.add([btnBg, btnText, btnZone]);
+      if (hasAllGifts) {
+        // 拾满 6: 升级 modal — 顶部大字标, 2 个按钮
+        this.modalContainer.add(this.add.text(0, -120, '🎫 老商人 · 船票兑换', {
+          fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5));
+        this.modalContainer.add(this.add.text(0, 60, '好！礼物都齐了，我给你一张去伊朗的船票 🚢', {
+          fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
+        }).setOrigin(0.5));
+
+        // "兑换船票" 主按钮
+        var ticketBg = this.add.rectangle(-100, 115, 180, 50, 0xFFD98A, 1);
+        var ticketText = this.add.text(-100, 115, '🎫 兑换船票', {
+          fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var ticketZone = this.add.zone(-100, 115, 180, 50).setInteractive({ useHandCursor: true });
+        ticketZone.on('pointerdown', function () {
+          self._ticketExchanged = true;
+          self._showTicketModal();
+        });
+
+        // "暂时不要" 次按钮
+        var laterBg = this.add.rectangle(100, 115, 140, 50, 0x6B4423, 1)
+          .setStrokeStyle(1, 0xFFD98A, 0.4);
+        var laterText = this.add.text(100, 115, '暂时不要', {
+          fontSize: '14px', color: '#F4ECD8', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var laterZone = this.add.zone(100, 115, 140, 50).setInteractive({ useHandCursor: true });
+        laterZone.on('pointerdown', function () {
+          self.modalContainer.setVisible(false);
+        });
+
+        this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
+      } else {
+        // 没拾满: 普通对话 — 1 个按钮
+        this.modalContainer.add(this.add.text(0, -120, '老商人', {
+          fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5));
+        this.modalContainer.add(this.add.text(0, 60, '礼物还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
+          fontSize: '12px', color: '#C9B89A', wordWrap: { width: 380 },
+        }).setOrigin(0.5));
+
+        var btnBg = this.add.rectangle(0, 110, 160, 50, 0xFFD98A, 1);
+        var btnText = this.add.text(0, 110, '知道了', {
+          fontSize: '15px', color: '#2A190E', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
+        btnZone.on('pointerdown', function () {
+          self.modalContainer.setVisible(false);
+        });
+        this.modalContainer.add([btnBg, btnText, btnZone]);
+      }
 
       this.joystickContainer.setVisible(false);
       this.actionContainer.setVisible(false);
       this.pauseContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+    },
+
+    // M9.5d: 兑换船票 modal — 显示船票 get 模态, 关闭后如果全拾齐则进入 result.
+    _showTicketModal: function () {
+      var self = this;
+      this.modalContainer.removeAll(true);
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);
+      this.modalContainer.add(backdrop);
+
+      var card = this.add.rectangle(0, 0, 420, 320, 0x6B4423, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      this.modalContainer.add(this.add.text(0, -120, '🎫', { fontSize: '52px' }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -50, '船票已兑换！', {
+        fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -10, '波斯湾之旅已开启\n下一站: 伊朗 🐪', {
+        fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 360 },
+      }).setOrigin(0.5));
+
+      // 大按钮 "起航前往伊朗 →"
+      var goBg = this.add.rectangle(0, 90, 280, 56, 0xFFD98A, 1);
+      var goText = this.add.text(0, 90, '起航前往伊朗 →', {
+        fontSize: '16px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var goZone = this.add.zone(0, 90, 280, 56).setInteractive({ useHandCursor: true });
+      goZone.on('pointerdown', function () {
+        self.modalContainer.setVisible(false);
+        // 接 #5: 船动画过渡到 level/1. 不过渡 = 当前 RESULT
+        // 第一步: enterResult() 跟原来一样触发 reward webhook.
+        if (self.pickupCount >= 6) {
+          self.enterResult();
+        } else {
+          // 拾不够 6 不能通关 — 关闭 modal 给玩家继续走
+          self.joystickContainer.setVisible(true);
+          self.actionContainer.setVisible(true);
+          self.pauseContainer.setVisible(true);
+        }
+      });
+
+      this.modalContainer.add([goBg, goText, goZone]);
       this.modalContainer.setVisible(true);
     },
 
