@@ -46,11 +46,11 @@
     </div>
 
     <div class="silk-modes">
-      <a class="silk-mode playable" href="{{ url_for('silk_road_level', n=0) }}">
-        <div class="icon">🏜️</div>
+      <a class="silk-mode playable" href="{{ url_for('silk_road_world_map') }}">
+        <div class="icon">🗺️</div>
         <div class="t">{{ config.modes.land.title if config.modes.land else '陆上丝绸之路' }}</div>
-        <div class="d">6 关闯关 · 一路向家</div>
-        <span class="badge">可玩</span>
+        <div class="d">看地图选关 · 6 关闯关 · 一路向家</div>
+        <span class="badge">点我看地图</span>
       </a>
       <div class="silk-mode disabled">
         <div class="icon">🌊</div>
@@ -66,7 +66,7 @@
       </div>
     </div>
 
-    <p style="margin-top:20px"><a href="{{ url_for('silk_road_world_map') }}" style="color:#ffd98a">🗺️ 世界地图</a></p>
+    {# M9.4c: 主"陆上丝绸之路"卡片已是世界地图, 独立链接重复, 删。 #}
     <p style="margin-top:8px"><a href="/games" style="color:#a8d8c0">← 返回游戏中心</a></p>
   </div>
 
