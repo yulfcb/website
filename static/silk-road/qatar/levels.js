@@ -19,7 +19,7 @@ window.QATAR_LEVEL = {
     { x: 980, y: 540, label: 'Katara 绿洲' },
   ],
 
-  // 6 个礼物 —— 顺序即礼物 id
+  // 7 个礼物 —— 顺序即礼物 id（关 0 主线 6 + 1 个隐藏 World Cup）
   gifts: [
     { id: 0, x: 520, y: 380, name: '沙漠之眼',  hint: '给关 1「伊朗·沙漠骆驼」的礼物',     emoji: '👁️', placeId: 'souq_waqif' },
     { id: 1, x: 380, y: 560, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum' },
@@ -27,9 +27,11 @@ window.QATAR_LEVEL = {
     { id: 3, x: 240, y: 540, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport' },
     { id: 4, x: 1020, y: 380, name: '归家之心', hint: '给关 5「成都·到家」的礼物',         emoji: '🏠', placeId: 'the_pearl' },
     { id: 5, x: 1080, y: 200, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche' },
+    // M9.5c: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯
+    { id: 6, x: 880, y: 90,  name: '世界杯奖杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium' },
   ],
 
-  // 6 个真实地名
+  // 7 个真实地名
   places: [
     { id: 'hamad_airport',   x: 200,  y: 600, label: 'Hamad Airport 多哈国际机场' },
     { id: 'islamic_museum',  x: 420,  y: 600, label: 'Museum of Islamic Art 伊斯兰艺术博物馆' },
@@ -37,17 +39,19 @@ window.QATAR_LEVEL = {
     { id: 'corniche',        x: 1110, y: 240, label: 'Corniche 滨海大道' },
     { id: 'the_pearl',       x: 1050, y: 420, label: 'The Pearl 人造岛' },
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park 体育公园' },
+    { id: 'lusail_stadium',  x: 880,  y: 90,  label: 'Lusail Stadium 卢赛尔体育场' },
   ],
 
   // 老商人 NPC —— 移出 Souq Waqif 区域（避开 gifts[0] 沙漠之眼在 souq_waqif），
   // 放到地图东北角空白区，玩家要"专门去找"他才能触发对话。
   merchant: { x: 1080, y: 100, emoji: '👳', line: '给心上人的礼物，要发自真心。要带走几件，看你的取舍。' },
 
-  // NPC banner 3 帧文案
+  // NPC banner 4 帧文案（最后一帧是找到 Lusail Stadium 触发的 World Cup 文案）
   npcFrames: [
     '欢迎来到多哈，旅人。这里是丝绸之路的起点——是拥抱大海的沙漠。',
     '你走了很远了，再往前走…别忘了补水分。',
     '沙海记住了你的每一步。',
+    '🏆 你找到了卡塔尔的世界杯主场 — Lusail Stadium！它见证了 2022 年那个冬天的辉煌。',
   ],
 
   // 4 档奖励金额（与 game.js 里 QATAR_REWARD_TIERS 一致；前端展示用）
