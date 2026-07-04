@@ -1,7 +1,14 @@
-{# M5 关 0 内容块 —— 卡塔尔·多哈·沙海寻路
+{# M5 关 0 内容块 —— 卡塔尔·多哈·沙海寻路 (M6: +手机横屏全屏 + 虚拟方向键)
    包含：pixi 舞台、3 帧 NPC banner、HUD、礼物 modal、老商人 popup、结果 modal
    复用 _level_base.html 提供的 #silk-win（reward 数字 + quote + next） + #silk-progress-bar-host
-   复活 modal 来自 _revive_modal.html（在 level-0.html 中 include） #}
+   复活 modal 来自 _revive_modal.html（在 level-0.html 中 include）
+
+   M6 新增：
+   - 全屏按钮 (fixed top-right)
+   - 虚拟方向键覆盖层（左下：↑↓←→ 4 个独立圆按钮）
+   - 拾起/确认按钮 (右下，黄粉色大按钮)
+   - canvas 容器包装 (.qatar-canvas-wrap) 用于 Pixi resizeTo 跟随
+#}
 
 {# 6 个真实多哈地名（grep-friendly + Pixi 之外的 fallback 文本） #}
 <template id="qatar-places-data">
@@ -13,7 +20,13 @@
   <span data-place="aspire_park">Aspire Park 体育公园</span>
 </template>
 
-{# 顶部 HUD：水分 / 拾起 / 行李 #}
+{# ====== M6 全屏按钮 (fixed top-right) ====== #}
+<button type="button" id="qatar-fullscreen" class="qtr-btn qtr-fullscreen" aria-label="全屏">
+  <span class="qtr-fs-icon">⛶</span>
+  <span class="qtr-fs-label">全屏</span>
+</button>
+
+{# ====== 顶部 HUD：水分 / 拾起 / 行李 ====== #}
 <div id="qatar-hud">
   <div class="qatar-hud-chip" id="qatar-water-display">
     💧 水分 <b id="qatar-water-value">10.0 / 10</b>
@@ -26,27 +39,40 @@
   </div>
 </div>
 
-{# NPC banner 右上 #}
+{# ====== NPC banner 右上 ====== #}
 <div id="qatar-npc-banner">
   <div class="qatar-npc-avatar">👳</div>
   <p id="qatar-npc-text">欢迎来到多哈，旅人。这里是丝绸之路的起点——是拥抱大海的沙漠。</p>
   <div class="qatar-npc-tag">老商人 · 帧 1</div>
 </div>
 
-{# 方向键提示 左下 #}
+{# ====== 方向键提示 左下 (PC 上仍显示，3 步后淡出) ====== #}
 <div id="qatar-hint">
   用方向键或 <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动<br>
   走到 🎁 处拾取礼物<br>
   走到 🌴 绿洲补水
 </div>
 
-{# Pixi 舞台 #}
-<div id="qatar-canvas"></div>
+{# ====== Pixi 舞台（M6: wrap 在 .qatar-canvas-wrap 里） ====== #}
+<div class="qatar-canvas-wrap">
+  <div id="qatar-canvas"></div>
+</div>
 
-{# 暂停按钮 #}
-<button type="button" id="qatar-pause">⏸ 暂停</button>
+{# ====== 暂停按钮 (fixed top-left, M6 缩小到 50×50) ====== #}
+<button type="button" id="qatar-pause" class="qtr-btn qtr-pause" aria-label="暂停">⏸</button>
 
-{# 礼物 modal #}
+{# ====== M6 虚拟方向键覆盖层 ====== #}
+<div class="qatar-joystick" id="qatar-joystick" aria-label="虚拟方向键">
+  <div class="qtr-dpad">
+    <button type="button" class="qtr-btn qtr-up"    data-key="ArrowUp"    aria-label="上">▲</button>
+    <button type="button" class="qtr-btn qtr-left"  data-key="ArrowLeft"  aria-label="左">◀</button>
+    <button type="button" class="qtr-btn qtr-right" data-key="ArrowRight" aria-label="右">▶</button>
+    <button type="button" class="qtr-btn qtr-down"  data-key="ArrowDown"  aria-label="下">▼</button>
+  </div>
+  <button type="button" class="qtr-btn qtr-action" data-key="Enter" aria-label="拾起/确认">🆗</button>
+</div>
+
+{# ====== 礼物 modal ====== #}
 <div id="qatar-gift-modal" style="display:none">
   <div class="qatar-gift-modal-card">
     <div class="qatar-gift-emoji">🎁</div>
@@ -69,7 +95,7 @@
   </div>
 </div>
 
-{# 老商人 popup #}
+{# ====== 老商人 popup ====== #}
 <div id="qatar-merchant-popup" style="display:none">
   <div class="qatar-merchant-card">
     <div class="qatar-merchant-emoji">👳</div>
@@ -78,7 +104,7 @@
   </div>
 </div>
 
-{# 结果 modal #}
+{# ====== 结果 modal ====== #}
 <div id="qatar-result-modal" style="display:none">
   <div class="qatar-result-card">
     <h2 id="qatar-result-tier">🌟 完美</h2>
@@ -88,7 +114,7 @@
   </div>
 </div>
 
-{# 通关面板（复用 _level_base.html 提供的 #silk-win） #}
+{# ====== 通关面板（复用 _level_base.html 提供的 #silk-win） ====== #}
 <div id="silk-win" class="silk-win">
   <p class="silk-quote" id="silk-quote">{{ level.quote if level else '' }}</p>
   <p class="silk-reward" id="silk-reward">+¥0.00</p>
@@ -96,5 +122,5 @@
   <a id="silk-next" class="silk-next" href="/games/silk-road/level/1">去下一关 →</a>
 </div>
 
-{# 复活 modal —— 渴死档复用 M3 的 _revive_modal.html #}
+{# ====== 复活 modal —— 渴死档复用 M3 的 _revive_modal.html ====== #}
 {% include "silk-road/_revive_modal.html" %}

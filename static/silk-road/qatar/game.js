@@ -128,13 +128,16 @@
   // ==================== 初始化 ====================
 
   function initPixi() {
+    // M6: 跟随 .qatar-canvas-wrap 容器 resize（横竖屏切换自动缩放）
+    var canvasWrap = document.querySelector('.qatar-canvas-wrap') || stageEl;
     app = new PIXI.Application({
       width: L.CANVAS_W,
       height: L.CANVAS_H,
       backgroundColor: 0xE8C282,
       antialias: true,
-      resolution: 1,
-      autoDensity: false,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      autoDensity: true,
+      resizeTo: canvasWrap,
     });
     stageEl.appendChild(app.view);
 
@@ -393,18 +396,152 @@
       ArrowUp: 0, ArrowDown: 0, ArrowLeft: 0, ArrowRight: 0,
       w: 0, a: 0, s: 0, d: 0, W: 0, A: 0, S: 0, D: 0,
     };
+
+    // M6: 抽象按键处理函数 —— 键盘 / 虚拟键都走这个
+    var onKey = function (key, isDown) {
+      if (keys.hasOwnProperty(key)) {
+        if (isDown) {
+          if (keys[key] === 0) tryMove(key);
+          keys[key] = 1;
+        } else {
+          keys[key] = 0;
+        }
+      }
+    };
+
+    // 键盘监听
     document.addEventListener('keydown', function (e) {
       if (keys.hasOwnProperty(e.key)) {
-        if (keys[e.key] === 0) tryMove(e.key);
-        keys[e.key] = 1;
+        onKey(e.key, true);
         e.preventDefault();
       }
     });
     document.addEventListener('keyup', function (e) {
       if (keys.hasOwnProperty(e.key)) {
-        keys[e.key] = 0;
+        onKey(e.key, false);
+        e.preventDefault();
       }
     });
+
+    // M6: 虚拟键绑定 —— 用 touch 事件（更灵敏）+ 鼠标兜底
+    var virtualBtns = document.querySelectorAll('.qtr-btn[data-key]');
+    virtualBtns.forEach(function (btn) {
+      var k = btn.dataset.key;
+
+      // touchstart —— 按下
+      btn.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        btn.classList.add('qtr-pressed');
+        onKey(k, true);
+      }, { passive: false });
+
+      // touchend —— 抬起
+      btn.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        btn.classList.remove('qtr-pressed');
+        onKey(k, false);
+      }, { passive: false });
+
+      // touchcancel —— 取消（系统手势拦截）
+      btn.addEventListener('touchcancel', function (e) {
+        btn.classList.remove('qtr-pressed');
+        onKey(k, false);
+      }, { passive: false });
+
+      // 鼠标兜底（PC 调试）
+      btn.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        btn.classList.add('qtr-pressed');
+        onKey(k, true);
+      });
+      btn.addEventListener('mouseup', function (e) {
+        e.preventDefault();
+        btn.classList.remove('qtr-pressed');
+        onKey(k, false);
+      });
+      btn.addEventListener('mouseleave', function (e) {
+        if (btn.classList.contains('qtr-pressed')) {
+          btn.classList.remove('qtr-pressed');
+          onKey(k, false);
+        }
+      });
+
+      // 阻止 contextmenu 长按菜单
+      btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    });
+  }
+
+  // ==================== M6 全屏 / 横竖屏切换 ====================
+
+  function bindFullscreen() {
+    var fsBtn = document.getElementById('qatar-fullscreen');
+    var fsIcon = fsBtn ? fsBtn.querySelector('.qtr-fs-icon') : null;
+    var fsLabel = fsBtn ? fsBtn.querySelector('.qtr-fs-label') : null;
+
+    var updateFsLabel = function () {
+      var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      if (fsIcon) fsIcon.textContent = isFs ? '✕' : '⛶';
+      if (fsLabel) fsLabel.textContent = isFs ? '退出' : '全屏';
+    };
+
+    if (fsBtn) {
+      fsBtn.addEventListener('click', function () {
+        var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        try {
+          if (!isFs) {
+            var el = document.documentElement;
+            var req = el.requestFullscreen || el.webkitRequestFullscreen;
+            if (req) {
+              var p = req.call(el);
+              if (p && typeof p.catch === 'function') p.catch(function () {});
+            }
+          } else {
+            var exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exit) {
+              var p2 = exit.call(document);
+              if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+            }
+          }
+        } catch (e) { /* 静默 */ }
+      });
+    }
+
+    document.addEventListener('fullscreenchange', updateFsLabel);
+    document.addEventListener('webkitfullscreenchange', updateFsLabel);
+    updateFsLabel();
+  }
+
+  function bindOrientationLock() {
+    var lock = document.getElementById('orientation-lock');
+    if (!lock) return;
+
+    var apply = function () {
+      var isPortrait = false;
+      try {
+        if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) {
+          isPortrait = true;
+        }
+      } catch (e) {}
+      // fallback: 比 width/height
+      if (!isPortrait && window.innerHeight > window.innerWidth) isPortrait = true;
+      if (isPortrait) {
+        lock.classList.add('show');
+        document.documentElement.classList.add('qtr-portrait');
+      } else {
+        lock.classList.remove('show');
+        document.documentElement.classList.remove('qtr-portrait');
+      }
+    };
+
+    apply();
+    if (window.matchMedia) {
+      var mql = window.matchMedia('(orientation: portrait)');
+      var mqHandler = function () { apply(); };
+      if (mql.addEventListener) mql.addEventListener('change', mqHandler);
+      else if (mql.addListener) mql.addListener(mqHandler);
+    }
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', function () { setTimeout(apply, 100); });
   }
 
   function tryMove(key) {
@@ -878,6 +1015,8 @@
   function start() {
     initPixi();
     bindInput();
+    bindFullscreen();        // M6
+    bindOrientationLock();   // M6
     startTicker();
     state = STATE.PLAYING;
     // 写 localStorage flag —— 标记 M5 启用
