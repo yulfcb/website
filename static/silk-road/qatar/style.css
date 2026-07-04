@@ -1,0 +1,300 @@
+/* 卡塔尔·多哈·沙海寻路 —— 关 0 专属样式（M5）
+   风格：沙漠色 + 椰枣金 + 深沙棕。毛笔字体仅用于水分数字。
+   所有元素 fixed/absolute 在 canvas 之上，z-index 100 起。 */
+
+/* ====== Canvas 容器 ====== */
+#qatar-canvas {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  margin: 12px auto 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  background: #E8C282;
+  z-index: 1;
+}
+#qatar-canvas canvas { display: block; max-width: 100%; height: auto; }
+
+/* ====== 顶部 HUD ====== */
+#qatar-hud {
+  position: fixed;
+  top: 12px; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 18px;
+  z-index: 200;
+  pointer-events: none;
+  gap: 12px;
+}
+#qatar-hud > div { pointer-events: auto; }
+.qatar-hud-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(74, 46, 26, 0.85);
+  color: #FFD98A;
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.qatar-hud-chip b {
+  color: #FFE9B0;
+  font-weight: 800;
+}
+.qatar-water-warn {
+  animation: qatar-water-flash 0.2s ease 2;
+}
+@keyframes qatar-water-flash {
+  0%, 100% { background: rgba(74, 46, 26, 0.85); }
+  50% { background: rgba(248, 113, 113, 0.85); }
+}
+.qatar-water-low {
+  background: rgba(248, 113, 113, 0.85) !important;
+  border-color: rgba(255, 200, 200, 0.6) !important;
+}
+
+/* ====== NPC banner 右上 ====== */
+#qatar-npc-banner {
+  position: fixed;
+  top: 76px;
+  right: 18px;
+  width: 280px;
+  padding: 12px 14px;
+  background: linear-gradient(160deg, rgba(74, 46, 26, 0.95) 0%, rgba(42, 25, 14, 0.95) 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+.qatar-npc-avatar {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+#qatar-npc-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #F4ECD8;
+  margin: 0;
+  font-style: italic;
+}
+.qatar-npc-tag {
+  font-size: 10px;
+  color: #FFD98A;
+  margin-top: 4px;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+/* ====== 暂停按钮 ====== */
+#qatar-pause {
+  position: fixed;
+  right: 18px;
+  bottom: 100px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 217, 138, 0.6);
+  background: rgba(74, 46, 26, 0.92);
+  color: #FFD98A;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+#qatar-pause:hover { transform: translateY(-2px); }
+
+/* ====== 方向键提示 ====== */
+#qatar-hint {
+  position: fixed;
+  left: 18px;
+  bottom: 100px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(74, 46, 26, 0.85);
+  color: #FFD98A;
+  font-size: 12px;
+  line-height: 1.6;
+  z-index: 200;
+  border: 1px solid rgba(255, 217, 138, 0.4);
+  transition: opacity 0.4s ease;
+}
+#qatar-hint.qatar-hidden { opacity: 0; pointer-events: none; }
+#qatar-hint .key {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: rgba(255, 217, 138, 0.2);
+  font-family: monospace;
+  font-weight: 700;
+}
+
+/* ====== 礼物 modal ====== */
+#qatar-gift-modal {
+  position: fixed; inset: 0;
+  background: rgba(20, 12, 6, 0.78);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9990;
+  padding: 16px;
+}
+.qatar-gift-modal-card {
+  width: 100%; max-width: 440px;
+  padding: 28px 24px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #4A2E1A 0%, #2A190E 100%);
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  color: #F4ECD8;
+  text-align: center;
+}
+.qatar-gift-emoji {
+  font-size: 56px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+#qatar-gift-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #FFD98A;
+  margin: 0 0 6px;
+}
+#qatar-gift-sub {
+  font-size: 13px;
+  color: #C9B89A;
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+.qatar-gift-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qatar-gift-btn {
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 217, 138, 0.4);
+  background: rgba(74, 46, 26, 0.6);
+  color: #F4ECD8;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.qatar-gift-btn:hover { background: rgba(107, 68, 35, 0.85); transform: translateY(-1px); }
+.qatar-gift-btn.primary {
+  background: linear-gradient(160deg, #FFD98A 0%, #E8B96A 100%);
+  color: #2A190E;
+  border-color: #FFD98A;
+}
+.qatar-gift-btn.primary:hover {
+  background: linear-gradient(160deg, #FFE9B0 0%, #F4C97A 100%);
+}
+.qatar-gift-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.qatar-gift-btn .small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+/* ====== 老商人 popup ====== */
+#qatar-merchant-popup {
+  position: fixed; inset: 0;
+  background: rgba(20, 12, 6, 0.78);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9980;
+  padding: 16px;
+}
+.qatar-merchant-card {
+  width: 100%; max-width: 380px;
+  padding: 24px 22px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #6B4423 0%, #2A190E 100%);
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  color: #F4ECD8;
+  text-align: center;
+}
+.qatar-merchant-emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.qatar-merchant-line {
+  font-size: 14px;
+  line-height: 1.6;
+  font-style: italic;
+  color: #FFE9B0;
+  margin: 0 0 14px;
+}
+#qatar-merchant-close {
+  padding: 8px 22px;
+  border-radius: 999px;
+  border: none;
+  background: #FFD98A;
+  color: #2A190E;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ====== 结果 modal ====== */
+#qatar-result-modal {
+  position: fixed; inset: 0;
+  background: rgba(20, 12, 6, 0.82);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9970;
+  padding: 16px;
+}
+.qatar-result-card {
+  width: 100%; max-width: 460px;
+  padding: 30px 26px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #6B4423 0%, #2A190E 100%);
+  border: 1px solid rgba(255, 217, 138, 0.5);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  color: #F4ECD8;
+  text-align: center;
+}
+#qatar-result-tier {
+  font-size: 28px;
+  font-weight: 800;
+  color: #FFD98A;
+  margin: 0 0 6px;
+}
+#qatar-result-quote {
+  font-size: 16px;
+  font-style: italic;
+  color: #A8D8C0;
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+#qatar-result-stats {
+  font-size: 13px;
+  color: #C9B89A;
+  margin: 0 0 20px;
+  letter-spacing: 1px;
+}
+#qatar-result-continue {
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: none;
+  background: #FFD98A;
+  color: #2A190E;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ====== 隐藏默认 silk-start（关 0 不再"出发"） ====== */
+#silk-start { display: none !important; }
+
+/* 关 0 主背景变暖一点，配合沙漠色 */
+.silk-stage { background: linear-gradient(160deg, #C49A5E 0%, #6B4423 100%) !important; }

@@ -1,30 +1,24 @@
 {% extends "silk-road/_level_base.html" %}
 {% block title %}关卡 0 · 起航·多哈{% endblock %}
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='silk-road/qatar/style.css') }}">
+{% endblock %}
 {% block content %}
   <div class="silk-badge">关卡 0 / 5</div>
   <h1 class="silk-title">{{ level.title if level else '起航·多哈' }}</h1>
   {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
 
-  <p class="silk-placeholder">从多哈港出发 🛳️ —— 连续点击下方船只 5 次即可通关</p>
-
-  <div id="pixi-stage"></div>
-
-  <p id="silk-progress" class="silk-progress">进度 0 / 5</p>
-
-  <button id="silk-start" class="silk-start" type="button">出发 →</button>
-
-  <div id="silk-win" class="silk-win">
-    <p class="silk-quote" id="silk-quote">{{ level.quote if level else '' }}</p>
-    <p class="silk-reward" id="silk-reward">+¥6.66</p>
-    <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
-    <a id="silk-next" class="silk-next" href="/games/silk-road/level/1">去下一关 →</a>
-  </div>
+  {% include "silk-road/_level_qatar.html" %}
 {% endblock %}
 
 {% block scripts %}
   <script>
     window.LEVEL_ID = 0;
+    // M5 标记：level-engine.js 看到这个就走 qatar 分支
+    window.QATAR_MODE = true;
   </script>
   <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
   <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
+  <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
+  <script src="{{ url_for('static', filename='silk-road/qatar/game.js') }}"></script>
 {% endblock %}

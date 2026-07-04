@@ -25,6 +25,14 @@
   // —— 关卡配置 ——
   var LEVEL_ID = window.LEVEL_ID;
   var cfg = (window.SILK_ROAD_LEVELS || {})[LEVEL_ID];
+
+  // —— M5 关 0 新引擎：qatar/game.js 自管 UI，level-engine.js 不再 init Pixi ——
+  // 触发条件：level=0 且模板设置了 window.QATAR_MODE
+  // （qatar/game.js 通过 <script> 顺序在本文件之后加载，会自己跑）
+  if (LEVEL_ID === 0 && window.QATAR_MODE) {
+    return;
+  }
+
   if (!cfg) {
     // 没配置：占位文案兜底
     if (stageEl) stageEl.innerHTML = '<p style="color:#f6b5c8">关卡配置缺失</p>';
