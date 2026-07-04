@@ -319,7 +319,9 @@
       this.pauseContainer = this.add.container(0, 0, [pauseBg, this.pauseBtnText, pauseZone]);
 
       // —— Modal 容器（礼物 modal / 老商人 popup / 复活 modal 共用）——
-      this.modalContainer = this.add.container(640, 360);
+      // M9.5b: modalContainer 移到 (640, 240) (中上), 不挡 dpad 区域 (左下 620)
+      // backdrop alpha 从 0.78 降到 0.45 — 玩家能透过看到自己 + 场景
+      this.modalContainer = this.add.container(640, 240);
       this.modalContainer.setDepth(2000);
       this.modalContainer.setVisible(false);
 
@@ -536,7 +538,7 @@
       this.modalContainer.removeAll(true);
 
       // 背景遮罩（吸收点击，不响应回调）
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 透明度 0.78->0.45
       // M8.5：backdrop 不该 interactive，否则会截掉按钮点击
       this.modalContainer.add(backdrop);
 
@@ -625,7 +627,7 @@
       this.merchantShown = true;
       this.modalContainer.removeAll(true);
 
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 透明度 0.78->0.45
       // M8.5：backdrop 不该 interactive！之前 setInteractive 把所有点击截了，
       // 玩家以为点的是按钮实际点中了 backdrop → 关不掉 modal
       this.modalContainer.add(backdrop);
@@ -674,7 +676,7 @@
       var self = this;
       this.modalContainer.removeAll(true);
 
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.85);
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 0.85->0.45
       // M8.5：backdrop 不该 interactive
       this.modalContainer.add(backdrop);
 
