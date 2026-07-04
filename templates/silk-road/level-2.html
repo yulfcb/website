@@ -1,12 +1,30 @@
 {% extends "silk-road/_level_base.html" %}
+{% block title %}关卡 2 · 土耳其·热气球{% endblock %}
 {% block content %}
-  <div class="silk-badge">关卡 {{ level_id }} / 5</div>
-  <h1 class="silk-title">{{ level.title if level else '关卡 ' ~ level_id }}</h1>
+  <div class="silk-badge">关卡 2 / 5</div>
+  <h1 class="silk-title">{{ level.title if level else '土耳其·热气球' }}</h1>
   {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
-  <p class="silk-quote">{{ level.quote if level else '' }}</p>
-  <p class="silk-placeholder">这是关卡 {{ level_id }}（骨架占位 · M2 接入 Pixi.js 玩法）</p>
-  {% if level and level.can_fail %}<p class="silk-hint">（本关 M3 会加入失败 / 复活机制）</p>{% endif %}
-  <a class="silk-next" href="{{ next_url }}">
-    {% if level_id >= 5 %}到家啦 · 查看情书 →{% else %}下一关 →{% endif %}
-  </a>
+
+  <p class="silk-placeholder">热气球升空 🎈 —— 连续点击下方气球 5 次即可通关</p>
+
+  <div id="pixi-stage"></div>
+
+  <p id="silk-progress" class="silk-progress">进度 0 / 5</p>
+
+  <button id="silk-start" class="silk-start" type="button">出发 →</button>
+
+  <div id="silk-win" class="silk-win">
+    <p class="silk-quote" id="silk-quote">{{ level.quote if level else '' }}</p>
+    <p class="silk-reward" id="silk-reward">+¥20.20</p>
+    <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
+    <a id="silk-next" class="silk-next" href="/games/silk-road/level/3">去下一关 →</a>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.LEVEL_ID = 2;
+  </script>
+  <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
+  <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
 {% endblock %}

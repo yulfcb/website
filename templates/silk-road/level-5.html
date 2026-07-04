@@ -1,12 +1,44 @@
 {% extends "silk-road/_level_base.html" %}
+{% block title %}关卡 5 · 成都·到家{% endblock %}
+{% block head_extra %}
+  <style>
+    /* 关 5 极简动画：纯 CSS 渐变 + emoji，不需要 Pixi */
+    .silk-home { margin: 18px auto; padding: 30px 16px; border-radius: 16px;
+                 background: linear-gradient(160deg, #fde2c5 0%, #f6b5c8 100%);
+                 box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+    .silk-home .home-emoji { font-size: 84px; line-height: 1; animation: silk-bounce 1.6s ease-in-out infinite; }
+    .silk-home .home-tip   { margin-top: 14px; color: #5a3a2a; font-size: 14px; }
+    @keyframes silk-bounce {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-10px); }
+    }
+  </style>
+{% endblock %}
 {% block content %}
-  <div class="silk-badge">关卡 {{ level_id }} / 5</div>
-  <h1 class="silk-title">{{ level.title if level else '关卡 ' ~ level_id }}</h1>
-  {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
-  <p class="silk-quote">{{ level.quote if level else '' }}</p>
-  <p class="silk-placeholder">这是关卡 {{ level_id }}（骨架占位 · M2 接入 Pixi.js 玩法）</p>
-  {% if level and level.can_fail %}<p class="silk-hint">（本关 M3 会加入失败 / 复活机制）</p>{% endif %}
-  <a class="silk-next" href="{{ next_url }}">
-    {% if level_id >= 5 %}到家啦 · 查看情书 →{% else %}下一关 →{% endif %}
-  </a>
+  <div class="silk-badge">关卡 5 / 5</div>
+  <h1 class="silk-title">{{ level.title if level else '成都·到家' }}</h1>
+
+  <p class="silk-placeholder">这一路，从多哈到成都 / 就为这一刻</p>
+
+  <div class="silk-home" id="silk-home-scene">
+    <div class="home-emoji">🏠</div>
+    <div class="home-tip">点击下方"推开家门"按钮，到家啦 ✨</div>
+  </div>
+
+  <button id="silk-start" class="silk-start" type="button">推开家门 →</button>
+
+  <div id="silk-win" class="silk-win">
+    <p class="silk-quote" id="silk-quote">{{ level.quote if level else '' }}</p>
+    <p class="silk-reward" id="silk-reward">+¥1098.00</p>
+    <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
+    <a id="silk-next" class="silk-next" href="/games/silk-road/end">查看情书 →</a>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.LEVEL_ID = 5;
+  </script>
+  <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
+  <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
 {% endblock %}

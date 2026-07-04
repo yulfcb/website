@@ -335,6 +335,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_game_reward_log_dedup
             ON game_reward_log(session_id, level_id, kind)
     ''')
+    # 失败标记（M3）：玩家在 can_fail 关卡 10s 内未达成时，前端打这里 + 弹复活 modal。
+    # 仅用于"是否已失败过"判定，**不发飞书**，**不阻止后续 reward/claim**（容错优先）。
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS game_fail_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            level_id INTEGER NOT NULL,
+            failed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(session_id, level_id)
+        )
+    ''')
     conn.execute('PRAGMA foreign_keys = ON')
     conn.commit()
     # 默认设置（仅当 settings 表里没值时插入）
@@ -1496,6 +1507,47 @@ def api_game_secret():
     })
     # 注意：这里以及任何地方都不 log secret_text 原文
     return jsonify({'success': True, 'triggered': triggered})
+
+
+@app.route('/api/game/fail_level', methods=['POST'])
+def api_game_fail_level():
+    """M3 新增：标记某关失败（不发飞书，仅挡玩家作弊 + 供前端判断）。
+
+    body: {session_id, level, nickname?}
+    返回：{ok, failed_levels: [...]}  ── 当前 session 已失败过的关卡列表
+    """
+    data = _game_request_json()
+    session_id = (data.get('session_id') or '').strip()
+    nickname = _game_clean_nickname(data.get('nickname'))
+    if not session_id:
+        return jsonify({'ok': False, 'error': 'missing session_id'}), 400
+    try:
+        level = int(data.get('level'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid level'}), 400
+
+    conn = get_db()
+    try:
+        conn.execute(
+            'UPDATE game_sessions SET last_seen_at=CURRENT_TIMESTAMP, nickname=? WHERE session_id=?',
+            (nickname, session_id),
+        )
+        # INSERT OR IGNORE：UNIQUE(session_id, level_id) 防止同一关被反复插
+        conn.execute(
+            'INSERT OR IGNORE INTO game_fail_log (session_id, level_id) VALUES (?, ?)',
+            (session_id, level),
+        )
+        conn.commit()
+        rows = conn.execute(
+            'SELECT level_id FROM game_fail_log WHERE session_id=? ORDER BY level_id',
+            (session_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True,
+        'failed_levels': [int(r['level_id']) for r in rows],
+    })
 
 
 # =============================================================================

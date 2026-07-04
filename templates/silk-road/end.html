@@ -8,13 +8,23 @@
   <style>
     body { background: #1b2135; color: #f4ecd8; }
     .silk-end {
-      max-width: 640px; margin: 60px auto; padding: 40px 28px; text-align: center;
+      max-width: 720px; margin: 60px auto; padding: 40px 28px; text-align: center;
       border-radius: 18px; background: linear-gradient(160deg, #3a2140 0%, #1b2135 100%);
       box-shadow: 0 12px 44px rgba(0,0,0,.4);
     }
-    .silk-end h1 { font-size: 34px; color: #ffd98a; }
-    .silk-end .total { font-size: 48px; font-weight: 800; color: #a6e3a1; margin: 20px 0 6px; }
-    .silk-end .poem { color: #a8d8c0; font-style: italic; line-height: 1.9; margin: 18px 0; }
+    .silk-end h1 { font-size: 34px; color: #ffd98a; margin: 0 0 6px; }
+    .silk-end .subtitle { color: #a8d8c0; margin: 0 0 16px; }
+    .silk-end .total { font-size: 48px; font-weight: 800; color: #a6e3a1; margin: 18px 0 6px; }
+    .silk-end .total-cap { color: #c9c2d8; font-size: 13px; margin: 0 0 26px; }
+    .silk-quote-chain { display: flex; flex-direction: column; gap: 14px; margin: 22px 0;
+                        padding: 20px 18px; border-radius: 14px;
+                        background: rgba(168, 216, 192, .08); border: 1px solid rgba(168, 216, 192, .25);
+                        text-align: left; }
+    .silk-quote-chain .row { display: flex; gap: 12px; align-items: flex-start; }
+    .silk-quote-chain .row .idx { color: #ffd98a; font-weight: 700; min-width: 22px; }
+    .silk-quote-chain .row .q { color: #f4ecd8; font-style: italic; line-height: 1.6; flex: 1; }
+    .silk-quote-chain .row .reward { color: #a6e3a1; font-size: 13px; white-space: nowrap; }
+    .silk-end .poem { color: #a8d8c0; font-style: italic; line-height: 1.9; margin: 26px 0 14px; font-size: 16px; }
     .silk-end a {
       display: inline-block; margin-top: 22px; padding: 12px 28px; border-radius: 999px;
       background: #f6b5c8; color: #2a2140; text-decoration: none; font-weight: 700;
@@ -24,8 +34,21 @@
 <body>
   <div class="silk-end">
     <h1>🎆 通关！你已到家</h1>
+    <p class="subtitle">从卡塔尔到成都 · 一路向东</p>
+
     <div class="total">¥{{ '%.2f' | format(total_reward) }}</div>
-    <p style="color:#c9c2d8">这一路累计的情书总额（谐音「一生一世」）</p>
+    <p class="total-cap">这一路累计的情书总额（谐音「一生一世」）</p>
+
+    <div class="silk-quote-chain">
+      {% for lv in config.levels %}
+        <div class="row">
+          <span class="idx">{{ lv.id }}.</span>
+          <span class="q">「{{ lv.quote }}」</span>
+          {% if lv.reward %}<span class="reward">¥{{ '%.2f' | format(lv.reward) }}</span>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
     <p class="poem">回家了<br>所有的路，都是为了走向你</p>
     <p style="color:#6c7086;font-size:13px">（M4 会在这里放烟花 + 终极大奖弹窗）</p>
     <a href="/games/silk-road/mode">再走一次 →</a>

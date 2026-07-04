@@ -1,0 +1,17 @@
+<!-- 复活 modal（M3）：关 3/4 失败时弹出
+     - 包含 textarea + "发送"按钮 + "放弃"按钮
+     - 引擎负责打开/关闭/提交/跳关（通过 #silk-revive / .slk-revive-send / .slk-revive-giveup 钩子）
+     - maxlength=500 防恶意大文本 -->
+<div id="silk-revive" class="slk-revive-overlay" style="display:none">
+  <div class="slk-revive-modal">
+    <h3 class="slk-revive-title">💌 时间到啦</h3>
+    <p class="slk-revive-tip">输入你最想告诉我的话<br><span class="slk-revive-sub">（一句话秘密，不存在数据库，只发飞书）</span></p>
+    <textarea id="silk-revive-text" maxlength="500"
+              placeholder="写点什么…"></textarea>
+    <div class="slk-revive-actions">
+      <button type="button" class="slk-revive-send" id="slk-revive-send">发送</button>
+      <button type="button" class="slk-revive-giveup" id="slk-revive-giveup">放弃</button>
+    </div>
+    <p id="slk-revive-status" class="slk-revive-status"></p>
+  </div>
+</div>

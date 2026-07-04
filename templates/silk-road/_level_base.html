@@ -42,6 +42,47 @@
                   box-shadow: 0 8px 28px rgba(0,0,0,.4); max-width: 100%; }
     #pixi-stage canvas { display: block; max-width: 100%; height: auto; }
     .silk-progress { display: none; font-size: 14px; color: #ffd98a; margin: 6px 0 12px; }
+    /* M3 倒计时大字：关 3/4 顶部居中、显眼 */
+    .silk-timer { display: none; font-size: 28px; font-weight: 800;
+                  color: #f6b5c8; text-shadow: 0 2px 8px rgba(0,0,0,.4);
+                  margin: 6px 0 12px; letter-spacing: 1px; }
+    .silk-timer.warn { color: #ffb86c; }
+    .silk-timer.danger { color: #f87171; animation: silk-timer-pulse .6s ease-in-out infinite; }
+    @keyframes silk-timer-pulse {
+      0%,100% { transform: scale(1); }
+      50%     { transform: scale(1.08); }
+    }
+    /* M3 复活 modal */
+    .slk-revive-overlay {
+      position: fixed; inset: 0; background: rgba(20, 16, 36, .78);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999; padding: 16px;
+    }
+    .slk-revive-modal {
+      width: 100%; max-width: 420px; padding: 28px 24px;
+      border-radius: 18px;
+      background: linear-gradient(160deg, #3a2140 0%, #1b2135 100%);
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      color: #f4ecd8; text-align: center;
+    }
+    .slk-revive-title { font-size: 22px; margin: 0 0 10px; color: #ffd98a; }
+    .slk-revive-tip   { font-size: 14px; color: #c9c2d8; margin: 0 0 16px; line-height: 1.6; }
+    .slk-revive-sub   { color: #a8d8c0; font-size: 12px; }
+    #silk-revive-text {
+      width: 100%; min-height: 88px; box-sizing: border-box;
+      padding: 10px 14px; border-radius: 12px; border: 1px solid #4a5578;
+      background: #2a2140; color: #f4ecd8; font-size: 15px; line-height: 1.5;
+      font-family: inherit; resize: vertical;
+    }
+    .slk-revive-text:focus { outline: none; border-color: #f6b5c8; }
+    .slk-revive-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+    .slk-revive-send, .slk-revive-giveup {
+      padding: 10px 24px; border-radius: 999px; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    .slk-revive-send   { background: #f6b5c8; color: #2a2140; }
+    .slk-revive-giveup { background: transparent; color: #a8d8c0; border: 1px solid #4a5578; }
+    .slk-revive-status { margin-top: 12px; min-height: 18px; font-size: 14px; color: #a8d8c0; }
     .silk-win { display: none; margin-top: 18px; padding: 16px;
                 border-radius: 12px; background: rgba(168, 216, 192, 0.12);
                 border: 1px solid #a8d8c0; }
