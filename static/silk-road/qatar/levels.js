@@ -22,24 +22,26 @@ window.QATAR_LEVEL = {
   // 7 个礼物 —— 顺序即礼物 id（关 0 主线 6 + 1 个隐藏 World Cup）
   gifts: [
     { id: 0, x: 520, y: 380, name: '沙漠之眼',  hint: '给关 1「伊朗·沙漠骆驼」的礼物',     emoji: '👁️', placeId: 'souq_waqif' },
-    { id: 1, x: 380, y: 560, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum' },
+    { id: 1, x: 380, y: 460, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum' },
     { id: 2, x: 320, y: 200, name: '草原之歌',  hint: '给关 3「哈萨克·草原骑马」的礼物',   emoji: '🌾', placeId: 'aspire_park' },
-    { id: 3, x: 240, y: 540, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport' },
+    { id: 3, x: 240, y: 480, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport' },
     { id: 4, x: 1020, y: 380, name: '归家之心', hint: '给关 5「成都·到家」的礼物',         emoji: '🏠', placeId: 'the_pearl' },
-    { id: 5, x: 1080, y: 200, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche' },
-    // M9.5c: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯
-    { id: 6, x: 880, y: 90,  name: '世界杯奖杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium' },
+    { id: 5, x: 1080, y: 220, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche' },
+    // M9.5g: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯 (大力神杯)
+    { id: 6, x: 880, y: 220, name: '大力神杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium' },
   ],
 
-  // 7 个真实地名 — 只保留英文 (M9.5f: 中文版本太挤 + Airport/Museum 撞在一起, 英文 + 微调 y 让 chip 不相撞)
+  // 7 个真实地名 — 英文 + 远离 HUD/dpad 区域 (M9.5g)
   places: [
-    { id: 'hamad_airport',   x: 200,  y: 660, label: 'Hamad Airport' },
-    { id: 'islamic_museum',  x: 420,  y: 580, label: 'Museum of Islamic Art' },
+    // airport 抬到 y=520 (避 dpad 620), museum 在 y=460 (与 airport 距离 220px + chip 100px, OK)
+    { id: 'hamad_airport',   x: 200,  y: 520, label: 'Hamad Airport' },
+    { id: 'islamic_museum',  x: 420,  y: 460, label: 'Museum of Islamic Art' },
     { id: 'souq_waqif',      x: 580,  y: 340, label: 'Souq Waqif' },
-    { id: 'corniche',        x: 1110, y: 240, label: 'Corniche' },
-    { id: 'the_pearl',       x: 1050, y: 420, label: 'The Pearl' },
+    { id: 'corniche',        x: 1110, y: 320, label: 'Corniche' },
+    { id: 'the_pearl',       x: 1050, y: 470, label: 'The Pearl' },
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park' },
-    { id: 'lusail_stadium',  x: 880,  y: 90,  label: 'Lusail Stadium' },
+    // lusail 掉到 y=180 (避 HUD 顶栏 y=36 + 高度 72, 留 18px 间距)
+    { id: 'lusail_stadium',  x: 880,  y: 180, label: 'Lusail Stadium' },
   ],
 
   // 老商人 NPC —— 移出 Souq Waqif 区域（避开 gifts[0] 沙漠之眼在 souq_waqif），
@@ -77,7 +79,9 @@ window.QATAR_LEVEL = {
   WATER_BOUNDARY_HIT: 0.5,    // 撞边界 -0.5
   WATER_OASIS_REWARD: 2,      // 绿洲 +2
   WATER_MAX: 10,
-  LUGGAGE_MAX: 5,
+  // M9.5g: LUGGAGE_MAX 5 → 6. 之前 5 件 + pickupsToClaim=6 矛盾, 玩家必须放弃 1 件才能装下.
+  // 改成 6 = match pickup 6 关卡, 玩家可全装下 (但仍然保留 2-3 选 1 的取舍 sense, 真实策略)
+  LUGGAGE_MAX: 6,
   MIN_PICKUPS_TO_CLAIM: 3,    // 至少拾取 3 件才能领奖
   CANVAS_W: 1280,
   CANVAS_H: 720,

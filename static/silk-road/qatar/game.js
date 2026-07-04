@@ -184,15 +184,23 @@
 
       // —— 6 个礼物 ——
       this.giftSprites = [];
+      // M9.5g: 给每个 gift 单独构建 sprite. id=6 (大力神杯) 用 graphics 程序画,
+      // 其他 6 个用 emoji (图省事, 都是装饰).
       L.gifts.forEach(function (g) {
-        var glow = self.add.graphics();
-        glow.fillStyle(0xFFD98A, 0.35);
-        glow.fillCircle(0, 0, 22);
-        var bag = self.add.text(0, 0, g.emoji, { fontSize: '32px' }).setOrigin(0.5);
-        var label = self.add.text(0, 22, g.name, {
-          fontSize: '11px', color: '#4A2E1A', fontStyle: 'bold',
-        }).setOrigin(0.5);
-        var sprite = self.add.container(g.x, g.y, [glow, bag, label]);
+        var sprite;
+        if (g.id === 6) {
+          // World Cup trophy — 用 graphics 程序画, 不要 emoji
+          sprite = self._buildWorldCupSprite(g);
+        } else {
+          var glow = self.add.graphics();
+          glow.fillStyle(0xFFD98A, 0.35);
+          glow.fillCircle(0, 0, 22);
+          var bag = self.add.text(0, 0, g.emoji, { fontSize: '32px' }).setOrigin(0.5);
+          var label = self.add.text(0, 22, g.name, {
+            fontSize: '11px', color: '#4A2E1A', fontStyle: 'bold',
+          }).setOrigin(0.5);
+          sprite = self.add.container(g.x, g.y, [glow, bag, label]);
+        }
         sprite.giftData = g;
         sprite.collected = false;
         sprite.bobPhase = Math.random() * Math.PI * 2;
@@ -758,7 +766,9 @@
       this.state = 'DEAD';
       this.paused = true;
       this.setNpcFrame(2);
-      this.showReviveModal(this.pickupCount >= 3);
+      // M9.5g: 用户要求无论 pickupCount 多少, 都强制原地复活 (原 giveUp 路径, 玩家失去所有努力感).
+      // 之前 `this.pickupCount >= 3` = false 时直接 giveUp (放弃所有); 现在一律 true → 原地复活.
+      this.showReviveModal(true);
     },
 
     showReviveModal: function (forceRestart) {
@@ -876,12 +886,11 @@
         if (data && data.success) {
           this.hideRevive();
           if (forceRestart) {
-            // 没拾够 3 件 → 复活 +1 滴回原点
-            this.water = 1;
-            this.player.x = L.start.x;
-            this.player.y = L.start.y;
-            this.playerContainer.x = L.start.x;
-            this.playerContainer.y = L.start.y;
+            // M9.5g: 原地复活 — 不强制回 start. 在玩家当前坐标补 5 滴血 (从死亡定格中复活)
+            this.water = 5;
+            // player.x/y 已经在原地, 不重置. 只重置 container 让 sprite 跟得上 (graphics bug protection)
+            this.playerContainer.x = this.player.x;
+            this.playerContainer.y = this.player.y;
             this.changeWater(0);
             this.paused = false;
             this.state = 'PLAYING';
@@ -1456,6 +1465,93 @@
       g.fillStyle(0xC04848, 1); g.fillRect(-2, -7, 4, 1);
     }
     return g;
+  };
+
+  // ==================== M9.5g 大力神杯 sprite (graphics 程序画) ====================
+  // 卡塔尔 2022 世界杯 — Lusail Stadium 奖杯. 用 Phaser.Graphics 画, 不要 emoji.
+  // 真实大力神杯形态: 双手举杯 (绿色翅膀) + 金色杯身 + 地球+马瑙.
+  PlayScene.prototype._buildWorldCupSprite = function (g) {
+    var container = this.add.container(g.x, g.y);
+    // 光晕 (金黄)
+    var glow = this.add.graphics();
+    glow.fillStyle(0xFFD98A, 0.35);
+    glow.fillCircle(0, 0, 26);
+    container.add(glow);
+
+    var trophy = this.add.graphics();
+    // —— 下半部基座 ——
+    // 黑色圆形基座
+    trophy.fillStyle(0x1A1208, 1);
+    trophy.fillRoundedRect(-12, 22, 24, 8, 2);
+    // 金色底层
+    trophy.fillStyle(0xD4A857, 1);
+    trophy.fillRoundedRect(-10, 18, 20, 6, 1);
+
+    // —— 马瑙环 (深红色, 杯身底圈) ——
+    trophy.fillStyle(0x8B2A2A, 1);
+    trophy.fillRoundedRect(-9, 12, 18, 6, 1);
+
+    // —— 杯身 (金色长椭圆) ——
+    trophy.fillStyle(0xFFD700, 1);
+    trophy.beginPath();
+    trophy.moveTo(-9, 12);   // 上左
+    trophy.lineTo(9, 12);    // 上右
+    trophy.lineTo(7, -2);    // 下右 (杯口收窄)
+    trophy.lineTo(-7, -2);
+    trophy.closePath(); trophy.fillPath();
+    // 杯身厚一点
+    trophy.fillStyle(0xD4A857, 1);
+    trophy.fillRect(-9, -3, 18, 3);
+
+    // —— 杯口 ——
+    trophy.fillStyle(0xFFD700, 1);
+    trophy.fillRoundedRect(-10, -6, 20, 4, 1);
+    trophy.fillStyle(0xFFE9B0, 1);  // 内壁浅色
+    trophy.fillEllipse(0, -4, 14, 2);
+
+    // —— 上半部: 双手举杯的握柄 (绿色翅膀) ——
+    // Graphics 没 quadraticBezierTo 直接 method, 用 lineTo 拼月牙形.
+    var wingColor = 0x2E5A3D;  // 墨绿
+    trophy.fillStyle(wingColor, 1);
+    // 左翅膀 (4 段 lineTo 近似月牙)
+    trophy.beginPath();
+    trophy.moveTo(-9, -6);
+    trophy.lineTo(-18, -10);
+    trophy.lineTo(-16, -22);  // 翼尖
+    trophy.lineTo(-12, -18);
+    trophy.lineTo(-10, -8);
+    trophy.closePath(); trophy.fillPath();
+    // 右翅膀
+    trophy.beginPath();
+    trophy.moveTo(9, -6);
+    trophy.lineTo(18, -10);
+    trophy.lineTo(16, -22);
+    trophy.lineTo(12, -18);
+    trophy.lineTo(10, -8);
+    trophy.closePath(); trophy.fillPath();
+
+    // —— 顶部饰带 (金色绑定横条) ——
+    trophy.fillStyle(0xFFD700, 1);
+    trophy.fillRect(-7, -10, 14, 3);
+
+    // —— 顶部装饰 (白色 + 红宝石 + 绿宝石点缀) ——
+    trophy.fillStyle(0xFFFFFF, 1);
+    trophy.fillCircle(0, -14, 2.5);
+    trophy.fillStyle(0xC0392B, 1);  // 红色宝石
+    trophy.fillCircle(-1, -14, 1);
+    trophy.fillStyle(0x27AE60, 1);  // 绿色宝石
+    trophy.fillCircle(1, -14, 1);
+
+    container.add(trophy);
+
+    // 标签 (大力神杯)
+    var label = this.add.text(0, 36, g.name || '大力神杯', {
+      fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
+      stroke: '#4A2E1A', strokeThickness: 3,
+    }).setOrigin(0.5);
+    container.add(label);
+
+    return container;
   };
 
   // ==================== M9.3b IntroScene 角色卡片用 mini graphics 替换 emoji ====================
