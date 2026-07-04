@@ -1088,14 +1088,19 @@
         fontSize: '14px', color: '#A8D8C0',
       }).setOrigin(0.5);
 
-      // 继续按钮 —— HTML 跳关，不用 Phaser 控制 URL
+      // ===== M9.5e: Voyage Scene — 关 0 通关后, 继续按钮触发船去伊朗动画 =====
+      // 先创建 voyageContainer (默认 hidden). 点继续按钮 -> 显示 voyage 1.8s -> window.location
+      this.buildVoyageContainer();
+
       var nextBg = this.add.rectangle(640, 555, 280, 60, 0xFFD98A, 1);
       var nextText = this.add.text(640, 555, '继续下一关 →', {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
       var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
+      var self = this;
       nextZone.on('pointerdown', function () {
-        window.location.href = '/games/silk-road/level/1';
+        // 隐藏 next button + statusText — 全部让位给 voyage 动画
+        self.playVoyageAnimation('/games/silk-road/level/1');
       });
 
       // 调用 webhook
@@ -1188,6 +1193,140 @@
     },
     scene: [BootScene, IntroScene, PlayScene, ResultScene],
   });
+
+  // ==================== M9.5e Voyage 动画 ====================
+  // 关 0 通关 → ResultScene → 点继续 → playVoyageAnimation() → 1.8s → window.location.href 到 next 关
+  // 在 ResultScene 上画海面 + 船 + 字幕. 只用 graphics 内联, 不引外部资源.
+  ResultScene.prototype.buildVoyageContainer = function () {
+    var self = this;
+    this.voyageContainer = this.add.container(0, 0);
+    this.voyageContainer.setDepth(3000);  // 盖住所有 ResultScene UI
+    this.voyageContainer.setVisible(false);
+
+    // 1) 海面背景 (深蓝渐变 + 海浪)
+    var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
+    this.voyageContainer.add(seaBg);
+    // 海面渐变 layer (上深下浅)
+    var grad = this.add.graphics();
+    grad.fillGradientStyle(0x1B3A5E, 0x1B3A5E, 0x4A7AAB, 0x4A7AAB, 1);
+    grad.fillRect(0, 360, 1280, 360);
+    this.voyageContainer.add(grad);
+
+    // 2) 太阳 (橙黄圆, 渐隐在海平面)
+    var sun = this.add.circle(960, 320, 50, 0xFFD98A, 0.9);
+    var halo = this.add.circle(960, 320, 80, 0xFFD98A, 0.25);
+    this.voyageContainer.add(halo);
+    this.voyageContainer.add(sun);
+
+    // 3) 海浪 (3 层弧线)
+    var wave1 = this.add.graphics();
+    wave1.lineStyle(2, 0xA8D8C0, 0.6);
+    wave1.beginPath();
+    for (var x = 0; x <= 1280; x += 20) {
+      var y = 460 + Math.sin(x * 0.025) * 8;
+      if (x === 0) wave1.moveTo(x, y); else wave1.lineTo(x, y);
+    }
+    wave1.strokePath();
+    var wave2 = this.add.graphics();
+    wave2.lineStyle(2, 0xA8D8C0, 0.45);
+    wave2.beginPath();
+    for (var x = 0; x <= 1280; x += 20) {
+      var y = 520 + Math.sin(x * 0.02 + 1) * 10;
+      if (x === 0) wave2.moveTo(x, y); else wave2.lineTo(x, y);
+    }
+    wave2.strokePath();
+    var wave3 = this.add.graphics();
+    wave3.lineStyle(3, 0xFFFFFF, 0.4);
+    wave3.beginPath();
+    for (var x = 0; x <= 1280; x += 20) {
+      var y = 600 + Math.sin(x * 0.018 + 2) * 12;
+      if (x === 0) wave3.moveTo(x, y); else wave3.lineTo(x, y);
+    }
+    wave3.strokePath();
+    this.voyageContainer.add([wave1, wave2, wave3]);
+
+    // 4) 船 (黑色船身 + 高耸三角帆 + 旗帜)
+    var shipContainer = this.add.container(-200, 460);   // 起始屏幕外左
+    // 船身 hull
+    var hull = this.add.graphics();
+    hull.fillStyle(0x4A2E1A, 1);
+    hull.beginPath();
+    hull.moveTo(-50, 0); hull.lineTo(50, 0);
+    hull.lineTo(35, 25); hull.lineTo(-35, 25);
+    hull.closePath(); hull.fillPath();
+    // 桅杆
+    var mast = this.add.graphics();
+    mast.fillStyle(0x2A190E, 1);
+    mast.fillRect(-2, -110, 4, 110);
+    // 帆 (白色三角)
+    var sail = this.add.graphics();
+    sail.fillStyle(0xF4ECD8, 1);
+    sail.beginPath();
+    sail.moveTo(0, -100); sail.lineTo(50, -10); sail.lineTo(0, -10);
+    sail.closePath(); sail.fillPath();
+    // 旗帜
+    var flag = this.add.graphics();
+    flag.fillStyle(0xFFD98A, 1);
+    flag.fillRect(-2, -120, 14, 8);
+    shipContainer.add([hull, mast, sail, flag]);
+    this.shipContainer = shipContainer;
+    this.voyageContainer.add(shipContainer);
+
+    // 5) 字幕 (顶部 + 底部)
+    var topText = this.add.text(640, 80, '🌊 离开多哈 · 波斯湾', {
+      fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    var subText = this.add.text(640, 600, '下一站 → 伊朗 🐪', {
+      fontSize: '18px', color: '#A8D8C0', fontStyle: 'italic',
+    }).setOrigin(0.5);
+    // 路线文字带行 (大字出现)
+    var carrier = this.add.text(640, 360, '🚢 海上丝绸之路', {
+      fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    carrier.setAlpha(0);
+
+    this.voyageTopText = topText;
+    this.voyageSubText = subText;
+    this.voyageCarrier = carrier;
+    this.voyageContainer.add([topText, subText, carrier]);
+  };
+
+  // 动画 + navigate
+  ResultScene.prototype.playVoyageAnimation = function (nextUrl) {
+    var self = this;
+    this.voyageContainer.setVisible(true);
+
+    // 隐藏所有 ResultScene UI 元素
+    this.children.list.forEach(function (c) {
+      if (c !== self.voyageContainer) c.setVisible(false);
+    });
+
+    // tween 1: 字幕淡入 fade in
+    this.tweens.add({
+      targets: this.voyageCarrier,
+      alpha: 1,
+      duration: 400,
+      ease: 'Quad.easeOut',
+    });
+    // tween 2: 船从 -200 -> 1100 (跨屏)
+    this.tweens.add({
+      targets: this.shipContainer,
+      x: 1100,
+      duration: 1600,
+      ease: 'Quad.easeInOut',
+    });
+    // tween 3: 字幕 carrier y 微微下沉 (船在前行)
+    this.tweens.add({
+      targets: this.voyageCarrier,
+      y: 420,
+      duration: 1800,
+      ease: 'Quad.easeIn',
+      onComplete: function () {
+        // 跳转
+        window.location.href = nextUrl;
+      },
+    });
+  };
 
   // ==================== M9.1 角色选择面板 ====================
   // 在 IntroScene 自定义原型上挂方法。Phaser Class 自创建后 add 方法
