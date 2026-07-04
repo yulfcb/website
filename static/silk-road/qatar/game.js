@@ -89,8 +89,23 @@
       this.add.text(640, 100, '关卡 0 · 起航·多哈沙海', {
         fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
-      this.add.text(640, 140, '丝绸之路 · 陆上', {
+      this.add.text(640, 140, '丝绸之路 · 陆上 · 第 0 段', {
         fontSize: '14px', color: '#A8D8C0',
+      }).setOrigin(0.5);
+
+      // ===== M8.5 关卡叙事卡 =====
+      // 关 0 主要目标：在多哈攒钱 → 凑够船票 → 关 1 坐船去伊朗
+      // 这一关没有骆驼，玩家徒步在沙海上找 6 件礼物换成路费
+      var storyCard = this.add.rectangle(640, 410, 880, 100, 0x2A1F18, 0.78)
+        .setStrokeStyle(1, 0xC49A5E, 0.6);
+      this.add.text(640, 372, '🧳 关卡目标', {
+        fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.add.text(640, 402, '我在多哈。下一站伊朗，要坐船。', {
+        fontSize: '16px', color: '#F4ECD8',
+      }).setOrigin(0.5);
+      this.add.text(640, 432, '徒步收集 6 件礼物 → 凑船票 → 关 1 港口上船（找到 3 件以上可结算）', {
+        fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
 
       // 开始按钮
@@ -188,11 +203,13 @@
       var mEmoji = this.add.text(0, 0, L.merchant.emoji, { fontSize: '28px' }).setOrigin(0.5);
       this.merchantSprite = this.add.container(L.merchant.x, L.merchant.y, [mBg, mEmoji]);
 
-      // —— 玩家 ——
-      var camel = this.add.text(-30, 5, '🐪', { fontSize: '38px' }).setOrigin(0.5);
-      var elf = this.add.text(0, 0, '🧝', { fontSize: '44px' }).setOrigin(0.5);
-      this.playerContainer = this.add.container(L.start.x, L.start.y, [camel, elf]);
-      this.playerSprite = { camel: camel, elf: elf };
+      // —— 玩家：徒步小人（脚沾地走）——
+      // (M8.5) 关 0 没骆驼，关 1 才有船。这一关玩家双脚走在沙地上
+      var elf = this.add.text(0, 0, '🚶', { fontSize: '44px' }).setOrigin(0.5);
+      // 影子圆让它"踩地"
+      var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
+      this.playerContainer = this.add.container(L.start.x, L.start.y, [shadow, elf]);
+      this.playerSprite = { shadow: shadow, elf: elf };
 
       // —— 状态 ——
       this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
@@ -331,16 +348,14 @@
         sp.list[1].y = Math.sin(sp.bobPhase) * 2;   // bag
       }
 
-      // 走动画
+      // 走动画 —— 徒步小人=M8.5，关 0 没有骆驼了
       if (Date.now() - this.player.lastMoveAt < 200) {
         this.player.walkPhase += 0.2;
         if (this.playerSprite) {
           this.playerSprite.elf.y = Math.sin(this.player.walkPhase) * 1.5;
-          this.playerSprite.camel.y = 5 + Math.sin(this.player.walkPhase) * 1.5;
         }
       } else if (this.playerSprite) {
         this.playerSprite.elf.y = 0;
-        this.playerSprite.camel.y = 5;
       }
 
       // 老商人距离检测
@@ -466,7 +481,7 @@
 
       // 背景遮罩（吸收点击，不响应回调）
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
-      backdrop.setInteractive({ useHandCursor: false });
+      // M8.5：backdrop 不该 interactive，否则会截掉按钮点击
       this.modalContainer.add(backdrop);
 
       var card = this.add.rectangle(0, 0, 460, 420, 0x4A2E1A, 1)
@@ -555,7 +570,8 @@
       this.modalContainer.removeAll(true);
 
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.78);
-      backdrop.setInteractive({ useHandCursor: false });
+      // M8.5：backdrop 不该 interactive！之前 setInteractive 把所有点击截了，
+      // 玩家以为点的是按钮实际点中了 backdrop → 关不掉 modal
       this.modalContainer.add(backdrop);
 
       var card = this.add.rectangle(0, 0, 420, 300, 0x6B4423, 1)
@@ -604,7 +620,7 @@
       this.modalContainer.removeAll(true);
 
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.85);
-      backdrop.setInteractive({ useHandCursor: false });
+      // M8.5：backdrop 不该 interactive
       this.modalContainer.add(backdrop);
 
       var card = this.add.rectangle(0, 0, 500, 380, 0x3A2140, 1)
@@ -916,17 +932,23 @@
         fontSize: '38px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
 
+      // ===== M8.5 关 0 → 关 1 叙事桥 =====
+      // 关 0 攒出钱后，关 1 才是伊朗港口上船
+      this.add.text(640, 475, this.given ? '💸' : '🛳️ 用这一关攒的钱，下一站 → 伊朗港口上船', {
+        fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic',
+      }).setOrigin(0.5);
+
       // 状态
-      this.statusText = this.add.text(640, 430, this.given ? '已放弃复活' : '推送中…', {
+      this.statusText = this.add.text(640, 510, this.given ? '已放弃复活' : '推送中…', {
         fontSize: '14px', color: '#A8D8C0',
       }).setOrigin(0.5);
 
       // 继续按钮 —— HTML 跳关，不用 Phaser 控制 URL
-      var nextBg = this.add.rectangle(640, 510, 280, 70, 0xFFD98A, 1);
-      var nextText = this.add.text(640, 510, '继续下一关 →', {
+      var nextBg = this.add.rectangle(640, 555, 280, 60, 0xFFD98A, 1);
+      var nextText = this.add.text(640, 555, '继续下一关 →', {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
-      var nextZone = this.add.zone(640, 510, 280, 70).setInteractive({ useHandCursor: true });
+      var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
       nextZone.on('pointerdown', function () {
         window.location.href = '/games/silk-road/level/1';
       });
