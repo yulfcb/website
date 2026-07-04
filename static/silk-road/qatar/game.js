@@ -206,15 +206,17 @@
       var mEmoji = this.add.text(0, 0, L.merchant.emoji, { fontSize: '28px' }).setOrigin(0.5);
       this.merchantSprite = this.add.container(L.merchant.x, L.merchant.y, [mBg, mEmoji]);
 
-      // —— 玩家：造型小人（脚沾地走）——
-      // (M8.5) 没骆驼；(M9.1) 玩家造型选自 IntroScene（4 个 emoji）
-      // avatar: 'malay'=🧔 / 'fala'=🧕 / 'cn_m'=👨 / 'cn_f'=👩
-      // facing: -1 左 / 1 右 — flipX 镜像 emoji
+      // —— 玩家：造型小人（有身体）——
+      // M9.3b：不只用 emoji 脸——用 Phaser.Graphics 程序画 4 个有身体的造型。
+      // 阿拉伯男：白袍 (thobe) + 头巾 (ghutra) + 黑色 agal 环
+      // 阿拉伯女：黑色长袍 (abaya) + 头巾 (hijab)
+      // 中国男：黑发 + 汉服对襟
+      // 中国女：长发垂下 + 汉服对襟
+      // facing: -1 左 / 1 右 —— elf 整体 flipX 镜像（emoji/graphics 都行）
       var avatarId = (this.initData && this.initData.avatar) || localStorage.getItem('silkroad_avatar') || 'malay';
       if (!window.QATAR_AVATARS[avatarId]) avatarId = 'malay';
       this._avatar = avatarId;
-      var avatarEmoji = window.QATAR_AVATARS[avatarId];
-      var elf = this.add.text(0, 0, avatarEmoji, { fontSize: '44px' }).setOrigin(0.5);
+      var elf = this._buildAvatarSprite(avatarId); // 返回 Graphics
       // 影子圆让它"踩地"
       var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
       this.playerContainer = this.add.container(L.start.x, L.start.y, [shadow, elf]);
@@ -381,11 +383,16 @@
         this.playerSprite.elf.y = 0;
       }
 
-      // 老商人距离检测
+      // 老商人距离检测 —— M9.3a 用"真状态机"代替"1s 延迟 reset"
+      // 老商人逻辑：玩家进 50px 触发；触发后必须走开 200px 才算"用完一次对话"。
+      // 这就避免了"站在 NPC 旁边"1s 后再弹、卡死的体验。
       var dx = this.player.x - L.merchant.x;
       var dy = this.player.y - L.merchant.y;
-      if (Math.sqrt(dx * dx + dy * dy) < 50 && !this.merchantShown) {
+      var merchantDist = Math.sqrt(dx * dx + dy * dy);
+      if (merchantDist < 50 && !this.merchantShown) {
         this.showMerchant();
+      } else if (merchantDist > 200 && this.merchantShown) {
+        this.merchantShown = false;   // 走远才放行下次触发
       }
     },
 
@@ -629,9 +636,8 @@
       var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
       btnZone.on('pointerdown', function () {
         self.modalContainer.setVisible(false);
-        // M8.4：2.5s cool-down，关掉就别立刻又来（player 还停在附近）
-        self._merchantCooldownUntil = Date.now() + 2500;
-        self.time.delayedCall(1000, function () { self.merchantShown = false; });
+        // M9.3a：移走 1s reset，靠 update 检测玩家距离 > 200px 才放行（真状态）
+        // 移走 _merchantCooldownUntil — 它跟新机制冲突，玩家走远即可触发
       });
       this.modalContainer.add([btnBg, btnText, btnZone]);
 
@@ -1085,6 +1091,135 @@
 
   // ==================== M9.1 角色选择面板 ====================
   // 在 IntroScene 自定义原型上挂方法。Phaser Class 自创建后 add 方法
+  // ==================== M9.3b 4 角色 graphics 绘制 ====================
+  // 用 Phaser.Graphics 程序画 4 个有身体的造型，所有 body 部分 0~44 范围 (elf.y=0)
+  // 颜色代码：阿拉伯男=白袍+白头巾， 阿拉伯女=黑色 abaya+hijab，中国男=藏青汉服，中国女=桃红汉服
+  PlayScene.prototype._buildAvatarSprite = function (avatarId) {
+    var g = this.add.graphics();
+    g.setName('avatar:' + avatarId);
+    if (avatarId === 'malay') {
+      // —— 阿拉伯男：thobe 白袍 + ghutra 白头巾 + 黑色 agal 头箍 ——
+      // 鞋
+      g.fillStyle(0x3A2614, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
+      // 袍身 (上窄下宽 — trapezoid)
+      g.fillStyle(0xF4ECD8, 1);
+      g.beginPath(); g.moveTo(-12, 18); g.lineTo(12, 18);
+      g.lineTo(15, -6); g.lineTo(-15, -6); g.closePath(); g.fillPath();
+      // 袍袖
+      g.fillStyle(0xE8DEC0, 1);
+      g.fillRoundedRect(-15, -8, 4, 20, 2); g.fillRoundedRect(11, -8, 4, 20, 2);
+      // 腰带
+      g.fillStyle(0x8B6B3A, 1); g.fillRect(-13, 6, 26, 2);
+      // 头巾 (ghutra) - 大白方巾搭在头上
+      g.fillStyle(0xFFFFFF, 1);
+      g.fillRoundedRect(-13, -22, 26, 14, 3); // 主头巾
+      g.fillRoundedRect(-15, -16, 4, 18, 1); // 左侧下垂
+      g.fillRoundedRect(11, -16, 4, 18, 1);  // 右侧下垂
+      // agal 黑头箍环 (双线)
+      g.lineStyle(2, 0x1A1208, 1);
+      g.strokeRoundedRect(-13, -18, 26, 2, 1);
+      g.strokeRoundedRect(-13, -14, 26, 2, 1);
+      // 脸 (深褐肤)
+      g.fillStyle(0xC9A47A, 1);
+      g.fillRoundedRect(-8, -14, 16, 12, 3);
+      // 络腮胡
+      g.fillStyle(0x1A1208, 1);
+      g.fillRoundedRect(-7, -6, 14, 6, 2);
+      // 眼睛
+      g.fillStyle(0x1A1208, 1);
+      g.fillRect(-4, -10, 2, 2); g.fillRect(2, -10, 2, 2);
+    } else if (avatarId === 'fala') {
+      // —— 阿拉伯女：黑色 abaya 长袍 + hijab 头巾 —— (黑袍 + 露脸 or 只露眼睛 — 选择: 露脸)
+      // 鞋
+      g.fillStyle(0x2A1F18, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
+      // 长袍 (盖到脚踝)
+      g.fillStyle(0x1A1208, 1);
+      g.beginPath(); g.moveTo(-12, 22); g.lineTo(12, 22);
+      g.lineTo(14, -4); g.lineTo(-14, -4); g.closePath(); g.fillPath();
+      // 袖
+      g.fillStyle(0x0F0A06, 1);
+      g.fillRoundedRect(-15, -6, 4, 22, 2); g.fillRoundedRect(11, -6, 4, 22, 2);
+      // 金色腰带
+      g.fillStyle(0xC49A5E, 1); g.fillRect(-13, 6, 26, 2);
+      // 金色装饰边
+      g.fillStyle(0xFFD98A, 1); g.fillRect(-13, 8, 26, 1);
+      // 头巾 hijab (盖住头发 + 脖子)
+      g.fillStyle(0x2A1F18, 1);
+      g.fillRoundedRect(-12, -22, 24, 22, 4);
+      // 脸框 (椭圆)
+      g.fillStyle(0xD4B68C, 1); // 浅褐肤
+      g.fillEllipse(0, -10, 14, 12);
+      // 眼睛
+      g.fillStyle(0x1A1208, 1); g.fillRect(-4, -11, 2, 2); g.fillRect(2, -11, 2, 2);
+      // 红唇点
+      g.fillStyle(0xC04848, 1); g.fillRect(-1, -7, 2, 1);
+    } else if (avatarId === 'cn_m') {
+      // —— 中国男：黑短发 + 藏青汉服对襟 —— 中式立领
+      // 鞋
+      g.fillStyle(0x2A1F18, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
+      // 汉服主体 (藏青)
+      g.fillStyle(0x2C3E50, 1);
+      g.beginPath(); g.moveTo(-13, 18); g.lineTo(13, 18);
+      g.lineTo(15, -4); g.lineTo(-15, -4); g.closePath(); g.fillPath();
+      // 袖 (宽袖汉服风格)
+      g.fillStyle(0x34495E, 1);
+      g.fillRoundedRect(-17, -6, 6, 22, 2); g.fillRoundedRect(11, -6, 6, 22, 2);
+      // 对襟白边 (汉服衣领)
+      g.lineStyle(1, 0xF4ECD8, 1);
+      g.beginPath(); g.moveTo(0, -4); g.lineTo(0, 14); g.strokePath();
+      // 5 颗中式盘扣
+      g.fillStyle(0xC49A5E, 1);
+      for (var i = 0; i < 3; i++) g.fillCircle(0, i * 5, 1);
+      // 腰带
+      g.fillStyle(0x1A1208, 1); g.fillRect(-13, 6, 26, 2);
+      // 头发 (黑短发)
+      g.fillStyle(0x1A1208, 1);
+      g.fillRoundedRect(-10, -22, 20, 10, 3);
+      // 脸 (黄肤)
+      g.fillStyle(0xF0D2A8, 1);
+      g.fillRoundedRect(-7, -14, 14, 12, 2);
+      // 眼睛
+      g.fillStyle(0x1A1208, 1); g.fillRect(-4, -10, 2, 2); g.fillRect(2, -10, 2, 2);
+    } else { // cn_f —— 中国女：长发垂到肩膀 + 桃红汉服对襟
+      // 鞋
+      g.fillStyle(0x5C3A22, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
+      // 汉服主体 (桃红)
+      g.fillStyle(0xD88099, 1);
+      g.beginPath(); g.moveTo(-13, 18); g.lineTo(13, 18);
+      g.lineTo(15, -4); g.lineTo(-15, -4); g.closePath(); g.fillPath();
+      // 宽袖
+      g.fillStyle(0xE89AAA, 1);
+      g.fillRoundedRect(-17, -6, 6, 22, 2); g.fillRoundedRect(11, -6, 6, 22, 2);
+      // 对襟白边
+      g.lineStyle(1, 0xF4ECD8, 1);
+      g.beginPath(); g.moveTo(0, -4); g.lineTo(0, 14); g.strokePath();
+      // 5 颗盘扣
+      g.fillStyle(0xC49A5E, 1);
+      for (var i = 0; i < 3; i++) g.fillCircle(0, i * 5, 1);
+      // 腰带
+      g.fillStyle(0xC49A5E, 1); g.fillRect(-13, 6, 26, 2);
+      // 头发 (黑色长发, 两侧垂到肩)
+      g.fillStyle(0x1A1208, 1);
+      g.fillRoundedRect(-11, -22, 22, 10, 3);
+      g.fillRoundedRect(-13, -16, 4, 12, 2); // 左侧长发
+      g.fillRoundedRect(9, -16, 4, 12, 2);  // 右侧长发
+      // 脸 (黄肤)
+      g.fillStyle(0xF8E0B8, 1);
+      g.fillRoundedRect(-7, -14, 14, 12, 2);
+      // 刘海 (中分)
+      g.fillStyle(0x1A1208, 1);
+      g.fillRoundedRect(-7, -16, 6, 4, 1);
+      g.fillRoundedRect(1, -16, 6, 4, 1);
+      // 眼睛
+      g.fillStyle(0x1A1208, 1); g.fillRect(-4, -10, 2, 2); g.fillRect(2, -10, 2, 2);
+      // 红唇
+      g.fillStyle(0xC04848, 1); g.fillRect(-2, -7, 4, 1);
+    }
+    return g;
+  };
+
+  // ==================== M9.3b IntroScene 角色卡片用 mini graphics 替换 emoji ====================
+  // (IntroScene 仍显示 emoji 是为了让用户"看看大致造型"；进入 PlayScene 才是真 graphics)
   IntroScene.prototype._renderAvatarPicker = function (cx, cy) {
     var self = this;
     this._avatarCards = [];
