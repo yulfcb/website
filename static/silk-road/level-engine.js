@@ -226,7 +226,64 @@
     if (progressLabel) progressLabel.textContent = '✅ 已到达';
     if (quoteText) quoteText.textContent = cfg.quote;
     if (rewardText) rewardText.textContent = '+¥' + cfg.reward.toFixed(2);
+    // 记录通关到 localStorage（跨关进度条读这个 key）
+    try {
+      var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
+      if (cleared.indexOf(LEVEL_ID) === -1) {
+        cleared.push(LEVEL_ID);
+        localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
+      }
+    } catch (e) { /* localStorage 可能不可用，吞 */ }
     claimReward(cfg.reward);
+  }
+
+  // —— M4 关 5 终局：弹 modal + 烟花 + 5 秒跳 end ——
+  var finaleShown = false;
+  function triggerFinale() {
+    if (finaleShown) return;
+    finaleShown = true;
+    var modal = document.getElementById('slk-finale');
+    var canvas = document.getElementById('slk-finale-fireworks');
+    var nickEl = document.getElementById('slk-finale-nick');
+    var amountEl = document.getElementById('slk-finale-amount');
+    var capEl = document.getElementById('slk-finale-cap');
+    var cdEl = document.getElementById('slk-finale-countdown');
+    var skipBtn = document.getElementById('slk-finale-skip');
+    if (!modal) return; // 兜底：没 modal 直接跳
+    if (nickEl) nickEl.textContent = '你好，' + nickname + ' ❤️';
+    if (amountEl) amountEl.textContent = '+¥' + cfg.reward.toFixed(2);
+    if (capEl) capEl.textContent = '杭州相见 · 立刻发送';
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // 烟花
+    if (window.SLK_Fireworks) {
+      try { window.SLK_Fireworks.start(canvas); } catch (e) { /* 兜底 */ }
+    }
+
+    var left = 5;
+    if (cdEl) cdEl.textContent = left;
+    var cdId = setInterval(function () {
+      left -= 1;
+      if (cdEl) cdEl.textContent = Math.max(0, left);
+      if (left <= 0) clearInterval(cdId);
+    }, 1000);
+    var jumpTimer = setTimeout(function () {
+      jumpToEnd();
+    }, 5000);
+    if (skipBtn) {
+      skipBtn.addEventListener('click', function () {
+        clearTimeout(jumpTimer);
+        clearInterval(cdId);
+        jumpToEnd();
+      });
+    }
+
+    function jumpToEnd() {
+      var url = '/games/silk-road/end';
+      if (SESSION_ID) url += '?sid=' + encodeURIComponent(SESSION_ID);
+      window.location.href = url;
+    }
   }
 
   function claimReward(amount) {
@@ -258,6 +315,11 @@
             ? '已领取过（服务端去重）'
             : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
           renderWin(msg, true);
+          // M4 关 5 终局：弹大奖 modal + 烟花 + 5s 跳 end
+          if (LEVEL_ID === 5 && window.SLK_FINALE && !data.duplicate) {
+            // 延迟 700ms 让 reward 数字先闪一下
+            setTimeout(triggerFinale, 700);
+          }
         } else {
           renderWin('领取失败：' + (data && data.error ? data.error : '未知错误'), false);
         }
@@ -496,6 +558,10 @@
     if (rewardText) rewardText.textContent = '+¥' + cfg.reward.toFixed(2);
     if (progressLabel) progressLabel.textContent = '本关已通关（前端去重命中，不重复发飞书）';
     renderWin('本关已领取（前端去重命中）', true);
+    // M4 关 5 已通关：仍触发终局动画（但允许 5s 后手动跳 end）
+    if (LEVEL_ID === 5 && window.SLK_FINALE && !finaleShown) {
+      setTimeout(triggerFinale, 400);
+    }
   } else {
     // 预先建 session（不阻塞 UI，缓存到 localStorage 给下一关用）
     ensureSession();

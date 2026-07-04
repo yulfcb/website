@@ -32,6 +32,9 @@
   </style>
 </head>
 <body>
+  {# M4: mode 页顶部加进度条（只显示已通关数，无 current）#}
+  <div id="silk-progress-bar-host"></div>
+
   <div class="silk-wrap">
     <h1 class="silk-h1">🐫 丝绸之路 · 回家</h1>
     <p class="silk-sub">从卡塔尔出发，一路向东，回到成都</p>
@@ -74,8 +77,13 @@
       if (saved) input.value = saved;
       input.addEventListener('input', function () {
         localStorage.setItem('silkroad_nickname', input.value.trim());
+        // 触发进度条昵称同步
+        if (window.SLK_Progress && window.SLK_Progress.rebuild) {
+          window.SLK_Progress.rebuild();
+        }
       });
     })();
   </script>
+  <script src="{{ url_for('static', filename='silk-road/progress.js') }}"></script>
 </body>
 </html>

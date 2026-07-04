@@ -15,7 +15,7 @@
   </style>
 {% endblock %}
 {% block content %}
-  <div class="silk-badge">关卡 5 / 5</div>
+  <div class="silk-badge">关卡 5 / 5 · 终局</div>
   <h1 class="silk-title">{{ level.title if level else '成都·到家' }}</h1>
 
   <p class="silk-placeholder">这一路，从多哈到成都 / 就为这一刻</p>
@@ -33,12 +33,18 @@
     <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
     <a id="silk-next" class="silk-next" href="/games/silk-road/end">查看情书 →</a>
   </div>
+
+  {# M4: 终极大奖弹窗（关 5 通关后弹出）#}
+  {% include "silk-road/_finale_modal.html" %}
 {% endblock %}
 
 {% block scripts %}
   <script>
     window.LEVEL_ID = 5;
+    // 关 5 标记：引擎读这个走 finale 分支
+    window.SLK_FINALE = true;
   </script>
   <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
+  <script src="{{ url_for('static', filename='silk-road/fireworks.js') }}"></script>
   <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
 {% endblock %}

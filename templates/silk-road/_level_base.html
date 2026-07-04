@@ -89,14 +89,68 @@
     .silk-win .silk-reward { font-size: 28px; color: #ffd98a; font-weight: 800; }
     .silk-webhook-status { font-size: 13px; margin-top: 6px; }
     .silk-next { display: none; margin-top: 14px; }
+
+    /* M4 跨关进度条 + 昵称 */
+    #silk-progress-bar-host { max-width: 720px; margin: 18px auto 0; padding: 0 16px; }
+    .slk-pg-wrap {
+      display: flex; align-items: center; gap: 16px;
+      padding: 10px 14px; border-radius: 14px;
+      background: rgba(42, 33, 64, 0.55); border: 1px solid rgba(74, 85, 120, 0.6);
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    .slk-pg-nick {
+      flex-shrink: 0; font-size: 13px; color: #f6b5c8;
+      padding: 6px 12px; border-radius: 999px;
+      background: rgba(246, 181, 200, 0.1);
+    }
+    .slk-pg-nick b { color: #ffd98a; font-weight: 700; margin-left: 2px; }
+    .slk-pg-bar { flex: 1; min-width: 0; }
+    .slk-pg-track {
+      display: flex; align-items: center; gap: 4px;
+      flex-wrap: nowrap; overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .slk-pg-track::-webkit-scrollbar { height: 3px; }
+    .slk-pg-track::-webkit-scrollbar-thumb { background: #4a5578; border-radius: 2px; }
+    .slk-pg-step {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 4px 6px; border-radius: 8px; cursor: pointer; min-width: 36px;
+      transition: background .14s ease; position: relative;
+    }
+    .slk-pg-step:hover { background: rgba(168, 216, 192, 0.08); }
+    .slk-pg-step.cleared .slk-pg-dot { filter: none; opacity: 1; }
+    .slk-pg-step.current .slk-pg-dot {
+      animation: slk-pg-bounce 1.2s ease-in-out infinite;
+    }
+    @keyframes slk-pg-bounce {
+      0%,100% { transform: translateY(0); }
+      50%     { transform: translateY(-3px); }
+    }
+    .slk-pg-step.todo .slk-pg-dot { opacity: 0.35; filter: grayscale(.7); }
+    .slk-pg-dot { font-size: 22px; line-height: 1; }
+    .slk-pg-check {
+      position: absolute; top: 0; right: 0;
+      font-size: 10px; line-height: 1;
+    }
+    .slk-pg-step.cleared .slk-pg-check { color: #a6e3a1; }
+    .slk-pg-step.current .slk-pg-check { color: #ffd98a; }
+    .slk-pg-label { font-size: 10px; color: #c9c2d8; }
+    .slk-pg-step.current .slk-pg-label { color: #ffd98a; font-weight: 700; }
+    .slk-pg-sep { color: #4a5578; font-size: 14px; }
+    .slk-pg-count { font-size: 12px; color: #c9c2d8; margin-top: 4px; text-align: center; }
+    .slk-pg-count b { color: #ffd98a; font-weight: 700; }
+    .slk-pg-count-num { color: #a6e3a1; font-weight: 800; font-size: 13px; }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+  {# M4 跨关进度条 #}
+  <div id="silk-progress-bar-host"></div>
   <div class="silk-stage">
     {% block content %}{% endblock %}
     <div><a class="silk-back" href="{{ url_for('silk_road_mode') }}">← 返回模式</a></div>
   </div>
   {% block scripts %}{% endblock %}
+  <script src="{{ url_for('static', filename='silk-road/progress.js') }}"></script>
 </body>
 </html>

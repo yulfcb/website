@@ -1366,13 +1366,44 @@ def silk_road_level(n):
 
 @app.route('/games/silk-road/end')
 def silk_road_end():
-    """终局页：累计奖励总额。"""
+    """终局页：累计奖励总额 + 通关时间（仅渲染模板，不打 webhook）。"""
     track_visit()
     cfg = load_game_config()
     total = cfg.get('total_reward')
     if total is None:
         total = round(sum(float(l.get('reward', 0)) for l in cfg.get('levels', [])), 2)
-    return render_template('silk-road/end.html', config=cfg, total_reward=total)
+
+    # M4：从 game_sessions 读最新一条 session 的 started_at → 算 elapsed（仅展示用，不返回整张表）
+    started_at = None
+    nickname = None
+    sid = request.args.get('sid', '').strip()
+    conn = get_db()
+    try:
+        if sid:
+            row = conn.execute(
+                'SELECT started_at, nickname FROM game_sessions WHERE session_id=?',
+                (sid,),
+            ).fetchone()
+            if row:
+                started_at = row['started_at']
+                nickname = row['nickname']
+        if started_at is None:
+            # 兜底：拿最近一条 session
+            row = conn.execute(
+                'SELECT started_at, nickname FROM game_sessions '
+                'ORDER BY id DESC LIMIT 1',
+            ).fetchone()
+            if row:
+                started_at = row['started_at']
+                nickname = row['nickname']
+    finally:
+        conn.close()
+
+    return render_template(
+        'silk-road/end.html',
+        config=cfg, total_reward=total,
+        started_at=started_at, db_nickname=nickname,
+    )
 
 
 @app.route('/api/game/config')

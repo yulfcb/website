@@ -1,0 +1,79 @@
+<!-- M4 终极大奖弹窗 —— 关 5 通关后显示
+     - 全屏遮罩 z-index 9999
+     - 显示昵称 + 红包金额 + 文案 + 倒数 5 秒自动跳 end 页
+     - 引擎通过 #slk-finale / #slk-finale-skip / #slk-finale-countdown 钩子控制 -->
+<div id="slk-finale" class="slk-finale-overlay" style="display:none" aria-modal="true" role="dialog">
+  <canvas id="slk-finale-fireworks" class="slk-finale-fireworks"></canvas>
+
+  <div class="slk-finale-modal">
+    <div class="slk-finale-emoji">🏠 ❤️</div>
+    <h2 class="slk-finale-title">回家了</h2>
+    <p class="slk-finale-nick" id="slk-finale-nick">—</p>
+
+    <div class="slk-finale-amount" id="slk-finale-amount">+¥1098.00</div>
+    <p class="slk-finale-cap" id="slk-finale-cap">杭州相见 · 立刻发送</p>
+
+    <p class="slk-finale-poem">所有的路，都是为了走向你</p>
+
+    <p class="slk-finale-countdown-line">
+      <span id="slk-finale-countdown">5</span> 秒后看完整回顾…
+    </p>
+
+    <div class="slk-finale-actions">
+      <button type="button" class="slk-finale-btn" id="slk-finale-skip">立刻查看 →</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .slk-finale-overlay {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(58, 33, 64, 0.78) 0%, rgba(20, 16, 36, 0.92) 80%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; padding: 16px;
+    animation: slk-finale-fade-in .6s ease both;
+  }
+  @keyframes slk-finale-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .slk-finale-fireworks {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+  }
+  .slk-finale-modal {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 480px; padding: 36px 28px;
+    border-radius: 22px;
+    background: linear-gradient(160deg, #4a2855 0%, #2a1640 60%, #1b2135 100%);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.6),
+                inset 0 0 60px rgba(246, 181, 200, 0.18);
+    color: #f4ecd8; text-align: center;
+    animation: slk-finale-pop .7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes slk-finale-pop {
+    0%   { transform: scale(0.7) translateY(20px); opacity: 0; }
+    100% { transform: scale(1)   translateY(0);    opacity: 1; }
+  }
+  .slk-finale-emoji { font-size: 56px; line-height: 1; margin-bottom: 8px; letter-spacing: 12px; }
+  .slk-finale-title { font-size: 36px; margin: 0 0 6px; color: #ffd98a; font-weight: 800; letter-spacing: 4px; }
+  .slk-finale-nick { color: #f6b5c8; font-size: 15px; margin: 0 0 18px; }
+  .slk-finale-amount {
+    font-size: 42px; font-weight: 800; color: #a6e3a1;
+    margin: 12px 0 4px; text-shadow: 0 2px 12px rgba(166, 227, 161, 0.3);
+  }
+  .slk-finale-cap { color: #c9c2d8; font-size: 14px; margin: 0 0 18px; }
+  .slk-finale-poem {
+    color: #a8d8c0; font-style: italic; font-size: 17px;
+    line-height: 1.7; margin: 18px 0;
+    padding: 14px 0; border-top: 1px solid rgba(168, 216, 192, 0.3);
+    border-bottom: 1px solid rgba(168, 216, 192, 0.3);
+  }
+  .slk-finale-countdown-line { color: #c9c2d8; font-size: 13px; margin: 14px 0 0; }
+  #slk-finale-countdown { color: #ffd98a; font-weight: 700; font-size: 16px; }
+  .slk-finale-actions { margin-top: 18px; }
+  .slk-finale-btn {
+    padding: 12px 32px; border-radius: 999px; border: none;
+    background: #f6b5c8; color: #2a2140; font-weight: 700; font-size: 15px;
+    cursor: pointer; transition: transform .12s ease;
+  }
+  .slk-finale-btn:hover { transform: translateY(-2px); }
+</style>
