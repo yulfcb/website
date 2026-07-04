@@ -299,16 +299,9 @@
       this.events.on('update', this._movementUpdate, this);
 
       // —— 拾起/确认按钮（右下）——
-      // M9.5a: 拾起按钮缩到 0.6 倍 + 半透明 — 不挡右下场景
-      var actBg = this.add.circle(1100, 620, 48, 0xFFD98A, 1)
-        .setStrokeStyle(2, 0xFFE9B0);
-      var actText = this.add.text(1100, 620, '🆗', { fontSize: '32px' }).setOrigin(0.5);
-      var actZone = this.add.zone(1100, 620, 96, 96).setInteractive({ useHandCursor: true });
-      this.actionContainer = this.add.container(0, 0, [actBg, actText, actZone]);
-      this.actionContainer.setAlpha(0.85);
-      this.actionContainer.setScale(0.6);
-      this.actionContainer.setDepth(500);
-      actZone.on('pointerdown', function () { self.tryActionPickup(); });
+      // M9.5f: 拾起按钮删除 — pickup 是 tryMove 内 checkGiftCollision 自动触发的, OK 按钮完全多余.
+      // 用户从未用过 — 删掉避免误会, 场景更干净.
+      // (actionContainer 占位已删除)
 
       // —— 暂停按钮（左上 Phaser Zone）——
       var pauseBg = this.add.circle(60, 100, 24, 0x4A2E1A, 0.92)
@@ -582,7 +575,7 @@
 
       // 隐藏 joystick / action / pause —— 避免 modal 打开时还能点
       this.joystickContainer.setVisible(false);
-      this.actionContainer.setVisible(false);
+      (this.actionContainer && this.actionContainer.setVisible(false));
       this.pauseContainer.setVisible(false);
       this.modalContainer.setVisible(true);
     },
@@ -604,7 +597,7 @@
       }
       // 恢复 joystick / action / pause
       this.joystickContainer.setVisible(true);
-      this.actionContainer.setVisible(true);
+      (this.actionContainer && this.actionContainer.setVisible(true));
       this.pauseContainer.setVisible(true);
     },
 
@@ -674,7 +667,11 @@
         }).setOrigin(0.5);
         var laterZone = this.add.zone(100, 115, 140, 50).setInteractive({ useHandCursor: true });
         laterZone.on('pointerdown', function () {
+          // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
+          self.joystickContainer.setVisible(true);
+          self.actionContainer && self.actionContainer.setVisible(true);
+          self.pauseContainer.setVisible(true);
         });
 
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
@@ -693,13 +690,17 @@
         }).setOrigin(0.5);
         var btnZone = this.add.zone(0, 110, 160, 50).setInteractive({ useHandCursor: true });
         btnZone.on('pointerdown', function () {
+          // M9.5f: 关闭 modal 同时恢复 dpad/action/pause, 让玩家继续走
           self.modalContainer.setVisible(false);
+          self.joystickContainer.setVisible(true);
+          self.actionContainer && self.actionContainer.setVisible(true);
+          self.pauseContainer.setVisible(true);
         });
         this.modalContainer.add([btnBg, btnText, btnZone]);
       }
 
       this.joystickContainer.setVisible(false);
-      this.actionContainer.setVisible(false);
+      (this.actionContainer && this.actionContainer.setVisible(false));
       this.pauseContainer.setVisible(false);
       this.modalContainer.setVisible(true);
     },
@@ -738,7 +739,7 @@
         } else {
           // 拾不够 6 不能通关 — 关闭 modal 给玩家继续走
           self.joystickContainer.setVisible(true);
-          self.actionContainer.setVisible(true);
+          self.actionContainer && self.actionContainer.setVisible(true);
           self.pauseContainer.setVisible(true);
         }
       });
@@ -800,7 +801,7 @@
       this.modalContainer.add([sendBg, sendText, sendZone, giveupBg, giveupText, giveupZone]);
 
       this.joystickContainer.setVisible(false);
-      this.actionContainer.setVisible(false);
+      (this.actionContainer && this.actionContainer.setVisible(false));
       this.pauseContainer.setVisible(false);
       this.modalContainer.setVisible(true);
 
@@ -844,7 +845,7 @@
       var ta = document.getElementById('phaser-revive-text');
       if (ta) ta.style.display = 'none';
       this.joystickContainer.setVisible(true);
-      this.actionContainer.setVisible(true);
+      (this.actionContainer && this.actionContainer.setVisible(true));
       this.pauseContainer.setVisible(true);
     },
 

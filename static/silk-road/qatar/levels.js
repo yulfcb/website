@@ -31,15 +31,15 @@ window.QATAR_LEVEL = {
     { id: 6, x: 880, y: 90,  name: '世界杯奖杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium' },
   ],
 
-  // 7 个真实地名
+  // 7 个真实地名 — 只保留英文 (M9.5f: 中文版本太挤 + Airport/Museum 撞在一起, 英文 + 微调 y 让 chip 不相撞)
   places: [
-    { id: 'hamad_airport',   x: 200,  y: 600, label: 'Hamad Airport 多哈国际机场' },
-    { id: 'islamic_museum',  x: 420,  y: 600, label: 'Museum of Islamic Art 伊斯兰艺术博物馆' },
-    { id: 'souq_waqif',      x: 580,  y: 340, label: 'Souq Waqif 瓦其夫老市场' },
-    { id: 'corniche',        x: 1110, y: 240, label: 'Corniche 滨海大道' },
-    { id: 'the_pearl',       x: 1050, y: 420, label: 'The Pearl 人造岛' },
-    { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park 体育公园' },
-    { id: 'lusail_stadium',  x: 880,  y: 90,  label: 'Lusail Stadium 卢赛尔体育场' },
+    { id: 'hamad_airport',   x: 200,  y: 660, label: 'Hamad Airport' },
+    { id: 'islamic_museum',  x: 420,  y: 580, label: 'Museum of Islamic Art' },
+    { id: 'souq_waqif',      x: 580,  y: 340, label: 'Souq Waqif' },
+    { id: 'corniche',        x: 1110, y: 240, label: 'Corniche' },
+    { id: 'the_pearl',       x: 1050, y: 420, label: 'The Pearl' },
+    { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park' },
+    { id: 'lusail_stadium',  x: 880,  y: 90,  label: 'Lusail Stadium' },
   ],
 
   // 老商人 NPC —— 移出 Souq Waqif 区域（避开 gifts[0] 沙漠之眼在 souq_waqif），
