@@ -45,12 +45,12 @@ window.QATAR_LEVEL = {
     { id: 'lusail_stadium',  x: 880,  y: 180, label: 'Lusail Stadium' },
   ],
 
-  // 老商人 NPC —— M11 改为港口 NPC (Mesaieed Port 梅赛伊德港)
-  // 港口是卡塔尔最大货运港, 也是去伊朗的传统航线起点.
-  // emoji ⚓ 海蓝主题 (L.port), 位置挪到 (280, 660) 下方避 dpad 区域.
-  // 玩家拾满 6 件后来此兑换船票.
-  port: { x: 280, y: 660, emoji: '⚓', name: 'Mesaieed Port 梅赛伊德港',
-         line: '梅赛伊德港是卡塔尔最大的货运港口, 也是去伊朗的传统航线起点. 带上你的礼物来兑换船票吧. ⚓' },
+  // 老商人 NPC —— M11 改为港口 NPC (Doha Port 多哈港, M11 part 5 从 Mesaieed 改名).
+  // 多哈港是卡塔尔首都的传统出海口, 跟 level 0 起点 Hamad Airport 同经度 (51.53°E),
+  // 位置上仍用 (280, 660) 跟 dpad 避开.
+  // emoji ⚓ 海蓝主题 (L.port), 玩家拾满 6 件后来此兑换船票.
+  port: { x: 280, y: 660, emoji: '⚓', name: 'Doha Port 多哈港',
+         line: '多哈港是卡塔尔首都的传统出海口, 也是去伊朗的丝路起点. 带上你的礼物来兑换船票吧. ⚓' },
 
   // NPC banner 4 帧文案（最后一帧是找到 Lusail Stadium 触发的 World Cup 文案）
   npcFrames: [

@@ -523,6 +523,15 @@
 
         var href = clickable ? ('/games/silk-road/level/' + lv.id) : 'javascript:void(0)';
 
+        // M11 part 5: 关 1 (伊朗) marker label 放右侧单行, 避免和卡塔尔 marker 垂直重叠
+        // 其他关卡 label 居中放下面 — 单独算 placeLabel 字符串避免打断 svg += 链
+        var placeLabel;
+        if (lv.id === 1) {
+          placeLabel = '<text x="' + (xy[0] - 28).toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="end" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">伊斯法罕</text>';
+        } else {
+          placeLabel = '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>';
+        }
+
         svg += ''
           + '<g class="slk-marker ' + lockClass + '" data-level="' + lv.id + '" '
           +     'data-clickable="' + (clickable ? '1' : '0') + '" '
@@ -533,7 +542,7 @@
           +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 6).toFixed(1) + '" text-anchor="middle" font-size="20" font-family="-apple-system, sans-serif">' + esc(lv.vehicle) + '</text>'
           +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] - 30).toFixed(1) + '" text-anchor="middle" font-size="12" font-weight="800" fill="#F5E8C8" stroke="#5C3A1E" stroke-width="3" paint-order="stroke">第 ' + lv.id + ' 關</text>'
           +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 42).toFixed(1) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#5C3A1E" stroke="#F5E8C8" stroke-width="3.5" paint-order="stroke">' + esc(lv.title) + '</text>'
-          +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>'
+          +   placeLabel
           +   (clearedLv ? '<text x="' + (xy[0] + 18).toFixed(1) + '" y="' + (xy[1] - 14).toFixed(1) + '" text-anchor="middle" font-size="16">✅</text>' : '')
           + '</g>';
       });

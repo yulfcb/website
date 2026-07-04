@@ -459,8 +459,8 @@
       var nx = this.player.x + dx;
       var ny = this.player.y + dy;
       if (nx < 30 || nx > L.CANVAS_W - 30 || ny < 30 || ny > L.CANVAS_H - 30) {
-        this.changeWater(-L.WATER_BOUNDARY_HIT);
-        this.flashWaterUI();
+        // M11 part 5: 边界 = 走不动，不扣血 (撞墙无 penalty). 显示短暂 toast 提示.
+        this.showBoundaryToast();
         return;
       }
 
@@ -528,6 +528,26 @@
       this.waterText.setColor('#FFE9B0');
       var self = this;
       this.time.delayedCall(200, function () { self.waterText.setColor(prev); });
+    },
+
+    // M11 part 5: 撞墙 toast — 短暂提示玩家走到边界, 不扣血 (替代原 WATER_BOUNDARY_HIT)
+    showBoundaryToast: function () {
+      if (!this.boundaryToast) {
+        this.boundaryToast = this.add.text(L.CANVAS_W / 2, L.CANVAS_H / 2 - 100, '🚧 撞墙了', {
+          fontSize: '18px', color: '#FFD98A', backgroundColor: '#2A2140',
+          padding: { x: 12, y: 6 },
+        }).setOrigin(0.5).setDepth(1000);
+      }
+      this.boundaryToast.setAlpha(1);
+      this.boundaryToast.setPosition(L.CANVAS_W / 2, L.CANVAS_H / 2 - 100);
+      // 重复触发时杀掉旧 tween, 否则 alpha 会被叠加错误
+      if (this._boundaryTween) this._boundaryTween.stop();
+      this._boundaryTween = this.tweens.add({
+        targets: this.boundaryToast,
+        alpha: 0,
+        duration: 600,
+        delay: 400,
+      });
     },
 
     // ==================== 碰撞 ====================
@@ -829,7 +849,7 @@
       this.modalContainer.add(card);
 
       this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -75, 'Mesaieed Port 梅赛伊德港', {
+      this.modalContainer.add(this.add.text(0, -75, 'Doha Port 多哈港', {
         fontSize: '14px', color: '#5fb3a0', fontStyle: 'bold',
       }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, -35, '船票已兑换！', {
@@ -893,7 +913,7 @@
         .setStrokeStyle(2, 0xFFD98A, 0.5);
       this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -140, '💌 时间到啦', {
+      this.modalContainer.add(this.add.text(0, -140, '💧 渴死啦', {
         fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, -100, '输入你最想告诉我的话\n（一句话秘密，不存在数据库，只发飞书）', {
@@ -935,13 +955,18 @@
         ta = document.createElement('textarea');
         ta.id = 'phaser-revive-text';
         ta.maxLength = 500;
+        // M11 part 5: textarea 缩小, top 抬到 46% 让出空间给发送键; 移动设备再缩到 max-height 80px 避 iOS 键盘遮太多
+        var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+        var minH = isMobile ? '40px' : '60px';
+        var maxH = isMobile ? '80px' : '120px';
         ta.style.cssText = [
           'position:fixed',
-          'left:50%', 'top:54%',
+          'left:50%', 'top:46%',
           'transform:translate(-50%,-50%)',
           'width:min(420px,90vw)',
-          'min-height:120px',
-          'padding:10px 14px',
+          'min-height:' + minH,
+          'max-height:' + maxH,
+          'padding:8px 12px',
           'border-radius:12px',
           'border:1px solid #4a5578',
           'background:#2a2140',
