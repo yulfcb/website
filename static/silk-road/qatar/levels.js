@@ -20,15 +20,16 @@ window.QATAR_LEVEL = {
   ],
 
   // 7 个礼物 —— 顺序即礼物 id（关 0 主线 6 + 1 个隐藏 World Cup）
+  // M11: 加 price 字段（船票兑换总价门槛用）, 把礼物移到 place chip 紧邻位置（视觉聚拢）
   gifts: [
-    { id: 0, x: 520, y: 380, name: '沙漠之眼',  hint: '给关 1「伊朗·沙漠骆驼」的礼物',     emoji: '👁️', placeId: 'souq_waqif' },
-    { id: 1, x: 380, y: 460, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum' },
-    { id: 2, x: 320, y: 200, name: '草原之歌',  hint: '给关 3「哈萨克·草原骑马」的礼物',   emoji: '🌾', placeId: 'aspire_park' },
-    { id: 3, x: 240, y: 480, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport' },
-    { id: 4, x: 1020, y: 380, name: '归家之心', hint: '给关 5「成都·到家」的礼物',         emoji: '🏠', placeId: 'the_pearl' },
-    { id: 5, x: 1080, y: 220, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche' },
+    { id: 0, x: 580, y: 320, name: '沙漠之眼',  hint: '给关 1「伊朗·沙漠骆驼」的礼物',     emoji: '👁️', placeId: 'souq_waqif',     price: 25 },
+    { id: 1, x: 380, y: 460, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum', price: 30 },
+    { id: 2, x: 240, y: 240, name: '草原之歌',  hint: '给关 3「哈萨克·草原骑马」的礼物',   emoji: '🌾', placeId: 'aspire_park',    price: 40 },
+    { id: 3, x: 160, y: 480, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport',  price: 15 },
+    { id: 4, x: 1100, y: 450, name: '归家之心', hint: '给关 5「成都·到家」的礼物',         emoji: '🏠', placeId: 'the_pearl',      price: 60 },
+    { id: 5, x: 1110, y: 360, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche',       price: 50 },
     // M9.5g: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯 (大力神杯)
-    { id: 6, x: 880, y: 220, name: '大力神杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium' },
+    { id: 6, x: 920, y: 220, name: '大力神杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium', price: 100 },
   ],
 
   // 7 个真实地名 — 英文 + 远离 HUD/dpad 区域 (M9.5g)
@@ -79,9 +80,9 @@ window.QATAR_LEVEL = {
   WATER_BOUNDARY_HIT: 0.5,    // 撞边界 -0.5
   WATER_OASIS_REWARD: 2,      // 绿洲 +2
   WATER_MAX: 10,
-  // M9.5g: LUGGAGE_MAX 5 → 6. 之前 5 件 + pickupsToClaim=6 矛盾, 玩家必须放弃 1 件才能装下.
-  // 改成 6 = match pickup 6 关卡, 玩家可全装下 (但仍然保留 2-3 选 1 的取舍 sense, 真实策略)
-  LUGGAGE_MAX: 6,
+  // M11: LUGGAGE_MAX 5 —— 6 件礼物必须挑 5 件带走，留 1 件后面买 (取舍策略保留).
+  // 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 6 但行李只装 5 件是合法的.
+  LUGGAGE_MAX: 5,
   MIN_PICKUPS_TO_CLAIM: 3,    // 至少拾取 3 件才能领奖
   CANVAS_W: 1280,
   CANVAS_H: 720,

@@ -280,6 +280,10 @@
       this.luggageText = this.add.text(1100, 30, '🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX, {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
+      // M11: 行李总价 HUD —— 跟 luggage 文字并排, 显示已装进行李的礼物总价
+      this.priceText = this.add.text(1100, 56, '💰 ¥0', {
+        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+      }).setOrigin(0.5);
       this.npcText = this.add.text(640, 80, L.npcFrames[0], {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
       }).setOrigin(0.5);
@@ -576,8 +580,9 @@
       this.modalContainer.add(this.add.text(0, -80, '你拾起了「' + g.name + '」', {
         fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -40, g.hint, {
-        fontSize: '13px', color: '#C9B89A', wordWrap: { width: 400 },
+      // M11: 礼物价格显示 — 船票兑换门槛要算总价
+      this.modalContainer.add(this.add.text(0, -50, '💰 ¥' + (g.price || 0) + '  ·  ' + g.hint, {
+        fontSize: '13px', color: '#FFE9B0', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
       var isFull = this.luggageCount >= L.LUGGAGE_MAX;
@@ -624,10 +629,9 @@
         this.npcShownPickup3 = true;
         this.setNpcFrame(1);
       }
-      if (this.pickupCount >= 6) {
-        this.enterResult();
-        return;
-      }
+      // M11: 拾满 6 不再直接 enterResult —— 必须走到港口 NPC 兑换船票 (新弹 modal).
+      // 旧逻辑备份：if (this.pickupCount >= 6) { this.enterResult(); return; }
+      // 新逻辑在后面 commit 里补 (port NPC 兑换分支 + 弹 pickup-done modal).
       // 恢复 joystick / action / pause
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
@@ -641,6 +645,8 @@
         this.luggageCount++;
         this.luggageText.setText('🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX);
       }
+      // M11: 行李总价 HUD 实时更新 (bucket/drop 都影响)
+      this._updatePriceHud();
       this.closeGiftModal();
     },
 
@@ -949,6 +955,25 @@
         if (this.giftBuckets[keys[i]] === 'bucket') n++;
       }
       return n;
+    },
+    // M11: 行李总价 —— 装进行李 (bucket) 的礼物 price 之和
+    totalLuggagePrice: function () {
+      var total = 0;
+      var keys = Object.keys(this.giftBuckets);
+      for (var i = 0; i < keys.length; i++) {
+        if (this.giftBuckets[keys[i]] === 'bucket') {
+          var id = parseInt(keys[i], 10);
+          // 在 L.gifts 中按 id 查 price
+          for (var j = 0; j < L.gifts.length; j++) {
+            if (L.gifts[j].id === id) { total += (L.gifts[j].price || 0); break; }
+          }
+        }
+      }
+      return total;
+    },
+    _updatePriceHud: function () {
+      if (!this.priceText) return;
+      this.priceText.setText('💰 ¥' + this.totalLuggagePrice());
     },
 
     // ==================== 4 档判定 ====================
