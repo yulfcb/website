@@ -2290,6 +2290,9 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   self.voyageDone = false;
   self.voyageMidpointReached = false;
   self.voyageNoHeartReturnStart = false;  // 返程开始的延迟触发器
+  // M21: 中点返程倒计时 (替代 time.delayedCall)
+  self.voyageMidpointTimer = 0;
+  self.voyageMidpointDelay = hasHomeHeart ? 9999 : 1.5;  // 有心时永远不触发返程
   self.voyageHasHeart = hasHomeHeart;
   self.voyageNextUrl = nextUrl;
   // 船初始位置 = Doha
@@ -2352,25 +2355,15 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
         self._showVoyageContinueButton();
         return;
       } else {
-        // 没归家之心 → 兜底: 强制跳回中点 + 800ms 后启动返程 (缩短 1500→800ms)
+        // 没归家之心 → 兜底: 强制跳回中点 + 启动返程倒计时 (不再依赖 delayedCall)
+        // M21: 用 voyageMidpointTimer (每帧 +dt) 替代 time.delayedCall, 保证每帧检查
+        //   触发. 之前 Phaser headless 下 delayedCall 不触发导致船卡 Bandar.
         self.voyageT = 0.5;
         self.voyageMidpointReached = true;
+        self.voyageMidpointTimer = 0;  // 返程倒计时起点
+        self.voyageMidpointDelay = 0.8; // 0.8s 后启动返程 (兜底场景比正常场景快)
         if (self.voyageNoHeartMessage) {
           self.voyageNoHeartMessage.setAlpha(1);
-          self.time.delayedCall(800, function () {
-            if (self.voyageDone) return;
-            self.tweens.add({
-              targets: self.voyageNoHeartMessage,
-              alpha: 0,
-              duration: 300,
-            });
-            self.voyageReturnMode = true;
-            self.voyageSpeed = 1 / 4;
-          });
-        } else {
-          // 极端情况: 文字不存在, 直接启动返程
-          self.voyageReturnMode = true;
-          self.voyageSpeed = 1 / 4;
         }
         return;
       }
@@ -2382,30 +2375,26 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
       return;
     }
 
-    // 中点检测 (去程时跨过 0.5 + 没归家之心)
+    // M21 Bug: 中点返程触发 — 改用每帧倒计时 (voyageMidpointTimer) 替代 delayedCall
+    //   delayedCall 在 Phaser headless 模式下不稳定, 改用确定性逻辑.
+    //   中点跨过 0.5 → voyageMidpointReached=true → voyageMidpointTimer 开始累计
+    //   达到 voyageMidpointDelay (1.5s) → voyageReturnMode=true
     if (!self.voyageReturnMode
-        && !self.voyageMidpointReached
-        && self.voyageT >= 0.5
+        && self.voyageMidpointReached
         && !self.voyageHasHeart) {
-      self.voyageMidpointReached = true;
-      self.voyageT = 0.5;  // 停在中点
-      // 浮出文字
-      if (self.voyageNoHeartMessage) {
-        self.voyageNoHeartMessage.setAlpha(1);
-        // M18 Bug 2: 3 秒后开始返程 (淡出文字 + 进入返程)
-        self.time.delayedCall(1500, function () {  // e2e 测试友好: 1.5s 而非 3s
-          if (self.voyageDone) return;
-          // 淡出文字
+      self.voyageMidpointTimer += dt;
+      if (self.voyageMidpointTimer >= self.voyageMidpointDelay) {
+        // 启动返程
+        if (self.voyageNoHeartMessage) {
           self.tweens.add({
             targets: self.voyageNoHeartMessage,
             alpha: 0,
-            duration: 500,
+            duration: 300,
           });
-          // 启动返程
-          self.voyageReturnMode = true;
-          // 速度 = 去程速度 (中点 0.5 回到 0)
-          self.voyageSpeed = 1 / 4;
-        });
+        }
+        self.voyageReturnMode = true;
+        self.voyageSpeed = 1 / 4;
+        return;
       }
     }
   };
