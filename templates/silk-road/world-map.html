@@ -295,9 +295,12 @@
 
   <script>
     // ===== 关卡真实地理 (lng, lat) =====
+    // M12 Bug 1: 关 1 marker 真实港口改到 Bandar Abbas 阿巴斯港 (56.27, 27.18),
+    //   这是从波斯湾坐船去伊朗最直接的港口, 跟 Doha (51.53, 25.30) 投影后不再同 x 列 (575 vs 576).
+    //   placeLabel 放右侧单行 + 适当外推, 跟 Doha marker label 不再重叠.
     var LEVEL_META = [
       { id: 0, title: {{ config.levels[0].title | tojson }}, lng: 51.53, lat: 25.30, vehicle: {{ (config.levels[0].vehicle or '🛳️') | tojson }}, place: '卡塔爾·多哈' },
-      { id: 1, title: {{ config.levels[1].title | tojson }}, lng: 51.67, lat: 32.65, vehicle: {{ (config.levels[1].vehicle or '🐪') | tojson }}, place: '伊朗·伊斯法罕' },
+      { id: 1, title: {{ config.levels[1].title | tojson }}, lng: 56.27, lat: 27.18, vehicle: {{ (config.levels[1].vehicle or '🐪') | tojson }}, place: '伊朗·阿巴斯港' },
       { id: 2, title: {{ config.levels[2].title | tojson }}, lng: 28.97, lat: 41.01, vehicle: {{ (config.levels[2].vehicle or '🎈') | tojson }}, place: '土耳其·伊斯坦堡' },
       { id: 3, title: {{ config.levels[3].title | tojson }}, lng: 71.45, lat: 51.17, vehicle: {{ (config.levels[3].vehicle or '🐎') | tojson }}, place: '哈薩克·阿斯塔納' },
       { id: 4, title: {{ config.levels[4].title | tojson }}, lng: 87.62, lat: 43.83, vehicle: {{ (config.levels[4].vehicle or '🏂') | tojson }}, place: '新疆·烏魯木齊' },
@@ -523,11 +526,12 @@
 
         var href = clickable ? ('/games/silk-road/level/' + lv.id) : 'javascript:void(0)';
 
-        // M11 part 5: 关 1 (伊朗) marker label 放右侧单行, 避免和卡塔尔 marker 垂直重叠
-        // 其他关卡 label 居中放下面 — 单独算 placeLabel 字符串避免打断 svg += 链
+        // M12 Bug 1: 关 1 (伊朗·阿巴斯港) marker label 放右侧单行,
+//   Bandar Abbas (56.27, 27.18) 投影后 x≈664, y≈384; Doha (51.53, 25.30) 投影后 x≈575, y≈448.
+//   水平差 89px, 垂直差 64px — label 放右侧 (xy[0]+30) 单行, 不会跟 Doha 重叠.
         var placeLabel;
         if (lv.id === 1) {
-          placeLabel = '<text x="' + (xy[0] - 28).toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="end" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">伊斯法罕</text>';
+          placeLabel = '<text x="' + (xy[0] + 30).toFixed(1) + '" y="' + (xy[1] + 4).toFixed(1) + '" text-anchor="start" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">伊朗·阿巴斯港</text>';
         } else {
           placeLabel = '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>';
         }
@@ -585,7 +589,7 @@
             e.preventDefault();
             // M11 part 4 — 关 1 locked toast: 必须通关关 0 才去
             if (lv === 1) {
-              showToast('请先通关关 0 才能去关 1 (this.merchantShown 已经清空)');
+              showToast('请先通关关 0 才能去关 1 (Bandar Abbas 阿巴斯港)');
             }
             m.style.transition = 'transform .1s ease';
             m.setAttribute('transform', 'translate(2 0)');

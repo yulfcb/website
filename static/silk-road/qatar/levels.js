@@ -33,6 +33,7 @@ window.QATAR_LEVEL = {
   ],
 
   // 7 个真实地名 — 英文 + 远离 HUD/dpad 区域 (M9.5g)
+  // M12: 加 doha_port chip (港口名) — 在 (280, 660) 跟 dpad 避开.
   places: [
     // airport 抬到 y=520 (避 dpad 620), museum 在 y=460 (与 airport 距离 220px + chip 100px, OK)
     { id: 'hamad_airport',   x: 200,  y: 520, label: 'Hamad Airport' },
@@ -43,14 +44,17 @@ window.QATAR_LEVEL = {
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park' },
     // lusail 掉到 y=180 (避 HUD 顶栏 y=36 + 高度 72, 留 18px 间距)
     { id: 'lusail_stadium',  x: 880,  y: 180, label: 'Lusail Stadium' },
+    // M12: Doha Port chip — 跟 port NPC (L.port) 同坐标, 标港口名
+    { id: 'doha_port',       x: 280,  y: 660, label: 'Doha Port' },
   ],
 
   // 老商人 NPC —— M11 改为港口 NPC (Doha Port 多哈港, M11 part 5 从 Mesaieed 改名).
   // 多哈港是卡塔尔首都的传统出海口, 跟 level 0 起点 Hamad Airport 同经度 (51.53°E),
   // 位置上仍用 (280, 660) 跟 dpad 避开.
   // emoji ⚓ 海蓝主题 (L.port), 玩家拾满 6 件后来此兑换船票.
-  port: { x: 280, y: 660, emoji: '⚓', name: 'Doha Port 多哈港',
-         line: '多哈港是卡塔尔首都的传统出海口, 也是去伊朗的丝路起点. 带上你的礼物来兑换船票吧. ⚓' },
+  // M12: port.name 英文 "Doha Port"; port.line 英文. issue 4: 多语言统一.
+  port: { x: 280, y: 660, emoji: '⚓', name: 'Doha Port',
+         line: "Doha Port is Qatar's historic maritime gateway to Persia. Bring your collected items here to exchange for a ship ticket. ⚓" },
 
   // NPC banner 4 帧文案（最后一帧是找到 Lusail Stadium 触发的 World Cup 文案）
   npcFrames: [
@@ -83,14 +87,14 @@ window.QATAR_LEVEL = {
   WATER_BOUNDARY_HIT: 0.5,    // 撞边界 -0.5
   WATER_OASIS_REWARD: 2,      // 绿洲 +2
   WATER_MAX: 10,
-  // M11: LUGGAGE_MAX 5 —— 6 件礼物必须挑 5 件带走，留 1 件后面买 (取舍策略保留).
-  // 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 6 但行李只装 5 件是合法的.
-  LUGGAGE_MAX: 5,
+  // M12: LUGGAGE_MAX 6 — 6 件物品可以全部装进, 让玩家可选 N 件兑换 (issue 6).
+  // M11: 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 6 但行李只装 5 件是合法的.
+  LUGGAGE_MAX: 6,
   MIN_PICKUPS_TO_CLAIM: 3,    // 至少拾取 3 件才能领奖
   // M11: 港口船票兑换阈值 — 玩家必须带够 ¥170 价值的礼物才能换船票
   PORT_TICKET_PRICE_THRESHOLD: 170,
-  // M11: 至少带多少件礼物才能上船 (跟 LUGGAGE_MAX 配合 — 要全装满)
-  MIN_LUGGAGE_TO_BOARD: 5,
+  // M12: 至少带多少件礼物才能上船 — issue 6: 改成 1, 玩家只要带 1 件 (selected) 就能上船
+  MIN_LUGGAGE_TO_BOARD: 1,
   CANVAS_W: 1280,
   CANVAS_H: 720,
 };

@@ -110,7 +110,8 @@
 
       // 关卡任务说明 - 在 NPC banner 与 avatar picker 之间
       // M9.1: 不做 narrative card 改做一行显眼的小卡
-      this.add.text(640, 485, '🧳 任务：在沙海收集 6 件礼物，徒步步行，不靠骆驼', {
+      // M12 Bug 3: 「礼物」→「物品」; 任务描述改为「收集 6 件物品 → 去 Doha Port 兑换船票」
+      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 6 件物品，然后去 Doha Port 兑换去伊朗的船票 🛳️', {
         fontSize: '16px', color: '#F4ECD8', fontStyle: 'italic', wordWrap: { width: 1000 },
       }).setOrigin(0.5);
 
@@ -157,7 +158,9 @@
       this.drawDunes(0xC49A5E, 460, 60);
       this.drawDunes(0xB58A55, 560, 90);
 
-      // —— 6 个地名 chip ——
+      // —— 7 个地名 chip (M12: 加 doha_port) ——
+      // M12 Bug 5: place chip 整体上移 36px (从 p.y 改成 p.y - 36), 跟 gift 分开不再重叠
+      // M12 Bug 2: chip text 加 wordWrap:false + setFixedSize 防止 emoji 或 fallback 字体换行
       this.placeSprites = [];
       L.places.forEach(function (p) {
         var w = Math.max(140, p.label.length * 9 + 24);
@@ -168,8 +171,11 @@
         bg.fillRoundedRect(-w / 2, 14, w, 2, 1);
         var t = self.add.text(0, 0, p.label, {
           fontSize: '12px', color: '#4A2E1A', fontStyle: 'bold',
+          wordWrap: false,
         }).setOrigin(0.5);
-        var chip = self.add.container(p.x, p.y, [bg, t]);
+        // 强制单行 + 限制宽度兜底 (M12 Bug 2: emoji 撑宽会触发中文 fallback 换行)
+        t.setFixedSize(w - 12, 14);
+        var chip = self.add.container(p.x, p.y - 36, [bg, t]);
         self.placeSprites.push(chip);
       });
 
@@ -189,6 +195,8 @@
       });
 
       // —— 7 个礼物 ——
+      // M12 Bug 5: gift sprite 中心下移 22px (从 g.y 改成 g.y + 22),
+      //             配合 place chip 上移 36px, 视觉顺序: chip → empty → gift emoji → label.
       this.giftSprites = [];
       // M9.5g: 给每个 gift 单独构建 sprite.
       // M9.6a: gift 6 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
@@ -199,7 +207,7 @@
           // M9.6a: World Cup trophy — 用 user-provided PNG (key-out 白底).
           // PNG 128x128 sprite 框内有 sports decoration.
           // 给我们 gift 大体 64x64 显示 (调 display size).
-          var container = self.add.container(g.x, g.y);
+          var container = self.add.container(g.x, g.y + 22);
           // 光晕 (金黄) 跟其他 gift 一致
           var glow = self.add.graphics();
           glow.fillStyle(0xFFD98A, 0.4);
@@ -213,7 +221,10 @@
           var label = self.add.text(0, 30, g.name, {
             fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
             stroke: '#4A2E1A', strokeThickness: 3,
+            wordWrap: false,
           }).setOrigin(0.5);
+          // M12 Bug 2: 强制单行 + 限制宽度 (中文 4 字 11px ≈ 44px, 80px 兜底够用)
+          label.setFixedSize(80, 14);
           container.add(label);
           sprite = container;
         } else {
@@ -223,8 +234,11 @@
           var bag = self.add.text(0, 0, g.emoji, { fontSize: '32px' }).setOrigin(0.5);
           var label = self.add.text(0, 22, g.name, {
             fontSize: '11px', color: '#4A2E1A', fontStyle: 'bold',
+            wordWrap: false,
           }).setOrigin(0.5);
-          sprite = self.add.container(g.x, g.y, [glow, bag, label]);
+          // M12 Bug 2: 强制单行 + 限制宽度 (中文 4 字 11px ≈ 44px, 80px 兜底够用)
+          label.setFixedSize(80, 14);
+          sprite = self.add.container(g.x, g.y + 22, [glow, bag, label]);
         }
         sprite.giftData = g;
         sprite.collected = false;
@@ -597,7 +611,8 @@
       this.modalContainer.add(card);
 
       this.modalContainer.add(this.add.text(0, -150, g.emoji, { fontSize: '56px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -80, '你拾起了「' + g.name + '」', {
+      // M12 Bug 3: 「你拾起了」改成更口语「你捡到了物品」(任务/教学文案统一改"物品")
+      this.modalContainer.add(this.add.text(0, -80, '你捡到了物品「' + g.name + '」', {
         fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
       // M11: 礼物价格显示 — 船票兑换门槛要算总价
@@ -623,8 +638,9 @@
       };
 
       var bucketTxt = isFull ? '🧳 行李满' : '🧳 装进 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')';
-      var bucket = makeModalBtn(bucketTxt, '占 1 行李位', 30, !isFull, function () { self.decideGift('bucket'); });
-      var stay = makeModalBtn('⏳ 留后', '留到后面买（不占位）', 100, false, function () { self.decideGift('stay'); });
+      // M12 Bug 3: 「装进」改「兑换物品」(任务/教学文案统一"物品")
+      var bucket = makeModalBtn(bucketTxt, '占 1 行李位 (用于兑换船票)', 30, !isFull, function () { self.decideGift('bucket'); });
+      var stay = makeModalBtn('⏳ 留后', '留到后面 (不占位)', 100, false, function () { self.decideGift('stay'); });
       var drop = makeModalBtn('❌ 放弃', '这条路不带', 170, false, function () { self.decideGift('drop'); });
 
       this.modalContainer.add(bucket);
@@ -673,10 +689,12 @@
       this.modalContainer.add(card);
 
       this.modalContainer.add(this.add.text(0, -110, '🎁', { fontSize: '52px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -55, '礼物都拾齐了！', {
+      // M12 Bug 3: 「礼物都拾齐了」→「物品都拾齐了」
+      this.modalContainer.add(this.add.text(0, -55, '物品都拾齐了！', {
         fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -15, '去港口 ⚓ 兑换船票\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
+      // M12 Bug 3 + Bug 4: 「去港口 ⚓ 兑换船票」改"去 Doha Port 用物品兑换船票"
+      this.modalContainer.add(this.add.text(0, -15, '去 Doha Port ⚓ 用物品兑换船票\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
         fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 380 },
       }).setOrigin(0.5));
 
@@ -751,7 +769,9 @@
 
       if (hasAllGifts && canExchange) {
         // ✅ 全部满足 → 兑换船票主按钮 (可点)
-        this.modalContainer.add(this.add.text(0, 30, '好！礼物都齐了，我给你一张去伊朗的船票 🚢', {
+        // M12 Bug 3: 「礼物」→「物品」(任务/教学文案统一)
+        // M12 Bug 6: 不再直接兑换, 改成跳 _showExchangeModal 让玩家选 N 件
+        this.modalContainer.add(this.add.text(0, 30, '好！物品都齐了，让我帮你换一张去伊朗的船票 🚢', {
           fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -760,9 +780,9 @@
           fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
         }).setOrigin(0.5);
         var ticketZone = this.add.zone(-100, 130, 180, 56).setInteractive({ useHandCursor: true });
+        // M12 Bug 6: 点击进入兑换选择 modal, 不是直接兑换
         ticketZone.on('pointerdown', function () {
-          self._ticketExchanged = true;
-          self._showTicketModal();
+          self._showExchangeModal();
         });
 
         var laterBg = this.add.rectangle(100, 130, 140, 56, 0x1B3A5E, 1)
@@ -784,7 +804,8 @@
         var reasons = [];
         if (!enoughLuggage) reasons.push('行李不足 ' + this.luggageCount + '/' + L.MIN_LUGGAGE_TO_BOARD);
         if (!canAfford) reasons.push('总价 ¥' + totalPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD);
-        this.modalContainer.add(this.add.text(0, 30, '礼物都齐了！但还差一点点:\n' + reasons.join(' · '), {
+        // M12 Bug 3: 「礼物」→「物品」
+        this.modalContainer.add(this.add.text(0, 30, '物品都齐了！但还差一点点:\n' + reasons.join(' · '), {
           fontSize: '12px', color: '#F6B5C8', align: 'center', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -812,7 +833,8 @@
         this.modalContainer.add([disabledBg, disabledText, laterBg2, laterText2, laterZone2]);
       } else {
         // 没拾满: 普通对话 — 1 个按钮
-        this.modalContainer.add(this.add.text(0, 60, '礼物还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
+        // M12 Bug 3: 「礼物」→「物品」
+        this.modalContainer.add(this.add.text(0, 60, '物品还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
           fontSize: '12px', color: '#A8D8C0', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -837,54 +859,236 @@
     },
 
     // M9.5d: 兑换船票 modal — 显示船票 get 模态, 关闭后如果全拾齐则进入 result.
-    // M11: 海蓝港口主题 (跟 port NPC 一致)
-    _showTicketModal: function () {
-      var self = this;
-      this.modalContainer.removeAll(true);
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
-      this.modalContainer.add(backdrop);
+// M11: 海蓝港口主题 (跟 port NPC 一致)
+// M12 Bug 6: 改为根据 _selectedGiftIds 是否含归家之心 (id=4) 决定文案:
+//            含 → 显示 voyage 提示「下一站 伊朗」; 不含 → 文案变体「这趟不会带你到伊朗」
+//            voyage 动画分支在 ResultScene.playVoyageAnimation 里处理
+// M12 Bug 4: 港口名 'Doha Port' (英文)
+_showTicketModal: function () {
+  var self = this;
+  this.modalContainer.removeAll(true);
+  var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
+  this.modalContainer.add(backdrop);
 
-      var card = this.add.rectangle(0, 0, 460, 340, 0x1B3A5E, 1)
-        .setStrokeStyle(2, 0x5fb3a0, 0.7);
-      this.modalContainer.add(card);
+  var card = this.add.rectangle(0, 0, 460, 340, 0x1B3A5E, 1)
+    .setStrokeStyle(2, 0x5fb3a0, 0.7);
+  this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -75, 'Doha Port 多哈港', {
-        fontSize: '14px', color: '#5fb3a0', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -35, '船票已兑换！', {
-        fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, 5, '波斯湾之旅已开启\n下一站: 伊朗 🐪', {
-        fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 360 },
-      }).setOrigin(0.5));
+  // M12 Bug 6: 检查 _selectedGiftIds 含归家之心 (gift id=4) 决定分支文案
+  var hasHomeHeart = this._selectedGiftIds && this._selectedGiftIds.indexOf(4) !== -1;
+  var titleTxt = hasHomeHeart ? '船票已兑换！' : '船票已兑换 — 但...';
+  var subTxt = hasHomeHeart
+    ? '波斯湾之旅已开启\n下一站: 伊朗 🐪'
+    : '🛳️ 没有归家之心 · 这趟不会带你到伊朗';
 
-      // 大按钮 "起航前往伊朗 →"
-      var goBg = this.add.rectangle(0, 100, 300, 60, 0x5fb3a0, 1);
-      var goText = this.add.text(0, 100, '起航前往伊朗 →', {
-        fontSize: '17px', color: '#0E2A47', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
-      goZone.on('pointerdown', function () {
-        self.modalContainer.setVisible(false);
-        // M11 part 3: 兑换船票 → 必须在 canExchange 前提下才能 enterResult.
-        // canExchange = hasAllGifts && enoughLuggage && canAfford (跟 showPort 同步).
-        var canExchangeNow = self.pickupCount >= 6
-          && self.luggageCount >= L.MIN_LUGGAGE_TO_BOARD
-          && self.totalLuggagePrice() >= L.PORT_TICKET_PRICE_THRESHOLD;
-        if (canExchangeNow) {
-          self.enterResult();
-        } else {
-          // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
-          self.joystickContainer.setVisible(true);
-          self.actionContainer && self.actionContainer.setVisible(true);
-          self.pauseContainer.setVisible(true);
-        }
+  this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
+  // M12 Bug 4: 英文 'Doha Port'
+  this.modalContainer.add(this.add.text(0, -75, 'Doha Port', {
+    fontSize: '14px', color: '#5fb3a0', fontStyle: 'bold',
+  }).setOrigin(0.5));
+  this.modalContainer.add(this.add.text(0, -35, titleTxt, {
+    fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
+  }).setOrigin(0.5));
+  this.modalContainer.add(this.add.text(0, 5, subTxt, {
+    fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 360 },
+  }).setOrigin(0.5));
+
+  // 大按钮 "起航" (M12 Bug 6: 文案分支)
+  var btnTxt = hasHomeHeart ? '起航前往伊朗 →' : '起航 →';
+  var goBg = this.add.rectangle(0, 100, 300, 60, 0x5fb3a0, 1);
+  var goText = this.add.text(0, 100, btnTxt, {
+    fontSize: '17px', color: '#0E2A47', fontStyle: 'bold',
+  }).setOrigin(0.5);
+  var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
+  goZone.on('pointerdown', function () {
+    self.modalContainer.setVisible(false);
+    // M11 part 3: 兑换船票 → 必须在 canExchange 前提下才能 enterResult.
+    // M12 Bug 6: 改成检查 _selectedPrice 而非 totalLuggagePrice (玩家可能选部分礼物)
+    var canExchangeNow = self.pickupCount >= 6
+      && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
+      && self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD;
+    if (canExchangeNow) {
+      self.enterResult();
+    } else {
+      // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
+      self.joystickContainer.setVisible(true);
+      self.actionContainer && self.actionContainer.setVisible(true);
+      self.pauseContainer.setVisible(true);
+    }
+  });
+
+  this.modalContainer.add([goBg, goText, goZone]);
+  this.modalContainer.setVisible(true);
+},
+
+// M12 Bug 6: 兑换选择 modal — 玩家勾选 N 件礼物 (N>=1, total>=¥170), 含归家之心 → voyage 到伊朗
+_showExchangeModal: function () {
+  var self = this;
+  // 初始化选中状态: 默认勾上 bucket 里所有物品 (按 id)
+  this._selectedGiftIds = [];
+  var keys = Object.keys(this.giftBuckets);
+  for (var i = 0; i < keys.length; i++) {
+    if (this.giftBuckets[keys[i]] === 'bucket') {
+      this._selectedGiftIds.push(parseInt(keys[i], 10));
+    }
+  }
+  this._selectedPrice = this._sumSelectedPrice(this._selectedGiftIds);
+  this._selectedCount = this._selectedGiftIds.length;
+
+  var self = this;
+  var renderList = function () {
+    self.modalContainer.removeAll(true);
+
+    var backdrop = self.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
+    self.modalContainer.add(backdrop);
+
+    // 加高 card 容纳 6 个 checkbox
+    var card = self.add.rectangle(0, 0, 560, 460, 0x1B3A5E, 1)
+      .setStrokeStyle(2, 0x5fb3a0, 0.7);
+    self.modalContainer.add(card);
+
+    self.modalContainer.add(self.add.text(0, -190, '⚓', { fontSize: '44px' }).setOrigin(0.5));
+    self.modalContainer.add(self.add.text(0, -150, '选择要兑换的物品', {
+      fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
+    }).setOrigin(0.5));
+    self.modalContainer.add(self.add.text(0, -123, '勾选 ≥1 件 · 总价 ≥ ¥' + L.PORT_TICKET_PRICE_THRESHOLD + ' 才能兑换', {
+      fontSize: '11px', color: '#A8D8C0', fontStyle: 'italic',
+    }).setOrigin(0.5));
+
+    // 6 行 checkbox + emoji + name + price (按 gift id 排序)
+    var startY = -90;
+    var rowH = 36;
+    var ids = [].concat(self._selectedGiftIds).concat([0,1,2,3,4,5,6].filter(function (id) {
+      return self._selectedGiftIds.indexOf(id) === -1;
+    }));
+    // 仅显示 bucket 里的 (玩家可以选未 bucket 的吗? 不能 - _showExchangeModal 只在 hasAllGifts+canAfford 时打开,
+    //              canAfford = totalLuggagePrice() >= ¥170, 即 bucket 总价已经达标)
+    var bucketIds = [];
+    var kkeys = Object.keys(self.giftBuckets);
+    for (var k = 0; k < kkeys.length; k++) {
+      if (self.giftBuckets[kkeys[k]] === 'bucket') bucketIds.push(parseInt(kkeys[k], 10));
+    }
+    bucketIds.sort(function (a, b) { return a - b; });
+
+    for (var r = 0; r < bucketIds.length; r++) {
+      var gid = bucketIds[r];
+      var g = null;
+      for (var j = 0; j < L.gifts.length; j++) {
+        if (L.gifts[j].id === gid) { g = L.gifts[j]; break; }
+      }
+      if (!g) continue;
+      var ry = startY + r * rowH;
+      var isChecked = self._selectedGiftIds.indexOf(gid) !== -1;
+
+      // checkbox 圆角矩形
+      var cbBg = self.add.rectangle(-220, ry, 18, 18, isChecked ? 0x5fb3a0 : 0x2A1F18, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.8);
+      if (isChecked) {
+        self.add.text(-220, ry, '✓', {
+          fontSize: '14px', color: '#0E2A47', fontStyle: 'bold',
+        }).setOrigin(0.5);
+      }
+
+      // emoji
+      self.add.text(-185, ry, g.emoji, { fontSize: '20px' }).setOrigin(0.5);
+
+      // 名字
+      var nameTxt = self.add.text(-145, ry, g.name, {
+        fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
+        wordWrap: false,
+      }).setOrigin(0, 0.5);
+      nameTxt.setFixedSize(160, 16);
+
+      // 价格
+      self.add.text(60, ry, '¥' + g.price, {
+        fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0, 0.5);
+
+      // 提示归家之心
+      if (gid === 4) {
+        self.add.text(120, ry, '🏠 归家之心', {
+          fontSize: '10px', color: '#F6B5C8', fontStyle: 'italic',
+        }).setOrigin(0, 0.5);
+      }
+
+      // 整行点击区 (点 checkbox 整行切换)
+      var rowZone = self.add.zone(0, ry, 400, rowH).setInteractive({ useHandCursor: true });
+      rowZone.on('pointerdown', (function (id) {
+        return function () {
+          var idx = self._selectedGiftIds.indexOf(id);
+          if (idx === -1) {
+            self._selectedGiftIds.push(id);
+          } else {
+            self._selectedGiftIds.splice(idx, 1);
+          }
+          self._selectedCount = self._selectedGiftIds.length;
+          self._selectedPrice = self._sumSelectedPrice(self._selectedGiftIds);
+          renderList();
+        };
+      })(gid));
+    }
+
+    // 底部 summary + 兑换按钮
+    var totalTxt = self.add.text(-30, 175, '已选 ' + self._selectedCount + ' 件 · 总价 ¥' + self._selectedPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
+      fontSize: '12px', color: '#A8D8C0', fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    var canSubmit = self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD
+      && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
+
+    // 兑换船票按钮 (亮色/灰色取决于 canSubmit)
+    var exBg = self.add.rectangle(-80, 215, 200, 50,
+      canSubmit ? 0x5fb3a0 : 0x4A4A4A, canSubmit ? 1 : 0.6)
+      .setStrokeStyle(1, canSubmit ? 0xFFD98A : 0x888888, canSubmit ? 0.7 : 0.4);
+    self.add.text(-80, 215, '🎫 兑换船票', {
+      fontSize: '15px', color: canSubmit ? '#0E2A47' : '#888888', fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    if (canSubmit) {
+      var exZone = self.add.zone(-80, 215, 200, 50).setInteractive({ useHandCursor: true });
+      exZone.on('pointerdown', function () {
+        self._ticketExchanged = true;
+        self._showTicketModal();
       });
+    }
 
-      this.modalContainer.add([goBg, goText, goZone]);
-      this.modalContainer.setVisible(true);
-    },
+    // 取消按钮
+    var cancelBg = self.add.rectangle(80, 215, 140, 50, 0x1B3A5E, 1)
+      .setStrokeStyle(1, 0x5fb3a0, 0.6);
+    self.add.text(80, 215, '取消', {
+      fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    var cancelZone = self.add.zone(80, 215, 140, 50).setInteractive({ useHandCursor: true });
+    cancelZone.on('pointerdown', function () {
+      self.modalContainer.setVisible(false);
+      self.joystickContainer.setVisible(true);
+      self.actionContainer && self.actionContainer.setVisible(true);
+      self.pauseContainer.setVisible(true);
+    });
+
+    // 提示行 (总价不够时)
+    if (self._selectedCount > 0 && self._selectedPrice < L.PORT_TICKET_PRICE_THRESHOLD) {
+      self.add.text(0, 145, '⚠️ 总价还差 ¥' + (L.PORT_TICKET_PRICE_THRESHOLD - self._selectedPrice), {
+        fontSize: '11px', color: '#F6B5C8',
+      }).setOrigin(0.5);
+    }
+
+    self.modalContainer.setVisible(true);
+  };
+
+  renderList();
+},
+
+// M12 Bug 6: 选中 gift ids 计算总价
+_sumSelectedPrice: function (ids) {
+  var total = 0;
+  for (var i = 0; i < ids.length; i++) {
+    for (var j = 0; j < L.gifts.length; j++) {
+      if (L.gifts[j].id === ids[i]) { total += (L.gifts[j].price || 0); break; }
+    }
+  }
+  return total;
+},
 
     setNpcFrame: function (idx) {
       this.npcFrame = idx;
@@ -1117,6 +1321,8 @@
         picked: this.pickupCount,
         water: this.water,
         bucket: this.bucketCount(),
+        // M12 Bug 6: 把选中的 gift ids 传给 ResultScene (判断 voyage 分支)
+        selectedIds: this._selectedGiftIds || [],
         given: false,
       });
     },
@@ -1211,6 +1417,8 @@
       this.water = data.water;
       this.bucket = data.bucket || 0;
       this.given = !!data.given;
+      // M12 Bug 6: 读 selectedIds 用于 voyage 分支
+      this.selectedIds = (data && data.selectedIds) || [];
       this.sessionId = data.sessionId || SESSION_ID;
       this.nickname = data.nickname || nickname;
     },
@@ -1233,7 +1441,8 @@
       this.add.text(640, 240, quote, {
         fontSize: '16px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 460 },
       }).setOrigin(0.5);
-      this.add.text(640, 320, '收 ' + this.bucket + ' 件 · 拾 ' + this.picked + ' / 6 · 水分 ' +
+      // M12 Bug 3: 「收 N 件」改「收 N 件物品」; 「拾 N/6 礼物」改「拾 N/6 物品」
+      this.add.text(640, 320, '收 ' + this.bucket + ' 件物品 · 拾 ' + this.picked + ' / 6 物品 · 水分 ' +
         this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
@@ -1243,7 +1452,17 @@
 
       // ===== M8.5 关 0 → 关 1 叙事桥 =====
       // 关 0 攒出钱后，关 1 才是伊朗港口上船
-      this.add.text(640, 475, this.given ? '💸' : '🛳️ 用这一关攒的钱，下一站 → 伊朗港口上船', {
+      // M12 Bug 6: 提示分支 —— 含归家之心 → 下一站 伊朗港口; 不含 → SPEC 文案 + 半途回程
+      var hasHomeHeart = this.initData && this.initData.selectedIds && this.initData.selectedIds.indexOf(4) !== -1;
+      var bridgeTxt;
+      if (this.given) {
+        bridgeTxt = '💸';
+      } else if (hasHomeHeart) {
+        bridgeTxt = '🛳️ 用这一关攒的钱，下一站 → 伊朗港口 (Bandar Abbas) 上船';
+      } else {
+        bridgeTxt = '🌊 你只是想坐邮轮玩一玩 · 没有收集到归家之心 (关 5 礼物)';
+      }
+      this.add.text(640, 475, bridgeTxt, {
         fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic',
       }).setOrigin(0.5);
 
@@ -1257,14 +1476,19 @@
       this.buildVoyageContainer();
 
       var nextBg = this.add.rectangle(640, 555, 280, 60, 0xFFD98A, 1);
-      var nextText = this.add.text(640, 555, '继续下一关 →', {
+      // M12 Bug 6: 按钮文案分支 —— 含归家之心 → 继续下一关; 不含 → 返回 (不跳关)
+      var hasHomeHeart = this.selectedIds.indexOf(4) !== -1;
+      var nextBtnTxt = hasHomeHeart ? '继续下一关 →' : '返回地图';
+      var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
       var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
       var self = this;
       nextZone.on('pointerdown', function () {
         // 隐藏 next button + statusText — 全部让位给 voyage 动画
-        self.playVoyageAnimation('/games/silk-road/level/1');
+        // M12 Bug 6: 不含归家之心 → 回程分支 (动画里展示) 然后跳世界地图 (不前进关 1)
+        var nextUrl = hasHomeHeart ? '/games/silk-road/level/1' : '/games/silk-road/world-map';
+        self.playVoyageAnimation(nextUrl, hasHomeHeart);
       });
 
       // 调用 webhook
@@ -1359,138 +1583,306 @@
   });
 
   // ==================== M9.5e Voyage 动画 ====================
-  // 关 0 通关 → ResultScene → 点继续 → playVoyageAnimation() → 1.8s → window.location.href 到 next 关
-  // 在 ResultScene 上画海面 + 船 + 字幕. 只用 graphics 内联, 不引外部资源.
-  ResultScene.prototype.buildVoyageContainer = function () {
-    var self = this;
-    this.voyageContainer = this.add.container(0, 0);
-    this.voyageContainer.setDepth(3000);  // 盖住所有 ResultScene UI
-    this.voyageContainer.setVisible(false);
+// 关 0 通关 → ResultScene → 点继续 → playVoyageAnimation() → 1.8s → window.location.href 到 next 关
+// 在 ResultScene 上画海面 + 卡塔尔-伊朗地图层 + 船 + 字幕. 只用 graphics 内联, 不引外部资源.
+//
+// M12 Bug 7: 加卡塔尔-伊朗地图层 (Doha pin + Bandar Abbas pin + dashed gold path)
+//            用 d3.geoMercator 算 2 港口投影 (与 world-map 一致 center [60,32] scale 440 translate [640,360])
+//            Doha = (51.53, 25.30), Bandar Abbas = (56.27, 27.18)
+// M12 Bug 6: voyage 分支 —— 含归家之心 → 去程; 不含 → 半途回程 (船走 60% 调头回 Doha)
+ResultScene.prototype.buildVoyageContainer = function () {
+  var self = this;
+  this.voyageContainer = this.add.container(0, 0);
+  this.voyageContainer.setDepth(3000);  // 盖住所有 ResultScene UI
+  this.voyageContainer.setVisible(false);
 
-    // 1) 海面背景 (深蓝渐变 + 海浪)
-    var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
-    this.voyageContainer.add(seaBg);
-    // 海面渐变 layer (上深下浅)
-    var grad = this.add.graphics();
-    grad.fillGradientStyle(0x1B3A5E, 0x1B3A5E, 0x4A7AAB, 0x4A7AAB, 1);
-    grad.fillRect(0, 360, 1280, 360);
-    this.voyageContainer.add(grad);
+  // 1) 海面背景 (深蓝渐变 + 海浪)
+  var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
+  this.voyageContainer.add(seaBg);
+  // 海面渐变 layer (上深下浅)
+  var grad = this.add.graphics();
+  grad.fillGradientStyle(0x1B3A5E, 0x1B3A5E, 0x4A7AAB, 0x4A7AAB, 1);
+  grad.fillRect(0, 360, 1280, 360);
+  this.voyageContainer.add(grad);
 
-    // 2) 太阳 (橙黄圆, 渐隐在海平面)
-    var sun = this.add.circle(960, 320, 50, 0xFFD98A, 0.9);
-    var halo = this.add.circle(960, 320, 80, 0xFFD98A, 0.25);
-    this.voyageContainer.add(halo);
-    this.voyageContainer.add(sun);
+  // 2) 太阳 (橙黄圆, 渐隐在海平面)
+  var sun = this.add.circle(960, 320, 50, 0xFFD98A, 0.9);
+  var halo = this.add.circle(960, 320, 80, 0xFFD98A, 0.25);
+  this.voyageContainer.add(halo);
+  this.voyageContainer.add(sun);
 
-    // 3) 海浪 (3 层弧线)
-    var wave1 = this.add.graphics();
-    wave1.lineStyle(2, 0xA8D8C0, 0.6);
-    wave1.beginPath();
-    for (var x = 0; x <= 1280; x += 20) {
-      var y = 460 + Math.sin(x * 0.025) * 8;
-      if (x === 0) wave1.moveTo(x, y); else wave1.lineTo(x, y);
+  // 3) 海浪 (3 层弧线)
+  var wave1 = this.add.graphics();
+  wave1.lineStyle(2, 0xA8D8C0, 0.6);
+  wave1.beginPath();
+  for (var x = 0; x <= 1280; x += 20) {
+    var y = 460 + Math.sin(x * 0.025) * 8;
+    if (x === 0) wave1.moveTo(x, y); else wave1.lineTo(x, y);
+  }
+  wave1.strokePath();
+  var wave2 = this.add.graphics();
+  wave2.lineStyle(2, 0xA8D8C0, 0.45);
+  wave2.beginPath();
+  for (var x = 0; x <= 1280; x += 20) {
+    var y = 520 + Math.sin(x * 0.02 + 1) * 10;
+    if (x === 0) wave2.moveTo(x, y); else wave2.lineTo(x, y);
+  }
+  wave2.strokePath();
+  var wave3 = this.add.graphics();
+  wave3.lineStyle(3, 0xFFFFFF, 0.4);
+  wave3.beginPath();
+  for (var x = 0; x <= 1280; x += 20) {
+    var y = 600 + Math.sin(x * 0.018 + 2) * 12;
+    if (x === 0) wave3.moveTo(x, y); else wave3.lineTo(x, y);
+  }
+  wave3.strokePath();
+  this.voyageContainer.add([wave1, wave2, wave3]);
+
+  // ===== M12 Bug 7: 卡塔尔-伊朗地图层 (Doha → Bandar Abbas) =====
+  // 用 d3.geoMercator (跟 world-map.html 一致配置) 算 2 个港口投影
+  // 注意: 这个 voyage 在 voyageContainer (deep 3000) 上画, 不影响主舞台地图
+  var voyageProjection = null;
+  var dohaXY = null, bandarXY = null;
+  if (window.d3 && window.d3.geoMercator) {
+    try {
+      voyageProjection = window.d3.geoMercator()
+        .center([60, 32])
+        .scale(440)
+        .translate([640, 360]);
+      dohaXY = voyageProjection([51.53, 25.30]);
+      bandarXY = voyageProjection([56.27, 27.18]);
+    } catch (e) {
+      console.warn('[voyage] d3 projection failed:', e);
     }
-    wave1.strokePath();
-    var wave2 = this.add.graphics();
-    wave2.lineStyle(2, 0xA8D8C0, 0.45);
-    wave2.beginPath();
-    for (var x = 0; x <= 1280; x += 20) {
-      var y = 520 + Math.sin(x * 0.02 + 1) * 10;
-      if (x === 0) wave2.moveTo(x, y); else wave2.lineTo(x, y);
-    }
-    wave2.strokePath();
-    var wave3 = this.add.graphics();
-    wave3.lineStyle(3, 0xFFFFFF, 0.4);
-    wave3.beginPath();
-    for (var x = 0; x <= 1280; x += 20) {
-      var y = 600 + Math.sin(x * 0.018 + 2) * 12;
-      if (x === 0) wave3.moveTo(x, y); else wave3.lineTo(x, y);
-    }
-    wave3.strokePath();
-    this.voyageContainer.add([wave1, wave2, wave3]);
+  }
+  // 兜底: d3 不可用时用固定坐标 (避免 voyage 白屏)
+  if (!dohaXY || !bandarXY) {
+    dohaXY = [480, 460];
+    bandarXY = [760, 420];
+  }
 
-    // 4) 船 (黑色船身 + 高耸三角帆 + 旗帜)
-    var shipContainer = this.add.container(-200, 460);   // 起始屏幕外左
-    // 船身 hull
-    var hull = this.add.graphics();
-    hull.fillStyle(0x4A2E1A, 1);
-    hull.beginPath();
-    hull.moveTo(-50, 0); hull.lineTo(50, 0);
-    hull.lineTo(35, 25); hull.lineTo(-35, 25);
-    hull.closePath(); hull.fillPath();
-    // 桅杆
-    var mast = this.add.graphics();
-    mast.fillStyle(0x2A190E, 1);
-    mast.fillRect(-2, -110, 4, 110);
-    // 帆 (白色三角)
-    var sail = this.add.graphics();
-    sail.fillStyle(0xF4ECD8, 1);
-    sail.beginPath();
-    sail.moveTo(0, -100); sail.lineTo(50, -10); sail.lineTo(0, -10);
-    sail.closePath(); sail.fillPath();
-    // 旗帜
-    var flag = this.add.graphics();
-    flag.fillStyle(0xFFD98A, 1);
-    flag.fillRect(-2, -120, 14, 8);
-    shipContainer.add([hull, mast, sail, flag]);
-    this.shipContainer = shipContainer;
-    this.voyageContainer.add(shipContainer);
+  // 4a) 中段海域轮廓 - 简化的卡塔尔-伊朗海域 (用 sphere path 裁切中东)
+  //     这里画个半透明椭圆代表波斯湾区域, 增强"海上"感
+  var gulfG = this.add.graphics();
+  gulfG.fillStyle(0x1B3A5E, 0.35);
+  gulfG.fillEllipse((dohaXY[0] + bandarXY[0]) / 2,
+                    (dohaXY[1] + bandarXY[1]) / 2,
+                    Math.abs(bandarXY[0] - dohaXY[0]) * 1.6,
+                    120);
+  this.voyageContainer.add(gulfG);
 
-    // 5) 字幕 (顶部 + 底部)
-    var topText = this.add.text(640, 80, '🌊 离开多哈 · 波斯湾', {
-      fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
-    }).setOrigin(0.5);
-    var subText = this.add.text(640, 600, '下一站 → 伊朗 🐪', {
-      fontSize: '18px', color: '#A8D8C0', fontStyle: 'italic',
-    }).setOrigin(0.5);
-    // 路线文字带行 (大字出现)
-    var carrier = this.add.text(640, 360, '🚢 海上丝绸之路', {
-      fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
-    }).setOrigin(0.5);
-    carrier.setAlpha(0);
+  // 4b) dashed gold line (船航行路径)
+  var pathG = this.add.graphics();
+  pathG.lineStyle(2.5, 0xFFD700, 0.85);
+  // 用 quadratic Bezier 让航线稍微弯
+  var mx = (dohaXY[0] + bandarXY[0]) / 2;
+  var my = (dohaXY[1] + bandarXY[1]) / 2 - 28;
+  pathG.beginPath();
+  pathG.moveTo(dohaXY[0], dohaXY[1]);
+  pathG.quadraticBezierTo(mx, my, bandarXY[0], bandarXY[1]);
+  pathG.strokePath();
+  // 画虚线效果 - 用 dashArray (Phaser Graphics 用 line style dash)
+  // 简化: 用多个 segment 实现在 dashed look
+  var dashG = this.add.graphics();
+  dashG.lineStyle(2.5, 0x0E2A47, 0.95);
+  // 二次贝塞尔采样 30 个点画虚线 (间隔盖在金线上)
+  var pts = [];
+  for (var i = 0; i <= 30; i++) {
+    var t = i / 30;
+    // Q 公式: (1-t)²P0 + 2(1-t)t P1 + t²P2
+    var px = (1 - t) * (1 - t) * dohaXY[0] + 2 * (1 - t) * t * mx + t * t * bandarXY[0];
+    var py = (1 - t) * (1 - t) * dohaXY[1] + 2 * (1 - t) * t * my + t * t * bandarXY[1];
+    pts.push([px, py]);
+  }
+  // 隔一个画一个短 dash (模拟 dashed look)
+  for (var d = 0; d < pts.length - 1; d += 2) {
+    dashG.beginPath();
+    dashG.moveTo(pts[d][0], pts[d][1]);
+    dashG.lineTo(pts[d + 1][0], pts[d + 1][1]);
+    dashG.strokePath();
+  }
+  this.voyageContainer.add(pathG);
 
-    this.voyageTopText = topText;
-    this.voyageSubText = subText;
-    this.voyageCarrier = carrier;
-    this.voyageContainer.add([topText, subText, carrier]);
-  };
+  // 4c) Doha pin (绿色 ⚓ 港口)
+  var dohaBg = this.add.circle(dohaXY[0], dohaXY[1], 18, 0x5fb3a0, 0.9)
+    .setStrokeStyle(2, 0xFFD700, 0.95);
+  this.add.text(dohaXY[0], dohaXY[1], '⚓', { fontSize: '22px' }).setOrigin(0.5);
+  this.add.text(dohaXY[0], dohaXY[1] - 32, 'Doha', {
+    fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+    stroke: '#0E2A47', strokeThickness: 3,
+  }).setOrigin(0.5);
+  this.voyageContainer.add(dohaBg);
 
-  // 动画 + navigate
-  ResultScene.prototype.playVoyageAnimation = function (nextUrl) {
-    var self = this;
-    this.voyageContainer.setVisible(true);
+  // 4d) Bandar Abbas pin (金色 🐪 港口)
+  var bandarBg = this.add.circle(bandarXY[0], bandarXY[1], 18, 0xFFD700, 0.95)
+    .setStrokeStyle(2, 0x0E2A47, 0.95);
+  this.add.text(bandarXY[0], bandarXY[1], '🐪', { fontSize: '22px' }).setOrigin(0.5);
+  this.add.text(bandarXY[0], bandarXY[1] - 32, 'Bandar Abbas', {
+    fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+    stroke: '#0E2A47', strokeThickness: 3,
+  }).setOrigin(0.5);
+  this.voyageContainer.add(bandarBg);
 
-    // 隐藏所有 ResultScene UI 元素
-    this.children.list.forEach(function (c) {
-      if (c !== self.voyageContainer) c.setVisible(false);
+  // 存 Doha/Bandar 坐标给 playVoyageAnimation 用
+  this.voyageDohaXY = dohaXY;
+  this.voyageBandarXY = bandarXY;
+  this.voyageCurve = { mx: mx, my: my };  // Bezier control point
+
+  // 5) 船 (黑色船身 + 高耸三角帆 + 旗帜)
+  // M12 Bug 7: 船起点 = Doha pin, 终点 = Bandar Abbas pin, 沿 Bezier 缓动
+  var shipContainer = this.add.container(dohaXY[0], dohaXY[1]);
+  // 船身 hull
+  var hull = this.add.graphics();
+  hull.fillStyle(0x4A2E1A, 1);
+  hull.beginPath();
+  hull.moveTo(-50, 0); hull.lineTo(50, 0);
+  hull.lineTo(35, 25); hull.lineTo(-35, 25);
+  hull.closePath(); hull.fillPath();
+  // 桅杆
+  var mast = this.add.graphics();
+  mast.fillStyle(0x2A190E, 1);
+  mast.fillRect(-2, -110, 4, 110);
+  // 帆 (白色三角)
+  var sail = this.add.graphics();
+  sail.fillStyle(0xF4ECD8, 1);
+  sail.beginPath();
+  sail.moveTo(0, -100); sail.lineTo(50, -10); sail.lineTo(0, -10);
+  sail.closePath(); sail.fillPath();
+  // 旗帜
+  var flag = this.add.graphics();
+  flag.fillStyle(0xFFD700, 1);
+  flag.fillRect(-2, -120, 14, 8);
+  shipContainer.add([hull, mast, sail, flag]);
+  this.shipContainer = shipContainer;
+  this.voyageContainer.add(shipContainer);
+
+  // 6) 字幕 (顶部 + 底部)
+  // M12 Bug 6: 文案分支 (forward=去程, return=回程)
+  var topText = this.add.text(640, 60, '🌊 离开多哈 · 波斯湾 → 伊朗 / 阿巴斯港', {
+    fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
+    wordWrap: false,
+  }).setOrigin(0.5);
+  topText.setFixedSize(1100, 30);
+
+  var subText = this.add.text(640, 620, '下一站 → 伊朗 🐪', {
+    fontSize: '18px', color: '#A8D8C0', fontStyle: 'italic',
+    wordWrap: false,
+  }).setOrigin(0.5);
+  subText.setFixedSize(1100, 24);
+
+  // 路线文字带行 (大字出现)
+  var carrier = this.add.text(640, 360, '🚢 海上丝绸之路', {
+    fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
+  }).setOrigin(0.5);
+  carrier.setAlpha(0);
+
+  this.voyageTopText = topText;
+  this.voyageSubText = subText;
+  this.voyageCarrier = carrier;
+  this.voyageContainer.add([topText, subText, carrier]);
+};
+
+// ==================== M9.5e Voyage 动画 ====================
+// M12 Bug 7: 船沿 Bezier path 从 Doha → Bandar Abbas 缓动
+// M12 Bug 6: hasHomeHeart=false 时 走 60% 调头回 Doha
+ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
+  var self = this;
+  // 默认 true (向后兼容)
+  if (hasHomeHeart === undefined) hasHomeHeart = true;
+
+  this.voyageContainer.setVisible(true);
+
+  // 隐藏所有 ResultScene UI 元素
+  this.children.list.forEach(function (c) {
+    if (c !== self.voyageContainer) c.setVisible(false);
+  });
+
+  // M12 Bug 6: 文案分支
+  if (hasHomeHeart) {
+    self.voyageTopText.setText('🌊 离开多哈 · 波斯湾 → 伊朗 / 阿巴斯港');
+    self.voyageSubText.setText('下一站 → Bandar Abbas 🐪');
+    self.voyageCarrier.setText('🚢 海上丝绸之路');
+  } else {
+    // 回程变体
+    self.voyageTopText.setText('🌊 出海半途 · 折返多哈');
+    self.voyageSubText.setText('你只是想坐邮轮玩了一玩');
+    self.voyageCarrier.setText('🛳️ 没有归家之心 · 这趟不会带你到伊朗');
+  }
+
+  // 计算 Bezier 路径点 (30 个采样点)
+  var pts = [];
+  var dohaXY = self.voyageDohaXY;
+  var bandarXY = self.voyageBandarXY;
+  var curve = self.voyageCurve;
+  for (var i = 0; i <= 30; i++) {
+    var t = i / 30;
+    var px = (1 - t) * (1 - t) * dohaXY[0] + 2 * (1 - t) * t * curve.mx + t * t * bandarXY[0];
+    var py = (1 - t) * (1 - t) * dohaXY[1] + 2 * (1 - t) * t * curve.my + t * t * bandarXY[1];
+    pts.push([px, py]);
+  }
+
+  // 起点 = pts[0] (Doha), 终点 = pts[30] (Bandar)
+  // 船已在 dohaXY 处, 直接 tween 走完整路径
+
+  // tween 1: carrier 字幕淡入
+  self.tweens.add({
+    targets: self.voyageCarrier,
+    alpha: 1,
+    duration: 400,
+    ease: 'Quad.easeOut',
+  });
+
+  if (hasHomeHeart) {
+    // —— 去程: 船沿 Bezier 全程 Doha → Bandar ——
+    self.tweens.add({
+      targets: self.shipContainer,
+      x: bandarXY[0],
+      y: bandarXY[1],
+      duration: 1800,
+      ease: 'Sine.easeInOut',
     });
-
-    // tween 1: 字幕淡入 fade in
-    this.tweens.add({
-      targets: this.voyageCarrier,
-      alpha: 1,
-      duration: 400,
-      ease: 'Quad.easeOut',
-    });
-    // tween 2: 船从 -200 -> 1100 (跨屏)
-    this.tweens.add({
-      targets: this.shipContainer,
-      x: 1100,
-      duration: 1600,
-      ease: 'Quad.easeInOut',
-    });
-    // tween 3: 字幕 carrier y 微微下沉 (船在前行)
-    this.tweens.add({
-      targets: this.voyageCarrier,
+    self.tweens.add({
+      targets: self.voyageCarrier,
       y: 420,
       duration: 1800,
       ease: 'Quad.easeIn',
       onComplete: function () {
-        // 跳转
         window.location.href = nextUrl;
       },
     });
-  };
+  } else {
+    // —— 回程: 船沿 Bezier 走 60% (到 pts[18]), 调头回到 Doha ——
+    var halfwayIdx = Math.floor(pts.length * 0.6);
+    var halfwayXY = pts[halfwayIdx];
+    // tween 2a: 船去到 60% 位置
+    self.tweens.add({
+      targets: self.shipContainer,
+      x: halfwayXY[0],
+      y: halfwayXY[1],
+      duration: 900,
+      ease: 'Sine.easeInOut',
+    });
+    // tween 2b: 船调头回 Doha
+    self.tweens.add({
+      targets: self.shipContainer,
+      x: dohaXY[0],
+      y: dohaXY[1],
+      duration: 900,
+      delay: 900,
+      ease: 'Sine.easeInOut',
+      onComplete: function () {
+        // 回程结束 → 跳世界地图 (不进关 1)
+        window.location.href = nextUrl;
+      },
+    });
+    // carrier 字幕不变位, 只保持 fade
+    self.tweens.add({
+      targets: self.voyageCarrier,
+      alpha: 0.6,
+      duration: 1800,
+    });
+  }
+};
 
   // ==================== M9.1 角色选择面板 ====================
   // 在 IntroScene 自定义原型上挂方法。Phaser Class 自创建后 add 方法
