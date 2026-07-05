@@ -237,36 +237,32 @@
       // M13 Bug 2: gift sprite y_offset 从 +22 改 +10, 配合 place chip 上移到 -22,
       //             视觉间距 = 22 + 16 (chip half h) + 10 = 48px, 比 M12 紧凑但仍分开.
       // M15 Part 2: 7 → 8 gifts, 大力神杯 id 从 6 移到 7 (PNG 同前).
+      // M16 Bug 6: gift id=0 (沙漠玫瑰), id=4 (天然气 LNG), id=6 (火炬塔) 用 Graphics 自定义
+      //            其他保留 emoji (归家之心 ❤️, 古兰经 📖, 猎鹰 🦅, 珍珠 🦪, 大力神杯 🏆)
       this.giftSprites = [];
-      // M9.5g: 给每个 gift 单独构建 sprite.
-      // M9.6a: gift id=7 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
-      // 其他 7 个保留 emoji (修饰, 省事).
       L.gifts.forEach(function (g) {
         var sprite;
         if (g.id === 7) {
           // M9.6a: World Cup trophy — 用 user-provided PNG (key-out 白底).
-          // PNG 128x128 sprite 框内有 sports decoration.
-          // 给我们 gift 大体 64x64 显示 (调 display size).
           var container = self.add.container(g.x, g.y + 10);
-          // 光晕 (金黄) 跟其他 gift 一致
           var glow = self.add.graphics();
           glow.fillStyle(0xFFD98A, 0.4);
           glow.fillCircle(0, 0, 28);
           container.add(glow);
-          // 实际杯 (use image)
           var trophyImg = self.add.image(0, 0, 'world-cup-trophy');
-          trophyImg.setDisplaySize(56, 56);  // 跟其他 gift emoji 38px ~ 一致
+          trophyImg.setDisplaySize(56, 56);
           container.add(trophyImg);
-          // label
           var label = self.add.text(0, 30, g.name, {
             fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
             stroke: '#4A2E1A', strokeThickness: 3,
             wordWrap: false,
           }).setOrigin(0.5);
-          // M12 Bug 2: 强制单行 + 限制宽度 (中文 4 字 11px ≈ 44px, 80px 兜底够用)
           label.setFixedSize(80, 14);
           container.add(label);
           sprite = container;
+        } else if (g.id === 0 || g.id === 4 || g.id === 6) {
+          // M16 Bug 6: 自定义 Graphics 礼物 sprite —— 沙漠玫瑰/天然气/火炬塔
+          sprite = self._buildCustomGiftSprite(g);
         } else {
           var glow = self.add.graphics();
           glow.fillStyle(0xFFD98A, 0.35);
@@ -276,7 +272,6 @@
             fontSize: '11px', color: '#4A2E1A', fontStyle: 'bold',
             wordWrap: false,
           }).setOrigin(0.5);
-          // M12 Bug 2: 强制单行 + 限制宽度 (中文 4 字 11px ≈ 44px, 80px 兜底够用)
           label.setFixedSize(80, 14);
           sprite = self.add.container(g.x, g.y + 10, [glow, bag, label]);
         }
@@ -698,9 +693,14 @@
         return [bg, label, subT, zone];
       };
 
-      var bucketTxt = isFull ? '🧳 行李满' : '🧳 装进 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')';
-      // M12 Bug 3: 「装进」改「兑换物品」(任务/教学文案统一"物品")
-      var bucket = makeModalBtn(bucketTxt, '占 1 行李位 (用于兑换船票)', 30, !isFull, function () { self.decideGift('bucket'); });
+      // M16 Bug 5: 行李满时不再禁用装进按钮, 改为允许点 → 弹替换 modal
+      var bucketTxt = isFull
+        ? '🔁 替换行李 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')'
+        : '🧳 装进 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')';
+      var bucketSub = isFull
+        ? '选一个丢弃, 把这件装进去'
+        : '占 1 行李位 (用于兑换船票)';
+      var bucket = makeModalBtn(bucketTxt, bucketSub, 30, true, function () { self.decideGift('bucket'); });
       var stay = makeModalBtn('⏳ 留后', '留到后面 (不占位)', 100, false, function () { self.decideGift('stay'); });
       var drop = makeModalBtn('❌ 放弃', '这条路不带', 170, false, function () { self.decideGift('drop'); });
 
@@ -784,6 +784,14 @@
 
     decideGift: function (choice) {
       if (this.currentGiftId === null) return;
+      // M16 Bug 5: 行李满时点"装进/替换" → 弹替换 modal 让玩家选要替换哪个
+      if (choice === 'bucket' && this.luggageCount >= L.LUGGAGE_MAX) {
+        // 关闭当前 gift modal (但保留 currentGiftId 供 _showReplaceModal 用)
+        var newGiftId = this.currentGiftId;
+        this.modalContainer.setVisible(false);
+        this._showReplaceModal(newGiftId);
+        return;
+      }
       this.giftBuckets[this.currentGiftId] = choice;
       if (choice === 'bucket') {
         this.luggageCount++;
@@ -792,6 +800,121 @@
       // M11: 行李总价 HUD 实时更新 (bucket/drop 都影响)
       this._updatePriceHud();
       this.closeGiftModal();
+    },
+
+    // M16 Bug 5: 行李满时弹替换 modal —— 玩家选要丢弃哪个, 用新 gift 替换
+    _showReplaceModal: function (newGiftId) {
+      var self = this;
+      // 取新 gift 信息
+      var newGift = null;
+      for (var i = 0; i < L.gifts.length; i++) {
+        if (L.gifts[i].id === newGiftId) { newGift = L.gifts[i]; break; }
+      }
+      if (!newGift) return;
+      // 当前 bucket 里所有 gift ids
+      var bucketIds = [];
+      var keys = Object.keys(this.giftBuckets);
+      for (var i = 0; i < keys.length; i++) {
+        if (this.giftBuckets[keys[i]] === 'bucket') bucketIds.push(parseInt(keys[i], 10));
+      }
+      bucketIds.sort(function (a, b) { return a - b; });
+
+      this.modalContainer.removeAll(true);
+
+      // backdrop
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
+      this.modalContainer.add(backdrop);
+
+      // card (加高, 容纳 6 个 bucket 项 + 标题 + 按钮)
+      var cardH = 80 + bucketIds.length * 38 + 80;
+      var card = this.add.rectangle(0, 0, 540, cardH, 0x1B3A5E, 1)
+        .setStrokeStyle(2, 0x5fb3a0, 0.7);
+      this.modalContainer.add(card);
+
+      // 标题
+      var titleY = -cardH / 2 + 36;
+      this.modalContainer.add(this.add.text(0, titleY, '🔁 选择要丢弃的物品', {
+        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      // 副标题 (新礼物信息)
+      var subY = titleY + 24;
+      this.modalContainer.add(this.add.text(0, subY,
+        '把 [' + newGift.emoji + ' ' + newGift.name + ' ¥' + (newGift.price || 0) + '] 装进行李, 需丢弃一件',
+        {
+          fontSize: '11px', color: '#A8D8C0', fontStyle: 'italic',
+          wordWrap: { width: 480 },
+        }).setOrigin(0.5));
+
+      // bucket 列表 — 每行: 丢弃按钮 + emoji + 名字 + 价格
+      var rowStartY = subY + 32;
+      for (var r = 0; r < bucketIds.length; r++) {
+        var gid = bucketIds[r];
+        var bg = null;
+        for (var j = 0; j < L.gifts.length; j++) {
+          if (L.gifts[j].id === gid) { bg = L.gifts[j]; break; }
+        }
+        if (!bg) continue;
+        var ry = rowStartY + r * 38;
+
+        // 丢弃按钮 (左侧红框)
+        var dropBg = self.add.rectangle(-210, ry, 56, 28, 0xC04848, 1)
+          .setStrokeStyle(1, 0xFFD98A, 0.5);
+        var dropTxt = self.add.text(-210, ry, '丢弃', {
+          fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var dropZone = self.add.zone(-210, ry, 56, 28).setInteractive({ useHandCursor: true });
+        (function (dropId) {
+          dropZone.on('pointerdown', function () {
+            // 1) 旧 gift 改 'drop' (从 bucket 移除)
+            self.giftBuckets[dropId] = 'drop';
+            // 2) 新 gift 改 'bucket' (加入 bucket, luggageCount 不变)
+            self.giftBuckets[newGiftId] = 'bucket';
+            // 3) 重算总价 (丢弃的 gift price 减掉, 新 gift price 加上)
+            self._updatePriceHud();
+            self.luggageText.setText('🧳 行李 ' + self.luggageCount + ' / ' + L.LUGGAGE_MAX);
+            // 4) 关闭 modal + 走正常 closeGiftModal 流程 (更新 HUD/状态)
+            self.modalContainer.setVisible(false);
+            self.closeGiftModal();
+          });
+        })(gid);
+
+        // emoji
+        self.modalContainer.add(self.add.text(-150, ry, bg.emoji, { fontSize: '20px' }).setOrigin(0.5));
+        // 名字
+        var nameTxt = self.add.text(-115, ry, bg.name, {
+          fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
+          wordWrap: false,
+        }).setOrigin(0, 0.5);
+        nameTxt.setFixedSize(160, 16);
+        self.modalContainer.add(nameTxt);
+        // 价格
+        self.modalContainer.add(self.add.text(85, ry, '¥' + bg.price, {
+          fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0, 0.5));
+
+        self.modalContainer.add([dropBg, dropTxt, dropZone]);
+      }
+
+      // 取消按钮 (底部)
+      var cancelY = cardH / 2 - 40;
+      var cancelBg = self.add.rectangle(0, cancelY, 200, 50, 0x1B3A5E, 1)
+        .setStrokeStyle(1, 0x5fb3a0, 0.6);
+      var cancelTxt = self.add.text(0, cancelY, '取消', {
+        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var cancelZone = self.add.zone(0, cancelY, 200, 50).setInteractive({ useHandCursor: true });
+      cancelZone.on('pointerdown', function () {
+        // 玩家取消 → 新 gift 不入桶 (跟之前 'drop' 一样), 走 closeGiftModal 流程
+        self.modalContainer.setVisible(false);
+        self.closeGiftModal();
+      });
+      self.modalContainer.add([cancelBg, cancelTxt, cancelZone]);
+
+      // 隐藏 joystick / pause (跟其他 modal 一致)
+      this.joystickContainer.setVisible(false);
+      (this.actionContainer && this.actionContainer.setVisible(false));
+      this.pauseContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
     },
 
     // ==================== 港口 NPC popup (M11: 老商人 → 港口 ⚓) ====================
@@ -812,15 +935,14 @@
         .setStrokeStyle(2, 0x5fb3a0, 0.7);
       this.modalContainer.add(card);
 
-      // M11 part 3: 港口船票兑换条件
-      //   - 拾满 8 件 (pickupCount >= 8) — M15 Part 2: 6 → 8 gifts
+      // M16 Bug 4: 兑换条件简化为 只看 行李件数 + 总价 (不要求拾满 8 件)
       //   - 行李装够 MIN_LUGGAGE_TO_BOARD 件 (默认 1)
       //   - 行李总价 >= PORT_TICKET_PRICE_THRESHOLD (默认 ¥170)
-      var hasAllGifts = this.pickupCount >= 8;
+      //   注: 玩家拾 ≥1 件 + 总价 ≥¥170 就能兑换, 不必 8 件都拾
       var totalPrice = this.totalLuggagePrice();
       var canAfford = totalPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
       var enoughLuggage = this.luggageCount >= L.MIN_LUGGAGE_TO_BOARD;
-      var canExchange = hasAllGifts && canAfford && enoughLuggage;
+      var canExchange = canAfford && enoughLuggage;
 
       this.modalContainer.add(this.add.text(0, -130, L.port.emoji, { fontSize: '52px' }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, -90, L.port.name, {
@@ -830,11 +952,10 @@
         fontSize: '13px', color: '#FFE9B0', fontStyle: 'italic', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
-      if (hasAllGifts && canExchange) {
+      if (canExchange) {
         // ✅ 全部满足 → 兑换船票主按钮 (可点)
-        // M12 Bug 3: 「礼物」→「物品」(任务/教学文案统一)
-        // M12 Bug 6: 不再直接兑换, 改成跳 _showExchangeModal 让玩家选 N 件
-        this.modalContainer.add(this.add.text(0, 30, '好！物品都齐了，让我帮你换一张去伊朗的船票 🚢', {
+        // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件 + 总价 ≥¥170 就能兑换
+        this.modalContainer.add(this.add.text(0, 30, '好！让我帮你换一张去伊朗的船票 🚢', {
           fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -862,14 +983,14 @@
         });
 
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
-      } else if (hasAllGifts && !canExchange) {
-        // ⚠️ 拾满 8 但不满足兑换条件 → 灰色禁用按钮 + 提示缺啥
-        // M15 Part 2: 6 → 8 gifts
+      } else if (!canExchange) {
+        // ⚠️ 不满足兑换条件 → 灰色禁用按钮 + 提示缺啥
+        // M16 Bug 4: 不再要求 hasAllGifts, 玩家只要带 1 件就能来, 但要带够件数 + 总价
         var reasons = [];
         if (!enoughLuggage) reasons.push('行李不足 ' + this.luggageCount + '/' + L.MIN_LUGGAGE_TO_BOARD);
         if (!canAfford) reasons.push('总价 ¥' + totalPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD);
         // M12 Bug 3: 「礼物」→「物品」
-        this.modalContainer.add(this.add.text(0, 30, '物品都齐了！但还差一点点:\n' + reasons.join(' · '), {
+        this.modalContainer.add(this.add.text(0, 30, '还差一点点:\n' + reasons.join(' · '), {
           fontSize: '12px', color: '#F6B5C8', align: 'center', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -896,10 +1017,9 @@
 
         this.modalContainer.add([disabledBg, disabledText, laterBg2, laterText2, laterZone2]);
       } else {
-        // 没拾满: 普通对话 — 1 个按钮
-        // M12 Bug 3: 「礼物」→「物品」
-        // M15 Part 2: 6 → 8 gifts
-        this.modalContainer.add(this.add.text(0, 60, '物品还没齐（' + this.pickupCount + '/8），先去把 8 件都找齐了再来找我吧。', {
+        // 普通对话 — 1 个按钮 (这段代码在 M16 Bug 4 后只 luggageCount >= MIN 但 canAfford=false 时进入)
+        // M16: 默认分支已不存在 (上面两个分支覆盖所有情况), 保留兜底
+        this.modalContainer.add(this.add.text(0, 60, '先去把物品带够，再来找我兑换船票吧。', {
           fontSize: '12px', color: '#A8D8C0', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -967,10 +1087,8 @@ _showTicketModal: function () {
   var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
   goZone.on('pointerdown', function () {
     self.modalContainer.setVisible(false);
-    // M11 part 3: 兑换船票 → 必须在 canExchange 前提下才能 enterResult.
-    // M12 Bug 6: 改成检查 _selectedPrice 而非 totalLuggagePrice (玩家可能选部分礼物)
-    var canExchangeNow = self.pickupCount >= 8
-      && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
+    // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件就能上船
+    var canExchangeNow = self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
       && self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD;
     if (canExchangeNow) {
       self.enterResult();
@@ -1850,25 +1968,46 @@ ResultScene.prototype.buildVoyageContainer = function () {
   var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
   this.voyageContainer.add(seaBg);
 
-  // 2) d3 Mercator 投影 (与 world-map.html 一致)
+  // 2) d3 Mercator 投影 (M16 Bug 1: fitExtent 卡塔尔→伊朗 bbox, 横跨波斯湾)
+  //    旧版 center[60,32] scale 440 → 用户要求"卡塔尔到伊朗这一段放大就行"
+  //    新版: bbox = [lng 50-58, lat 24-29] (矩形 8° lng × 5° lat)
+  //          手动 fitExtent (d3.fitExtent 在小 bbox + Mercator 失真下结果不稳),
+  //          用 4 角投影 + compute scale/translate 让这段地理区域填满 voyage container.
+  //    矩形 viewport 1180×620px (留 50px/50px margin), Doha 在西, Bandar 在东
   var voyageProjection = null;
   var dohaXY = null, bandarXY = null;
   if (window.d3 && window.d3.geoMercator) {
     try {
-      voyageProjection = window.d3.geoMercator()
-        .center([60, 32])
-        .scale(440)
-        .translate([640, 360]);
-      dohaXY = voyageProjection([51.53, 25.30]);
-      bandarXY = voyageProjection([56.27, 27.18]);
+      var lngMin = 50, lngMax = 58, latMin = 24, latMax = 29;
+      // 在 scale=1 下投影 4 角 (Mercator y = -ln(tan(45+lat/2)))
+      var corners = [
+        [lngMin * Math.PI / 180, -Math.log(Math.tan(Math.PI / 4 + latMin * Math.PI / 360))],
+        [lngMax * Math.PI / 180, -Math.log(Math.tan(Math.PI / 4 + latMin * Math.PI / 360))],
+        [lngMin * Math.PI / 180, -Math.log(Math.tan(Math.PI / 4 + latMax * Math.PI / 360))],
+        [lngMax * Math.PI / 180, -Math.log(Math.tan(Math.PI / 4 + latMax * Math.PI / 360))],
+      ];
+      var projMinX = Math.min(corners[0][0], corners[1][0], corners[2][0], corners[3][0]);
+      var projMaxX = Math.max(corners[0][0], corners[1][0], corners[2][0], corners[3][0]);
+      var projMinY = Math.min(corners[0][1], corners[1][1], corners[2][1], corners[3][1]);
+      var projMaxY = Math.max(corners[0][1], corners[1][1], corners[2][1], corners[3][1]);
+      var projW = projMaxX - projMinX;
+      var projH = projMaxY - projMinY;
+      // viewport = 1180×620, 居中于 extent [[50,50],[1230,670]]
+      var extW = 1180, extH = 620;
+      var fitScale = Math.min(extW / projW, extH / projH);
+      var tx = (extW - fitScale * projW) / 2 - fitScale * projMinX + 50;
+      var ty = (extH - fitScale * projH) / 2 - fitScale * projMinY + 50;
+      voyageProjection = window.d3.geoMercator().scale(fitScale).translate([tx, ty]);
+      dohaXY = voyageProjection([51.53, 25.30]);   // Doha (卡塔尔首都)
+      bandarXY = voyageProjection([56.27, 27.18]);  // Bandar Abbas (伊朗波斯湾港口)
     } catch (e) {
       console.warn('[voyage] d3 projection failed:', e);
     }
   }
-  // 兜底: d3 不可用时用固定坐标 (避免 voyage 白屏)
+  // 兜底: d3 不可用时用估算坐标 (横跨波斯湾布局, 跟手动 fitExtent 接近)
   if (!dohaXY || !bandarXY) {
-    dohaXY = [480, 460];
-    bandarXY = [760, 420];
+    dohaXY = [366, 511];
+    bandarXY = [892, 279];
   }
 
   // 3) 画国家轮廓 (若 window.__qatarCountriesGeo 已就绪)
@@ -1884,8 +2023,9 @@ ResultScene.prototype.buildVoyageContainer = function () {
     try {
       var geoPath = window.d3.geoPath(voyageProjection);
       var features = window.__qatarCountriesGeo.features || [];
-      // viewport 范围 (大约 longitude 38-82, latitude 12-52) — 用 bbox 粗筛
-      var lngMin = 38, lngMax = 82, latMin = 8, latMax = 52;
+      // M16 Bug 1: viewport 跟 fitExtent bbox 对齐 — longitude 48-60, latitude 22-31
+      //            (留 2° 余量避免边缘国家被截)
+      var lngMin = 48, lngMax = 60, latMin = 22, latMax = 31;
       for (var fi = 0; fi < features.length; fi++) {
         var feat = features[fi];
         var nm = (feat.properties && feat.properties.name) || '';
@@ -2180,6 +2320,143 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
     });
   }
 };
+
+  // ==================== M16 Bug 6: 自定义 Graphics 礼物 sprite ====================
+  // 给 gift id=0 (沙漠玫瑰), id=4 (LNG 储罐), id=6 (火炬塔) 用 Phaser.Graphics 程序绘制
+  // 56x56 icon (跟大力神杯 PNG display size 一致), 中心 (0,0)
+  // 颜色: 沙漠色 (棕黄橙), 不依赖 emoji 字体, 跨浏览器一致
+  PlayScene.prototype._buildCustomGiftSprite = function (g) {
+    var container = this.add.container(g.x, g.y + 10);
+    // 光晕 (金黄) 跟其他 gift 一致
+    var glow = this.add.graphics();
+    glow.fillStyle(0xFFD98A, 0.35);
+    glow.fillCircle(0, 0, 28);
+    container.add(glow);
+
+    var icon = this.add.graphics();
+    if (g.id === 0) {
+      // —— 沙漠玫瑰 (desert rose) ——
+      // 5 个椭圆花瓣 (沙漠色 #C19A6B + 浅橙 #D4A857 交替), 黄圆心, 棕色茎
+      var petalR = 14;   // 花瓣长轴
+      var petalW = 7;    // 花瓣短轴
+      var colors = [0xC19A6B, 0xD4A857, 0xC19A6B, 0xD4A857, 0xC19A6B];
+      // 茎 (先画, 在花后面)
+      icon.fillStyle(0x5C3A1E, 1);
+      icon.fillRoundedRect(-1.5, 8, 3, 14, 1);
+      // 5 片花瓣, 旋转 -90°, -18°, 54°, 126°, 198° (等分 72°, 起始向上)
+      var angles = [-90, -18, 54, 126, 198];
+      for (var i = 0; i < 5; i++) {
+        icon.fillStyle(colors[i], 1);
+        // 用 save/restore 模拟旋转
+        var rad = angles[i] * Math.PI / 180;
+        var cx = Math.cos(rad) * 7;
+        var cy = Math.sin(rad) * 7;
+        // 椭圆 = 中心 (cx,cy), 半径 petalR 长轴 + petalW 短轴
+        icon.fillEllipse(cx, cy, petalR * 2, petalW * 2);
+        // 花瓣暗影 (深一点)
+        icon.fillStyle(0x8B6B3A, 0.4);
+        icon.fillEllipse(cx, cy + 2, petalR * 1.5, petalW);
+      }
+      // 黄圆心 (#FFD98A)
+      icon.fillStyle(0xFFD98A, 1);
+      icon.fillCircle(0, 0, 6);
+      icon.fillStyle(0xE8C282, 1);
+      icon.fillCircle(0, 0, 3);
+    } else if (g.id === 4) {
+      // —— LNG 储罐 (Qatar Gas) ——
+      // 圆柱罐 (灰色 #B0B0B0) + 顶部圆顶 + 蓝色火焰
+      // 罐身 (圆柱, 用 roundedRect 近似)
+      icon.fillStyle(0xB0B0B0, 1);
+      icon.fillRoundedRect(-16, -2, 32, 26, 4);
+      // 罐身阴影 (右侧)
+      icon.fillStyle(0x707070, 1);
+      icon.fillRoundedRect(8, -2, 8, 26, 4);
+      // 罐顶圆顶
+      icon.fillStyle(0xC0C0C0, 1);
+      icon.fillEllipse(0, -2, 32, 10);
+      // 罐顶管道 (小竖管)
+      icon.fillStyle(0x606060, 1);
+      icon.fillRoundedRect(-2, -12, 4, 10, 1);
+      // "QATAR GAS" 小字 (用 Phaser Text 加到 container, 不画到 icon)
+      // 火焰 (蓝色, 三角形从管口向上) — 这是关键标志, 表示 LNG 出口
+      icon.fillStyle(0x4A90E2, 1);
+      icon.beginPath();
+      icon.moveTo(0, -12);
+      icon.lineTo(4, -22);
+      icon.lineTo(0, -28);
+      icon.lineTo(-4, -22);
+      icon.closePath();
+      icon.fillPath();
+      // 内焰 (浅蓝)
+      icon.fillStyle(0xA8D8FF, 1);
+      icon.beginPath();
+      icon.moveTo(0, -12);
+      icon.lineTo(2, -18);
+      icon.lineTo(0, -23);
+      icon.lineTo(-2, -18);
+      icon.closePath();
+      icon.fillPath();
+    } else if (g.id === 6) {
+      // —— 火炬塔 (Aspire Park) ——
+      // 钢杆 (#5C3A1E) + 火焰 (橙→红渐变)
+      // 底座 (深色矩形)
+      icon.fillStyle(0x3A2614, 1);
+      icon.fillRoundedRect(-12, 22, 24, 6, 2);
+      // 钢杆 (深棕, 中心竖条)
+      icon.fillStyle(0x5C3A1E, 1);
+      icon.fillRoundedRect(-3, -10, 6, 32, 1);
+      // 横臂 (顶部小横, 让火炬像塔)
+      icon.fillStyle(0x5C3A1E, 1);
+      icon.fillRoundedRect(-7, -10, 14, 2, 1);
+      // 火焰外层 (橙)
+      icon.fillStyle(0xFF8C42, 1);
+      icon.beginPath();
+      icon.moveTo(0, -10);
+      icon.lineTo(8, -22);
+      icon.lineTo(0, -36);
+      icon.lineTo(-8, -22);
+      icon.closePath();
+      icon.fillPath();
+      // 火焰中层 (橙黄)
+      icon.fillStyle(0xFFB347, 1);
+      icon.beginPath();
+      icon.moveTo(0, -10);
+      icon.lineTo(5, -20);
+      icon.lineTo(0, -30);
+      icon.lineTo(-5, -20);
+      icon.closePath();
+      icon.fillPath();
+      // 火焰内层 (黄)
+      icon.fillStyle(0xFFE066, 1);
+      icon.beginPath();
+      icon.moveTo(0, -10);
+      icon.lineTo(3, -18);
+      icon.lineTo(0, -24);
+      icon.lineTo(-3, -18);
+      icon.closePath();
+      icon.fillPath();
+    }
+    container.add(icon);
+
+    // "QATAR GAS" 文字 (只在 LNG 罐子上加)
+    if (g.id === 4) {
+      var labelGas = this.add.text(0, 14, 'QATAR GAS', {
+        fontSize: '6px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      container.add(labelGas);
+    }
+
+    // gift 名字标签 (跟其他 gift 一致)
+    var label = this.add.text(0, 30, g.name, {
+      fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
+      stroke: '#4A2E1A', strokeThickness: 3,
+      wordWrap: false,
+    }).setOrigin(0.5);
+    label.setFixedSize(80, 14);
+    container.add(label);
+
+    return container;
+  };
 
   // ==================== M9.1 角色选择面板 ====================
   // 在 IntroScene 自定义原型上挂方法。Phaser Class 自创建后 add 方法
