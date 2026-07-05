@@ -37,7 +37,9 @@
   {# Phaser 3.80.1 —— 本地静态资源，不走任何 CDN #}
   <script src="{{ url_for('static', filename='vendor/phaser-3.80.1.min.js') }}"></script>
 
-  {# M12 Bug 7: voyage 动画需要 d3-geo 算 Doha / Bandar Abbas 投影 #}
+  {# M12 Bug 7: voyage 动画需要 d3 算 Doha / Bandar Abbas 投影.
+     d3-geo 需要 d3-array (dependencies 写在 d3-geo.min.js 头部). 顺序: array → geo. #}
+  <script src="{{ url_for('static', filename='vendor/world-atlas/d3-array.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/world-atlas/d3-geo.min.js') }}"></script>
 
   {# 关卡数据 → game.js #}

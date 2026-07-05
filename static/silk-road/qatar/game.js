@@ -1672,56 +1672,58 @@ ResultScene.prototype.buildVoyageContainer = function () {
   this.voyageContainer.add(gulfG);
 
   // 4b) dashed gold line (船航行路径)
-  var pathG = this.add.graphics();
-  pathG.lineStyle(2.5, 0xFFD700, 0.85);
-  // 用 quadratic Bezier 让航线稍微弯
+  // Phaser Graphics 3.80 没有 quadraticBezier, 用 lineTo 采样 Bezier 30 个点画 dashed gold line
   var mx = (dohaXY[0] + bandarXY[0]) / 2;
   var my = (dohaXY[1] + bandarXY[1]) / 2 - 28;
-  pathG.beginPath();
-  pathG.moveTo(dohaXY[0], dohaXY[1]);
-  pathG.quadraticBezierTo(mx, my, bandarXY[0], bandarXY[1]);
-  pathG.strokePath();
-  // 画虚线效果 - 用 dashArray (Phaser Graphics 用 line style dash)
-  // 简化: 用多个 segment 实现在 dashed look
-  var dashG = this.add.graphics();
-  dashG.lineStyle(2.5, 0x0E2A47, 0.95);
-  // 二次贝塞尔采样 30 个点画虚线 (间隔盖在金线上)
+  // 二次贝塞尔采样 30 个点
   var pts = [];
-  for (var i = 0; i <= 30; i++) {
-    var t = i / 30;
-    // Q 公式: (1-t)²P0 + 2(1-t)t P1 + t²P2
-    var px = (1 - t) * (1 - t) * dohaXY[0] + 2 * (1 - t) * t * mx + t * t * bandarXY[0];
-    var py = (1 - t) * (1 - t) * dohaXY[1] + 2 * (1 - t) * t * my + t * t * bandarXY[1];
+  for (var ii = 0; ii <= 30; ii++) {
+    var tt = ii / 30;
+    var px = (1 - tt) * (1 - tt) * dohaXY[0] + 2 * (1 - tt) * tt * mx + tt * tt * bandarXY[0];
+    var py = (1 - tt) * (1 - tt) * dohaXY[1] + 2 * (1 - tt) * tt * my + tt * tt * bandarXY[1];
     pts.push([px, py]);
   }
-  // 隔一个画一个短 dash (模拟 dashed look)
+  // 金线 (实线, 底)
+  var pathG = this.add.graphics();
+  pathG.lineStyle(2.5, 0xFFD700, 0.85);
+  pathG.beginPath();
+  pathG.moveTo(pts[0][0], pts[0][1]);
+  for (var pi = 1; pi < pts.length; pi++) {
+    pathG.lineTo(pts[pi][0], pts[pi][1]);
+  }
+  pathG.strokePath();
+  // 虚线盖在金线上 (深蓝 dash, 模拟 dashed look)
+  var dashG = this.add.graphics();
+  dashG.lineStyle(2.5, 0x0E2A47, 0.95);
   for (var d = 0; d < pts.length - 1; d += 2) {
     dashG.beginPath();
     dashG.moveTo(pts[d][0], pts[d][1]);
     dashG.lineTo(pts[d + 1][0], pts[d + 1][1]);
     dashG.strokePath();
   }
-  this.voyageContainer.add(pathG);
+  // M12 Bug 7 fix: 把金线 + 虚线都加到 voyageContainer (否则深蓝背景会盖住)
+  this.voyageContainer.add([pathG, dashG]);
 
   // 4c) Doha pin (绿色 ⚓ 港口)
   var dohaBg = this.add.circle(dohaXY[0], dohaXY[1], 18, 0x5fb3a0, 0.9)
     .setStrokeStyle(2, 0xFFD700, 0.95);
-  this.add.text(dohaXY[0], dohaXY[1], '⚓', { fontSize: '22px' }).setOrigin(0.5);
-  this.add.text(dohaXY[0], dohaXY[1] - 32, 'Doha', {
+  var dohaEmoji = this.add.text(dohaXY[0], dohaXY[1], '⚓', { fontSize: '22px' }).setOrigin(0.5);
+  var dohaLabel = this.add.text(dohaXY[0], dohaXY[1] - 32, 'Doha', {
     fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
     stroke: '#0E2A47', strokeThickness: 3,
   }).setOrigin(0.5);
-  this.voyageContainer.add(dohaBg);
+  // M12 Bug 7 fix: 把 pin + emoji + label 都加到 voyageContainer, 否则会被深蓝背景遮住
+  this.voyageContainer.add([dohaBg, dohaEmoji, dohaLabel]);
 
   // 4d) Bandar Abbas pin (金色 🐪 港口)
   var bandarBg = this.add.circle(bandarXY[0], bandarXY[1], 18, 0xFFD700, 0.95)
     .setStrokeStyle(2, 0x0E2A47, 0.95);
-  this.add.text(bandarXY[0], bandarXY[1], '🐪', { fontSize: '22px' }).setOrigin(0.5);
-  this.add.text(bandarXY[0], bandarXY[1] - 32, 'Bandar Abbas', {
+  var bandarEmoji = this.add.text(bandarXY[0], bandarXY[1], '🐪', { fontSize: '22px' }).setOrigin(0.5);
+  var bandarLabel = this.add.text(bandarXY[0], bandarXY[1] - 32, 'Bandar Abbas', {
     fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
     stroke: '#0E2A47', strokeThickness: 3,
   }).setOrigin(0.5);
-  this.voyageContainer.add(bandarBg);
+  this.voyageContainer.add([bandarBg, bandarEmoji, bandarLabel]);
 
   // 存 Doha/Bandar 坐标给 playVoyageAnimation 用
   this.voyageDohaXY = dohaXY;
