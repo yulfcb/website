@@ -1244,22 +1244,22 @@ _showExchangeModal: function () {
     self.modalContainer.add(totalTxt);
 
     // M18 Bug 1: 必须 luggage 包含归家之心 (gift id=5) 才能走「坐船出发」分支
+    // M19: 移除归家之心 gate — 玩家任何时候都能兑换上船, 没归家之心的话在 voyage 中点返程
     var hasHeart = self._selectedGiftIds.indexOf(5) !== -1;
     var canSubmit = self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD
       && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
-    var canSubmitWithHeart = canSubmit && hasHeart;
 
-    // 兑换船票按钮 (亮色/灰色取决于 canSubmitWithHeart)
+    // 兑换船票按钮 (亮色/灰色取决于 canSubmit — M19: 不再检查归家之心)
     var exBg = self.add.rectangle(-80, 215, 200, 50,
-      canSubmitWithHeart ? 0x5fb3a0 : 0x4A4A4A, canSubmitWithHeart ? 1 : 0.6)
-      .setStrokeStyle(1, canSubmitWithHeart ? 0xFFD98A : 0x888888, canSubmitWithHeart ? 0.7 : 0.4);
+      canSubmit ? 0x5fb3a0 : 0x4A4A4A, canSubmit ? 1 : 0.6)
+      .setStrokeStyle(1, canSubmit ? 0xFFD98A : 0x888888, canSubmit ? 0.7 : 0.4);
     self.modalContainer.add(exBg);
     // M18 Bug 7: 按钮文字改「🚢 坐船出发」
     self.modalContainer.add(self.add.text(-80, 215, '🚢 坐船出发', {
-      fontSize: '15px', color: canSubmitWithHeart ? '#0E2A47' : '#888888', fontStyle: 'bold',
+      fontSize: '15px', color: canSubmit ? '#0E2A47' : '#888888', fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    if (canSubmitWithHeart) {
+    if (canSubmit) {
       var exZone = self.add.zone(-80, 215, 200, 50).setInteractive({ useHandCursor: true });
       self.modalContainer.add(exZone);
       exZone.on('pointerdown', function () {
@@ -1293,12 +1293,7 @@ _showExchangeModal: function () {
         fontSize: '11px', color: '#F6B5C8',
       }).setOrigin(0.5));
     }
-    // M18 Bug 1: 没勾归家之心 → 提示 "需要归家之心才能兑换"
-    if (canSubmit && !hasHeart) {
-      self.modalContainer.add(self.add.text(0, 145, '❤️ 需要归家之心才能兑换', {
-        fontSize: '11px', color: '#F6B5C8',
-      }).setOrigin(0.5));
-    }
+    // M19: 移除 "❤️ 需要归家之心才能兑换" 提示 — gate 已移到 voyage 中点
 
     self.modalContainer.setVisible(true);
   };
@@ -1491,7 +1486,8 @@ _sumSelectedPrice: function (ids) {
       // M18 Bug 4: pauseContainer removed
     },
 
-    // M18 Bug 5: 复活流程 — 输入任意非空文本 → 立即复活 + water 满, 不调 /api/game/secret
+    // M18 Bug 5: 复活流程 — 输入任意非空文本 → 立即复活, 不调 /api/game/secret
+    // M19: 复活后只给 10% water (保命但要继续探索补给, 不能满血)
     submitSecret: async function (forceRestart) {
       var modal = document.getElementById('phaser-revive-modal');
       var ta = modal ? modal.querySelector('textarea') : null;
@@ -1501,12 +1497,12 @@ _sumSelectedPrice: function (ids) {
       ta.disabled = true;
       if (sendBtn) sendBtn.disabled = true;
 
-      // M18 Bug 5: 直接原地复活 + water 拉满, 跳过 secret API
+      // M19: 直接原地复活 + water 给 10% (= 1, 因为 WATER_MAX=10), 跳过 secret API
       this.hideRevive();
-      this.water = L.WATER_MAX;  // 满血复活, 不是 5
+      this.water = Math.floor(L.WATER_MAX * 0.1);  // M19: 10% 复活, 不是满血
       this.playerContainer.x = this.player.x;
       this.playerContainer.y = this.player.y;
-      this.changeWater(0);
+      this.changeWater(0);  // 刷新 waterText UI
       this.paused = false;
       this.state = 'PLAYING';
       // 反馈音 (复活成功的 pickup, 而不是死亡 die)
@@ -1746,17 +1742,20 @@ _sumSelectedPrice: function (ids) {
       this.buildVoyageContainer();
 
       var nextBg = this.add.rectangle(640, 555, 280, 60, 0xFFD98A, 1);
-      // M12 Bug 6: 按钮文案分支 —— 含归家之心 → 继续下一关; 不含 → 返回 (不跳关)
+      // M19: 按钮文案统一为 "🚢 坐船出发" — 不管有没有归家之心都先上船
+      //      没有归家之心 → voyage 中点返程 + 文字提示 → 重置回 level-0
+      //      有归家之心 → voyage 到 Bandar → 跳 level-1
       var hasHomeHeart = this.selectedIds.indexOf(5) !== -1;
-      var nextBtnTxt = hasHomeHeart ? '继续下一关 →' : '返回地图';
+      var nextBtnTxt = '🚢 坐船出发';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
       var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
       var self = this;
       nextZone.on('pointerdown', function () {
-        // 隐藏 next button + statusText — 全部让位给 voyage 动画
-        // M12 Bug 6: 不含归家之心 → 回程分支 (动画里展示) 然后跳世界地图 (不前进关 1)
+        // M19: 统一 "坐船出发" 触发点 — 根据 hasHomeHeart 决定 nextUrl
+        //   有归家之心 → /games/silk-road/level/1 (下一关)
+        //   无归家之心 → /games/silk-road/world-map (返程后回地图)
         var nextUrl = hasHomeHeart ? '/games/silk-road/level/1' : '/games/silk-road/world-map';
         self.playVoyageAnimation(nextUrl, hasHomeHeart);
       });
@@ -2154,34 +2153,84 @@ ResultScene.prototype.buildVoyageContainer = function () {
 // M18 Bug 6: 用 Phaser Graphics 画邮轮 (船身 + 船头尖端 + 上层建筑 + 桅杆 + 旗帜)
 //           船头朝 +X 方向 (旋转 origin=容器中心), 沿 Bezier 路径用 setRotation(angle) 切线对齐.
 //           返程时 scaleX=-1 镜像 (Graphics 没有 setFlipX, 用 scaleX).
+// M19: 邮轮整体放大 3 倍 — 总长 ~100px, 大船不再是"小导弹"
+//      船头朝 +X, 船头扁平带 logo, 船尾圆弧, 3 层上层建筑, 2 烟囱带白烟
   var shipContainer = this.add.container(dohaXY[0], dohaXY[1]);
-  // 船身 (深蓝填充, 长方形 24×10)
+  // 1) 船身 (深蓝填充, 长方形 72×18, 中心原点)
   var shipHull = this.add.graphics();
   shipHull.fillStyle(0x1B3A5B, 1);
-  shipHull.fillRect(-12, -5, 24, 10);
-  // 船头 (金色三角尖端在前)
+  shipHull.fillRect(-36, -9, 72, 18);
+  // 船身下侧暗影 (右半加深, 模拟立体感)
+  shipHull.fillStyle(0x0E2238, 1);
+  shipHull.fillRect(-36, 3, 72, 6);
+  // 2) 船头 (扁平 + logo 金色圆牌, 不用三角尖) — 船头在 +X 端
   var shipBow = this.add.graphics();
   shipBow.fillStyle(0xD4A017, 1);
-  shipBow.fillTriangle(12, -5, 12, 5, 22, 0);
-  // 船尾 (深色矩形)
+  // 船头扁平矩形 (36→40), 略凸出船身
+  shipBow.fillRect(36, -9, 4, 18);
+  // 船头 logo 圆牌 (金色, +X 端)
+  shipBow.fillStyle(0xFFD700, 1);
+  shipBow.fillCircle(38, 0, 3);
+  shipBow.fillStyle(0x8B6B3A, 1);
+  shipBow.fillCircle(38, 0, 1.5);
+  // 3) 船尾 (圆弧, 用 fillCircle 切一半 + 矩形) — 船尾在 -X 端
   var shipStern = this.add.graphics();
   shipStern.fillStyle(0x0E2238, 1);
-  shipStern.fillRect(-12, -5, 4, 10);
-  // 上层建筑 (小方块在船身中后部)
+  // 圆弧 (用 ellipse 模拟)
+  shipStern.fillEllipse(-36, 0, 8, 18);
+  // 船尾深色填充 (跟船身下侧暗影融合)
+  shipStern.fillStyle(0x08182A, 1);
+  shipStern.fillEllipse(-38, 0, 6, 18);
+  // 4) 上层建筑 — 3 层 (主甲板 / 船桥 / 桅杆)
   var shipCabin = this.add.graphics();
-  shipCabin.fillStyle(0x8B7355, 1);
-  shipCabin.fillRect(-4, -8, 8, 3);
-  // 桅杆 (竖线)
+  // 主甲板 (棕色, 在船身中后部 -36 到 0)
+  shipCabin.fillStyle(0xD4B07A, 1);
+  shipCabin.fillRect(-32, -16, 40, 7);
+  // 主甲板舷窗 (4 个小白点)
+  shipCabin.fillStyle(0xFFD98A, 1);
+  for (var wi = 0; wi < 4; wi++) {
+    shipCabin.fillRect(-28 + wi * 8, -14, 3, 2);
+  }
+  // 船桥 (白色, 在主甲板上方中后部)
+  shipCabin.fillStyle(0xF4ECD8, 1);
+  shipCabin.fillRect(-22, -22, 18, 6);
+  // 船桥窗户 (3 个)
+  shipCabin.fillStyle(0x1B3A5E, 1);
+  for (var bwi = 0; bwi < 3; bwi++) {
+    shipCabin.fillRect(-19 + bwi * 6, -20, 3, 2);
+  }
+  // 桅杆底座 (深色, 在船桥中后)
+  shipCabin.fillStyle(0x5C4A2E, 1);
+  shipCabin.fillRect(-16, -28, 2, 6);
+  // 5) 烟囱 2 个 (深灰 + 白烟 tweens 预留位置)
+  var shipFunnels = this.add.graphics();
+  // 烟囱 1 (前, 深灰)
+  shipFunnels.fillStyle(0x3A4A5E, 1);
+  shipFunnels.fillRect(-6, -30, 5, 14);
+  // 烟囱 1 顶部红条
+  shipFunnels.fillStyle(0xB03030, 1);
+  shipFunnels.fillRect(-6, -30, 5, 2);
+  // 烟囱 2 (后, 深灰)
+  shipFunnels.fillStyle(0x3A4A5E, 1);
+  shipFunnels.fillRect(4, -30, 5, 14);
+  // 烟囱 2 顶部红条
+  shipFunnels.fillStyle(0xB03030, 1);
+  shipFunnels.fillRect(4, -30, 5, 2);
+  // 6) 桅杆 + 旗帜 (高耸在船桥上方)
   var shipMast = this.add.graphics();
+  // 桅杆 (竖线, 棕色)
   shipMast.fillStyle(0x5C4A2E, 1);
-  shipMast.fillRect(0, -8, 1, -10);
-  // 旗帜 (金色小条)
-  var shipFlag = this.add.graphics();
-  shipFlag.fillStyle(0xFFD700, 1);
-  shipFlag.fillRect(1, -18, 10, 5);
-  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipMast, shipFlag]);
+  shipMast.fillRect(-15, -42, 1, 14);
+  // 桅杆顶部横杆
+  shipMast.fillRect(-18, -42, 7, 1);
+  // 旗帜 (金色, 三角)
+  shipMast.fillStyle(0xFFD700, 1);
+  shipMast.fillTriangle(-11, -42, -11, -36, -4, -39);
+  shipMast.fillStyle(0xB03030, 1);
+  shipMast.fillTriangle(-11, -42, -11, -39, -7, -40);
+  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipFunnels, shipMast]);
   this.shipContainer = shipContainer;
-  // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
+  // M19: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
   this.shipContainer.setRotation(0);
   this.voyageContainer.add(shipContainer);
 
