@@ -5,12 +5,12 @@
 //
 // 坐标系统：1280×720，左上原点。
 //
-// 6 个礼物：拾取 → 弹 Phaser modal → 选 [装进/留后/放弃] → 装进占 1 行李位（最多 5）。
+// 8 个礼物：拾取 → 弹 Phaser modal → 选 [装进/留后/放弃] → 装进占 1 行李位（最多 6）。
 // 2 个绿洲：玩家走上去 +2 水分（不超过 10）。
-// 6 个真实地名：作为 Phaser Text chip 浮动，纯装饰。
+// 9 个真实地名：作为 Phaser Text chip 浮动，纯装饰 (含 doha_port)。
 
 window.QATAR_LEVEL = {
-  // 关 0 玩家起点 —— Hamad Airport 左下角附近
+  // 关 0 玩家起点 —— Doha 左下角附近 (M15: 跟 hamad_airport 一起退役, 起点仍在左下)
   start: { x: 200, y: 580 },
 
   // 2 个绿洲
@@ -19,27 +19,38 @@ window.QATAR_LEVEL = {
     { x: 980, y: 540, label: 'Katara 绿洲' },
   ],
 
-  // 7 个礼物 —— 顺序即礼物 id（关 0 主线 6 + 1 个隐藏 World Cup）
-  // M11: 加 price 字段（船票兑换总价门槛用）, 把礼物移到 place chip 紧邻位置（视觉聚拢）
+  // M15 Part 2: 8 个礼物 —— 全部对应 Qatar 地标物品 (重设计).
+  //   M11: 加 price 字段（船票兑换总价门槛用）, 把礼物移到 place chip 紧邻位置（视觉聚拢）
+  //   M15: 沙漠之眼 → 沙漠玫瑰 (NMoQ); 风之物语 → 古兰经 (MIA);
+  //         草原之歌 → 火炬塔之火 (Aspire); 雪山之钥 + hamad_airport → 删除;
+  //         新增 天然气 (Ras Laffan LNG); 大海之信 → 波斯湾珍珠 (Corniche);
+  //         归家之心 emoji 🏠 → ❤️ (Pearl/Qatar 主旋律);
+  //         大力神杯 id 从 6 移到 7 (放在 8 个位置最后).
   gifts: [
-    { id: 0, x: 580, y: 320, name: '沙漠之眼',  hint: '给关 1「伊朗·沙漠骆驼」的礼物',     emoji: '👁️', placeId: 'souq_waqif',     price: 25 },
-    { id: 1, x: 380, y: 460, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum', price: 30 },
-    { id: 2, x: 240, y: 240, name: '草原之歌',  hint: '给关 3「哈萨克·草原骑马」的礼物',   emoji: '🌾', placeId: 'aspire_park',    price: 40 },
-    { id: 3, x: 160, y: 480, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport',  price: 15 },
-    { id: 4, x: 1100, y: 450, name: '归家之心', hint: '四川 成都',                         emoji: '🏠', placeId: 'the_pearl',      price: 60 },
-    { id: 5, x: 1110, y: 360, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche',       price: 50 },
-    // M9.5g: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯 (大力神杯)
-    { id: 6, x: 920, y: 220, name: '大力神杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium', price: 100 },
+    { id: 0, x: 540,  y: 330, name: '沙漠玫瑰',    hint: '国家博物馆',         emoji: '🌹',  placeId: 'national_museum', price: 30 },
+    { id: 1, x: 420,  y: 440, name: '古兰经',      hint: '伊斯兰博物馆',       emoji: '📖',  placeId: 'islamic_museum',  price: 40 },
+    { id: 2, x: 580,  y: 340, name: '猎鹰',        hint: '瓦其夫集市',         emoji: '🦅',  placeId: 'souq_waqif',     price: 25 },
+    { id: 3, x: 1110, y: 340, name: '波斯湾珍珠',  hint: '波斯湾珍珠',         emoji: '🦪',  placeId: 'corniche',        price: 35 },
+    // Ras Laffan (North Field LNG) — 北部气田, 卡塔尔最大天然气/LNG 出口港
+    { id: 4, x: 200,  y: 220, name: '天然气',      hint: '北部气田',           emoji: '🔥',  placeId: 'ras_laffan',      price: 60 },
+    { id: 5, x: 1050, y: 490, name: '归家之心',    hint: '四川 成都',          emoji: '❤️',  placeId: 'the_pearl',       price: 80 },
+    { id: 6, x: 280,  y: 260, name: '火炬塔之火',  hint: '体育公园',           emoji: '🔥',  placeId: 'aspire_park',     price: 50 },
+    // M9.5g: 隐藏 World Cup 奖杯 — Lusail Stadium 2022 (大力神杯), M15: id 从 6 → 7
+    { id: 7, x: 880,  y: 200, name: '大力神杯',    hint: '卢赛尔世界杯',       emoji: '🏆',  placeId: 'lusail_stadium',  price: 100 },
   ],
 
-  // 7 个真实地名 — 英文 + 远离 HUD/dpad 区域 (M9.5g)
-  // M12: 加 doha_port chip (港口名) — 在 (280, 660) 跟 dpad 避开.
+  // 9 个真实地名 — 英文 + 远离 HUD/dpad 区域 (M9.5g)
+  // M12: 加 doha_port chip (港口名).
+  // M15: 加 national_museum (NMoQ 沙漠玫瑰建筑) + ras_laffan (北部气田 LNG);
+  //      删 hamad_airport (官方任务移到 Ras Laffan LNG).
   places: [
-    // airport 抬到 y=520 (避 dpad 620), museum 在 y=460 (与 airport 距离 220px + chip 100px, OK)
-    { id: 'hamad_airport',   x: 200,  y: 520, label: 'Hamad Airport' },
+    // NMoQ 沙漠玫瑰建筑 (国家博物馆)
+    { id: 'national_museum', x: 540,  y: 350, label: 'National Museum of Qatar' },
     { id: 'islamic_museum',  x: 420,  y: 460, label: 'Museum of Islamic Art' },
-    { id: 'souq_waqif',      x: 580,  y: 340, label: 'Souq Waqif' },
+    { id: 'souq_waqif',      x: 580,  y: 320, label: 'Souq Waqif' },
     { id: 'corniche',        x: 1110, y: 320, label: 'Corniche' },
+    // Ras Laffan — 卡塔尔北部 LNG 港 (North Field 北部气田)
+    { id: 'ras_laffan',      x: 200,  y: 200, label: 'Ras Laffan (North Field)' },
     { id: 'the_pearl',       x: 1050, y: 470, label: 'The Pearl' },
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park' },
     // lusail 掉到 y=180 (避 HUD 顶栏 y=36 + 高度 72, 留 18px 间距)
@@ -51,7 +62,7 @@ window.QATAR_LEVEL = {
   // 老商人 NPC —— M11 改为港口 NPC (Doha Port 多哈港, M11 part 5 从 Mesaieed 改名).
   // 多哈港是卡塔尔首都的传统出海口, 跟 level 0 起点 Hamad Airport 同经度 (51.53°E).
   // M13 Bug 3: 移到右下方 (1010, 660), 远离 dpad (110, 620) 防止误触.
-  // emoji ⚓ 海蓝主题 (L.port), 玩家拾满 6 件后来此兑换船票.
+  // emoji ⚓ 海蓝主题 (L.port), 玩家拾满 8 件后来此兑换船票.
   // M12: port.name 英文 "Doha Port"; port.line 英文. issue 4: 多语言统一.
   port: { x: 1010, y: 660, emoji: '⚓', name: 'Doha Port',
          line: "Doha Port is Qatar's historic maritime gateway to Persia. Bring your collected items here to exchange for a ship ticket. ⚓" },
@@ -87,8 +98,8 @@ window.QATAR_LEVEL = {
   WATER_BOUNDARY_HIT: 0.5,    // 撞边界 -0.5
   WATER_OASIS_REWARD: 2,      // 绿洲 +2
   WATER_MAX: 10,
-  // M12: LUGGAGE_MAX 6 — 6 件物品可以全部装进, 让玩家可选 N 件兑换 (issue 6).
-  // M11: 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 6 但行李只装 5 件是合法的.
+  // M12: LUGGAGE_MAX 6 — 玩家从 8 件里任选 6 件装进, 让玩家可选 N 件兑换 (issue 6).
+  // M11: 同时港口船票兑换要 总价 >= PORT_TICKET_PRICE_THRESHOLD, 拾满 8 行李只装 6 件是合法的.
   LUGGAGE_MAX: 6,
   MIN_PICKUPS_TO_CLAIM: 3,    // 至少拾取 3 件才能领奖
   // M11: 港口船票兑换阈值 — 玩家必须带够 ¥170 价值的礼物才能换船票

@@ -148,8 +148,9 @@
 
       // 关卡任务说明 - 在 NPC banner 与 avatar picker 之间
       // M9.1: 不做 narrative card 改做一行显眼的小卡
-      // M12 Bug 3: 「礼物」→「物品」; 任务描述改为「收集 6 件物品 → 去 Doha Port 兑换船票」
-      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 6 件物品，然后去 Doha Port 兑换去伊朗的船票 🛳️', {
+      // M12 Bug 3: 「礼物」→「物品」; 任务描述改为「收集 8 件物品 → 去 Doha Port 兑换船票」
+      // M15 Part 2: 6 → 8 (加 Ras Laffan 天然气 + NMoQ 沙漠玫瑰).
+      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 8 件物品，然后去 Doha Port 兑换去伊朗的船票 🛳️', {
         fontSize: '16px', color: '#F4ECD8', fontStyle: 'italic', wordWrap: { width: 1000 },
       }).setOrigin(0.5);
 
@@ -232,16 +233,17 @@
         self.oasisSprites.push(oasis);
       });
 
-      // —— 7 个礼物 ——
+      // —— 8 个礼物 ——
       // M13 Bug 2: gift sprite y_offset 从 +22 改 +10, 配合 place chip 上移到 -22,
       //             视觉间距 = 22 + 16 (chip half h) + 10 = 48px, 比 M12 紧凑但仍分开.
+      // M15 Part 2: 7 → 8 gifts, 大力神杯 id 从 6 移到 7 (PNG 同前).
       this.giftSprites = [];
       // M9.5g: 给每个 gift 单独构建 sprite.
-      // M9.6a: gift 6 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
-      // 其他 6 个保留 emoji (修饰, 省事).
+      // M9.6a: gift id=7 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
+      // 其他 7 个保留 emoji (修饰, 省事).
       L.gifts.forEach(function (g) {
         var sprite;
-        if (g.id === 6) {
+        if (g.id === 7) {
           // M9.6a: World Cup trophy — 用 user-provided PNG (key-out 白底).
           // PNG 128x128 sprite 框内有 sports decoration.
           // 给我们 gift 大体 64x64 显示 (调 display size).
@@ -327,7 +329,7 @@
       this.waterText = this.add.text(180, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
-      this.pickupText = this.add.text(640, 30, '🎁 拾起 ' + this.pickupCount + ' / 6', {
+      this.pickupText = this.add.text(640, 30, '🎁 拾起 ' + this.pickupCount + ' / 8', {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       this.luggageText = this.add.text(1100, 30, '🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX, {
@@ -718,14 +720,15 @@
       this.currentGiftId = null;
       this.state = 'PLAYING';
       this.pickupCount++;
-      this.pickupText.setText('🎁 拾起 ' + this.pickupCount + ' / 6');
+      this.pickupText.setText('🎁 拾起 ' + this.pickupCount + ' / 8');
 
       if (!this.npcShownPickup3 && this.pickupCount >= 3) {
         this.npcShownPickup3 = true;
         this.setNpcFrame(1);
       }
-      // M11: 拾满 6 弹 pickup-done modal —— 提示玩家去港口兑换船票 (不再直接 enterResult).
-      if (this.pickupCount >= 6) {
+      // M11: 拾满 8 弹 pickup-done modal —— 提示玩家去港口兑换船票 (不再直接 enterResult).
+      // M15 Part 2: 6 → 8 gifts, 所以拾满阈值从 6 升到 8.
+      if (this.pickupCount >= 8) {
         this._showPickupMaxedModal();
         return;
       }
@@ -735,7 +738,8 @@
       this.pauseContainer.setVisible(true);
     },
 
-    // M11 part 3: 拾满 6 件 → 弹 pickup-done modal, 提示去港口兑换船票
+    // M11 part 3: 拾满 8 件 → 弹 pickup-done modal, 提示去港口兑换船票
+    // M15 Part 2: 6 → 8 gifts
     _showPickupMaxedModal: function () {
       var self = this;
       this.modalContainer.removeAll(true);
@@ -809,10 +813,10 @@
       this.modalContainer.add(card);
 
       // M11 part 3: 港口船票兑换条件
-      //   - 拾满 6 件 (pickupCount >= 6)
-      //   - 行李装够 MIN_LUGGAGE_TO_BOARD 件 (默认 5)
+      //   - 拾满 8 件 (pickupCount >= 8) — M15 Part 2: 6 → 8 gifts
+      //   - 行李装够 MIN_LUGGAGE_TO_BOARD 件 (默认 1)
       //   - 行李总价 >= PORT_TICKET_PRICE_THRESHOLD (默认 ¥170)
-      var hasAllGifts = this.pickupCount >= 6;
+      var hasAllGifts = this.pickupCount >= 8;
       var totalPrice = this.totalLuggagePrice();
       var canAfford = totalPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
       var enoughLuggage = this.luggageCount >= L.MIN_LUGGAGE_TO_BOARD;
@@ -859,7 +863,8 @@
 
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
       } else if (hasAllGifts && !canExchange) {
-        // ⚠️ 拾满 6 但不满足兑换条件 → 灰色禁用按钮 + 提示缺啥
+        // ⚠️ 拾满 8 但不满足兑换条件 → 灰色禁用按钮 + 提示缺啥
+        // M15 Part 2: 6 → 8 gifts
         var reasons = [];
         if (!enoughLuggage) reasons.push('行李不足 ' + this.luggageCount + '/' + L.MIN_LUGGAGE_TO_BOARD);
         if (!canAfford) reasons.push('总价 ¥' + totalPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD);
@@ -893,7 +898,8 @@
       } else {
         // 没拾满: 普通对话 — 1 个按钮
         // M12 Bug 3: 「礼物」→「物品」
-        this.modalContainer.add(this.add.text(0, 60, '物品还没齐（' + this.pickupCount + '/6），先去把 6 件都找齐了再来找我吧。', {
+        // M15 Part 2: 6 → 8 gifts
+        this.modalContainer.add(this.add.text(0, 60, '物品还没齐（' + this.pickupCount + '/8），先去把 8 件都找齐了再来找我吧。', {
           fontSize: '12px', color: '#A8D8C0', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
@@ -963,7 +969,7 @@ _showTicketModal: function () {
     self.modalContainer.setVisible(false);
     // M11 part 3: 兑换船票 → 必须在 canExchange 前提下才能 enterResult.
     // M12 Bug 6: 改成检查 _selectedPrice 而非 totalLuggagePrice (玩家可能选部分礼物)
-    var canExchangeNow = self.pickupCount >= 6
+    var canExchangeNow = self.pickupCount >= 8
       && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
       && self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD;
     if (canExchangeNow) {
@@ -1001,7 +1007,7 @@ _showExchangeModal: function () {
     var backdrop = self.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
     self.modalContainer.add(backdrop);
 
-    // 加高 card 容纳 6 个 checkbox
+    // 加高 card 容纳 8 个 checkbox (M15 Part 2: 6 → 8 gifts)
     var card = self.add.rectangle(0, 0, 560, 460, 0x1B3A5E, 1)
       .setStrokeStyle(2, 0x5fb3a0, 0.7);
     self.modalContainer.add(card);
@@ -1014,10 +1020,10 @@ _showExchangeModal: function () {
       fontSize: '11px', color: '#A8D8C0', fontStyle: 'italic',
     }).setOrigin(0.5));
 
-    // 6 行 checkbox + emoji + name + price (按 gift id 排序)
+    // 8 行 checkbox + emoji + name + price (按 gift id 排序, M15 Part 2)
     var startY = -90;
     var rowH = 36;
-    var ids = [].concat(self._selectedGiftIds).concat([0,1,2,3,4,5,6].filter(function (id) {
+    var ids = [].concat(self._selectedGiftIds).concat([0,1,2,3,4,5,6,7].filter(function (id) {
       return self._selectedGiftIds.indexOf(id) === -1;
     }));
     // 仅显示 bucket 里的 (玩家可以选未 bucket 的吗? 不能 - _showExchangeModal 只在 hasAllGifts+canAfford 时打开,
@@ -1066,9 +1072,9 @@ _showExchangeModal: function () {
         fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0, 0.5));
 
-      // 提示归家之心
+      // 提示归家之心 (M15 Part 2: emoji 🏠 → ❤️)
       if (gid === 4) {
-        self.modalContainer.add(self.add.text(120, ry, '🏠 归家之心', {
+        self.modalContainer.add(self.add.text(120, ry, '❤️ 归家之心', {
           fontSize: '10px', color: '#F6B5C8', fontStyle: 'italic',
         }).setOrigin(0, 0.5));
       }
@@ -1427,7 +1433,8 @@ _sumSelectedPrice: function (ids) {
     // ==================== 4 档判定 ====================
     determineTier: function () {
       var bucket = this.bucketCount();
-      var allPicked = this.pickupCount >= 6;
+      // M15 Part 2: 全部拾起条件从 6 升到 8 gifts
+      var allPicked = this.pickupCount >= 8;
       if (allPicked && this.water > 5) return 'PERFECT';
       if ((bucket >= 4 || allPicked) && this.water > 0) return 'NORMAL';
       if (bucket >= 3 || this.pickupCount >= 3) {
@@ -1581,8 +1588,9 @@ _sumSelectedPrice: function (ids) {
       this.add.text(640, 240, quote, {
         fontSize: '16px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 460 },
       }).setOrigin(0.5);
-      // M12 Bug 3: 「收 N 件」改「收 N 件物品」; 「拾 N/6 礼物」改「拾 N/6 物品」
-      this.add.text(640, 320, '收 ' + this.bucket + ' 件物品 · 拾 ' + this.picked + ' / 6 物品 · 水分 ' +
+      // M12 Bug 3: 「收 N 件」改「收 N 件物品」; 「拾 N/6 礼物」改「拾 N/8 物品」
+      // M15 Part 2: 6 → 8 gifts
+      this.add.text(640, 320, '收 ' + this.bucket + ' 件物品 · 拾 ' + this.picked + ' / 8 物品 · 水分 ' +
         this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
