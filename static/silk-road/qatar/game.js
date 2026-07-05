@@ -159,7 +159,7 @@
       this.drawDunes(0xB58A55, 560, 90);
 
       // —— 7 个地名 chip (M12: 加 doha_port) ——
-      // M12 Bug 5: place chip 整体上移 36px (从 p.y 改成 p.y - 36), 跟 gift 分开不再重叠
+      // M13 Bug 2: place chip y_offset 从 -36 改 -22, 离 gift 更紧凑
       // M12 Bug 2: chip text 加 wordWrap:false + setFixedSize 防止 emoji 或 fallback 字体换行
       this.placeSprites = [];
       L.places.forEach(function (p) {
@@ -175,7 +175,7 @@
         }).setOrigin(0.5);
         // 强制单行 + 限制宽度兜底 (M12 Bug 2: emoji 撑宽会触发中文 fallback 换行)
         t.setFixedSize(w - 12, 14);
-        var chip = self.add.container(p.x, p.y - 36, [bg, t]);
+        var chip = self.add.container(p.x, p.y - 22, [bg, t]);
         self.placeSprites.push(chip);
       });
 
@@ -195,8 +195,8 @@
       });
 
       // —— 7 个礼物 ——
-      // M12 Bug 5: gift sprite 中心下移 22px (从 g.y 改成 g.y + 22),
-      //             配合 place chip 上移 36px, 视觉顺序: chip → empty → gift emoji → label.
+      // M13 Bug 2: gift sprite y_offset 从 +22 改 +10, 配合 place chip 上移到 -22,
+      //             视觉间距 = 22 + 16 (chip half h) + 10 = 48px, 比 M12 紧凑但仍分开.
       this.giftSprites = [];
       // M9.5g: 给每个 gift 单独构建 sprite.
       // M9.6a: gift 6 (大力神杯) 现在用 user-provided PNG (从 PNG vendor 中 load),
@@ -207,7 +207,7 @@
           // M9.6a: World Cup trophy — 用 user-provided PNG (key-out 白底).
           // PNG 128x128 sprite 框内有 sports decoration.
           // 给我们 gift 大体 64x64 显示 (调 display size).
-          var container = self.add.container(g.x, g.y + 22);
+          var container = self.add.container(g.x, g.y + 10);
           // 光晕 (金黄) 跟其他 gift 一致
           var glow = self.add.graphics();
           glow.fillStyle(0xFFD98A, 0.4);
@@ -238,7 +238,7 @@
           }).setOrigin(0.5);
           // M12 Bug 2: 强制单行 + 限制宽度 (中文 4 字 11px ≈ 44px, 80px 兜底够用)
           label.setFixedSize(80, 14);
-          sprite = self.add.container(g.x, g.y + 22, [glow, bag, label]);
+          sprite = self.add.container(g.x, g.y + 10, [glow, bag, label]);
         }
         sprite.giftData = g;
         sprite.collected = false;
@@ -1117,11 +1117,9 @@ _sumSelectedPrice: function (ids) {
         .setStrokeStyle(2, 0xFFD98A, 0.5);
       this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -140, '💧 渴死啦', {
-        fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -100, '输入你最想告诉我的话\n（一句话秘密，不存在数据库，只发飞书）', {
-        fontSize: '13px', color: '#C9B89A', align: 'center', wordWrap: { width: 420 },
+      this.modalContainer.add(this.add.text(0, -140, '💧 渴死啦 · 告诉我一个小秘密', {
+        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
+        align: 'center', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
       // DOM textarea 覆盖在 Phaser canvas 上 —— Phaser 没有原生 text input
@@ -1159,25 +1157,27 @@ _sumSelectedPrice: function (ids) {
         ta = document.createElement('textarea');
         ta.id = 'phaser-revive-text';
         ta.maxLength = 500;
-        // M11 part 5: textarea 缩小, top 抬到 46% 让出空间给发送键; 移动设备再缩到 max-height 80px 避 iOS 键盘遮太多
+        // M13 Bug 5: textarea 缩小 + 移到 modal 上半区 (top:42%) 不挡发送按钮
+        //  模态卡中点是 (640, 240), 高度 380, 上半到 y=50, 屏 y=290 → 42% 视口 = 302
+        //  发送按钮在 modalContainer 内部 dy=110 → 屏 y=240+110=350, 跟 textarea (屏 y=302) 错开 48px
         var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
-        var minH = isMobile ? '40px' : '60px';
-        var maxH = isMobile ? '80px' : '120px';
+        var minH = isMobile ? '32px' : '36px';
+        var maxH = isMobile ? '44px' : '48px';
         ta.style.cssText = [
           'position:fixed',
-          'left:50%', 'top:46%',
+          'left:50%', 'top:42%',
           'transform:translate(-50%,-50%)',
-          'width:min(420px,90vw)',
+          'width:min(280px,70vw)',
           'min-height:' + minH,
           'max-height:' + maxH,
-          'padding:8px 12px',
-          'border-radius:12px',
+          'padding:6px 10px',
+          'border-radius:8px',
           'border:1px solid #4a5578',
           'background:#2a2140',
           'color:#f4ecd8',
-          'font-size:15px',
+          'font-size:14px',
           'font-family:inherit',
-          'resize:vertical',
+          'resize:none',
           'z-index:99999',
           'display:none',
         ].join(';');

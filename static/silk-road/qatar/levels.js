@@ -26,7 +26,7 @@ window.QATAR_LEVEL = {
     { id: 1, x: 380, y: 460, name: '风之物语',  hint: '给关 2「土耳其·热气球」的礼物',     emoji: '🎈', placeId: 'islamic_museum', price: 30 },
     { id: 2, x: 240, y: 240, name: '草原之歌',  hint: '给关 3「哈萨克·草原骑马」的礼物',   emoji: '🌾', placeId: 'aspire_park',    price: 40 },
     { id: 3, x: 160, y: 480, name: '雪山之钥',  hint: '给关 4「新疆·雪山滑雪」的礼物',     emoji: '❄️', placeId: 'hamad_airport',  price: 15 },
-    { id: 4, x: 1100, y: 450, name: '归家之心', hint: '给关 5「成都·到家」的礼物',         emoji: '🏠', placeId: 'the_pearl',      price: 60 },
+    { id: 4, x: 1100, y: 450, name: '归家之心', hint: '四川 成都',                         emoji: '🏠', placeId: 'the_pearl',      price: 60 },
     { id: 5, x: 1110, y: 360, name: '大海之信', hint: '关 5 之后的隐藏奖励',                emoji: '🌊', placeId: 'corniche',       price: 50 },
     // M9.5g: 第 7 个礼物 — Lusail Stadium 2022 World Cup 奖杯 (大力神杯)
     { id: 6, x: 920, y: 220, name: '大力神杯', hint: '🇶🇦 卡塔尔 2022 世界杯 🇶🇦 — Lusail Stadium 主场', emoji: '🏆', placeId: 'lusail_stadium', price: 100 },
@@ -44,16 +44,16 @@ window.QATAR_LEVEL = {
     { id: 'aspire_park',     x: 280,  y: 240, label: 'Aspire Park' },
     // lusail 掉到 y=180 (避 HUD 顶栏 y=36 + 高度 72, 留 18px 间距)
     { id: 'lusail_stadium',  x: 880,  y: 180, label: 'Lusail Stadium' },
-    // M12: Doha Port chip — 跟 port NPC (L.port) 同坐标, 标港口名
-    { id: 'doha_port',       x: 280,  y: 660, label: 'Doha Port' },
+    // M13 Bug 3: Doha Port chip — 跟 port NPC (L.port) 同坐标, 移至右下方远离 dpad (110, 620)
+    { id: 'doha_port',       x: 1010, y: 660, label: 'Doha Port' },
   ],
 
   // 老商人 NPC —— M11 改为港口 NPC (Doha Port 多哈港, M11 part 5 从 Mesaieed 改名).
-  // 多哈港是卡塔尔首都的传统出海口, 跟 level 0 起点 Hamad Airport 同经度 (51.53°E),
-  // 位置上仍用 (280, 660) 跟 dpad 避开.
+  // 多哈港是卡塔尔首都的传统出海口, 跟 level 0 起点 Hamad Airport 同经度 (51.53°E).
+  // M13 Bug 3: 移到右下方 (1010, 660), 远离 dpad (110, 620) 防止误触.
   // emoji ⚓ 海蓝主题 (L.port), 玩家拾满 6 件后来此兑换船票.
   // M12: port.name 英文 "Doha Port"; port.line 英文. issue 4: 多语言统一.
-  port: { x: 280, y: 660, emoji: '⚓', name: 'Doha Port',
+  port: { x: 1010, y: 660, emoji: '⚓', name: 'Doha Port',
          line: "Doha Port is Qatar's historic maritime gateway to Persia. Bring your collected items here to exchange for a ship ticket. ⚓" },
 
   // NPC banner 4 帧文案（最后一帧是找到 Lusail Stadium 触发的 World Cup 文案）

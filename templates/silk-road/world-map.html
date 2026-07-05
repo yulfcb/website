@@ -526,14 +526,18 @@
 
         var href = clickable ? ('/games/silk-road/level/' + lv.id) : 'javascript:void(0)';
 
-        // M12 Bug 1: 关 1 (伊朗·阿巴斯港) marker label 放右侧单行,
+        // M13 Bug 1: 关 1 (伊朗·阿巴斯港) marker 三个 label 都放右侧垂直堆
 //   Bandar Abbas (56.27, 27.18) 投影后 x≈664, y≈384; Doha (51.53, 25.30) 投影后 x≈575, y≈448.
-//   水平差 89px, 垂直差 64px — label 放右侧 (xy[0]+30) 单行, 不会跟 Doha 重叠.
+//   水平差 89px, 垂直差 64px — marker 圈右侧垂直堆 3 个文字标签:
+//     第 N 關 (y-30) → title (y+6) → place (y+22) 都在右侧, 不跟 Doha marker 重叠.
+        var labelAnchor = (lv.id === 1);
+        var labelDx = labelAnchor ? (xy[0] + 30).toFixed(1) : xy[0].toFixed(1);
+        var labelAnchorAttr = labelAnchor ? 'start' : 'middle';
         var placeLabel;
         if (lv.id === 1) {
-          placeLabel = '<text x="' + (xy[0] + 30).toFixed(1) + '" y="' + (xy[1] + 4).toFixed(1) + '" text-anchor="start" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">伊朗·阿巴斯港</text>';
+          placeLabel = '<text x="' + labelDx + '" y="' + (xy[1] + 22).toFixed(1) + '" text-anchor="' + labelAnchorAttr + '" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">伊朗·阿巴斯港</text>';
         } else {
-          placeLabel = '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>';
+          placeLabel = '<text x="' + labelDx + '" y="' + (xy[1] + 58).toFixed(1) + '" text-anchor="' + labelAnchorAttr + '" font-size="11" fill="#6B4423" stroke="#F5E8C8" stroke-width="2.5" paint-order="stroke">' + esc(lv.place) + '</text>';
         }
 
         svg += ''
@@ -544,8 +548,8 @@
           +   '<circle cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="22" fill="#8B5A2B" stroke="#5C3A1E" stroke-width="2" filter="url(#markerShadow)"/>'
           +   '<circle cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="17" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5" opacity="' + strokeOpacity + '"/>'
           +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 6).toFixed(1) + '" text-anchor="middle" font-size="20" font-family="-apple-system, sans-serif">' + esc(lv.vehicle) + '</text>'
-          +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] - 30).toFixed(1) + '" text-anchor="middle" font-size="12" font-weight="800" fill="#F5E8C8" stroke="#5C3A1E" stroke-width="3" paint-order="stroke">第 ' + lv.id + ' 關</text>'
-          +   '<text x="' + xy[0].toFixed(1) + '" y="' + (xy[1] + 42).toFixed(1) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#5C3A1E" stroke="#F5E8C8" stroke-width="3.5" paint-order="stroke">' + esc(lv.title) + '</text>'
+          +   '<text x="' + labelDx + '" y="' + (xy[1] - 30).toFixed(1) + '" text-anchor="' + labelAnchorAttr + '" font-size="12" font-weight="800" fill="#F5E8C8" stroke="#5C3A1E" stroke-width="3" paint-order="stroke">第 ' + lv.id + ' 關</text>'
+          +   '<text x="' + labelDx + '" y="' + (xy[1] + 6).toFixed(1) + '" text-anchor="' + labelAnchorAttr + '" font-size="13" font-weight="700" fill="#5C3A1E" stroke="#F5E8C8" stroke-width="3.5" paint-order="stroke">' + esc(lv.title) + '</text>'
           +   placeLabel
           +   (clearedLv ? '<text x="' + (xy[0] + 18).toFixed(1) + '" y="' + (xy[1] - 14).toFixed(1) + '" text-anchor="middle" font-size="16">✅</text>' : '')
           + '</g>';
