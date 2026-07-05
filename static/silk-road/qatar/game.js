@@ -74,6 +74,25 @@
         if (a) a.pause();
       });
 
+      // M15 Bug B: 预取 countries-110m.json + topojson 解码 (后台进行,
+      // ResultScene.buildVoyageContainer 读取 window.__qatarCountriesGeo).
+      // 玩家至少玩几分钟才会触发 voyage, 给 fetch 充分时间.
+      if (window.topojson && !window.__qatarCountriesGeo) {
+        fetch('/static/vendor/world-atlas/countries-110m.json')
+          .then(function (r) {
+            if (!r.ok) throw new Error('fetch topo failed: ' + r.status);
+            return r.json();
+          })
+          .then(function (topo) {
+            try {
+              window.__qatarCountriesGeo = window.topojson.feature(topo, topo.objects.countries);
+            } catch (e) {
+              console.warn('[qatar-m15] topojson decode failed:', e);
+            }
+          })
+          .catch(function (e) { console.warn('[qatar-m15] topo fetch failed:', e); });
+      }
+
       // 短暂延迟 → IntroScene（保留 0 ms 也行；这里 30 ms 让浏览器渲一帧）
       // 用闭包 self 引 BootScene，避免 time.delayedCall 把 args 当 this（Phaser 3 API）
       this.time.delayedCall(30, function () {
@@ -1155,108 +1174,178 @@ _sumSelectedPrice: function (ids) {
     },
 
     showReviveModal: function (forceRestart) {
-      var self = this;
-      this.modalContainer.removeAll(true);
-
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 0.85->0.45
-      // M8.5：backdrop 不该 interactive
-      this.modalContainer.add(backdrop);
-
-      var card = this.add.rectangle(0, 0, 500, 380, 0x3A2140, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.5);
-      this.modalContainer.add(card);
-
-      this.modalContainer.add(this.add.text(0, -140, '💧 渴死啦 · 告诉我一个小秘密', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-        align: 'center', wordWrap: { width: 400 },
-      }).setOrigin(0.5));
-
-      // DOM textarea 覆盖在 Phaser canvas 上 —— Phaser 没有原生 text input
-      var ta = this.getOrCreateTextarea();
-
-      var sendBg = this.add.rectangle(-100, 110, 160, 50, 0xF6B5C8, 1);
-      var sendText = this.add.text(-100, 110, forceRestart ? '发送·继续' : '发送·复活', {
-        fontSize: '14px', color: '#2A190E', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var sendZone = this.add.zone(-100, 110, 160, 50).setInteractive({ useHandCursor: true });
-      sendZone.on('pointerdown', function () { self.submitSecret(forceRestart, ta); });
-
-      var giveupBg = this.add.rectangle(100, 110, 160, 50, 0x2A2140, 1)
-        .setStrokeStyle(1, 0x4A5578);
-      var giveupText = this.add.text(100, 110, '放弃', {
-        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var giveupZone = this.add.zone(100, 110, 160, 50).setInteractive({ useHandCursor: true });
-      giveupZone.on('pointerdown', function () { self.giveUp(); });
-
-      this.modalContainer.add([sendBg, sendText, sendZone, giveupBg, giveupText, giveupZone]);
+      // M15 Bug A: 纯 HTML <div> modal — 替代 Phaser 浮动 DOM textarea 方案
+      // 整个 modal card 用 HTML 渲染, Phaser 只触发 show/hide
+      var modal = this.getOrCreateReviveModal();
+      // 设置按钮文案: M9.5g 强制原地复活 → 「发送·继续」
+      var sendBtn = modal.querySelector('.btn-send');
+      if (sendBtn) sendBtn.textContent = forceRestart ? '发送·继续' : '发送·复活';
+      // 保存 forceRestart 给 submitSecret 用
+      modal._forceRestart = !!forceRestart;
+      modal._scene = this;
+      modal.show();
 
       this.joystickContainer.setVisible(false);
       (this.actionContainer && this.actionContainer.setVisible(false));
       this.pauseContainer.setVisible(false);
       this.modalContainer.setVisible(true);
 
-      // 自动聚焦
-      this.time.delayedCall(50, function () { ta.focus(); });
+      // 自动聚焦 (50ms 等 modal 显示完)
+      var self = this;
+      this.time.delayedCall(50, function () {
+        var ta = modal.querySelector('textarea');
+        if (ta) ta.focus();
+      });
     },
 
-    getOrCreateTextarea: function () {
-      var ta = document.getElementById('phaser-revive-text');
-      if (!ta) {
-        ta = document.createElement('textarea');
-        ta.id = 'phaser-revive-text';
-        ta.maxLength = 500;
-        // M13 Bug 5: textarea 缩小 + 移到 modal 上半区 (top:42%) 不挡发送按钮
-        //  模态卡中点是 (640, 240), 高度 380, 上半到 y=50, 屏 y=290 → 42% 视口 = 302
-        //  发送按钮在 modalContainer 内部 dy=110 → 屏 y=240+110=350, 跟 textarea (屏 y=302) 错开 48px
-        var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
-        var minH = isMobile ? '32px' : '36px';
-        var maxH = isMobile ? '44px' : '48px';
-        ta.style.cssText = [
-          'position:fixed',
-          'left:50%', 'top:42%',
-          'transform:translate(-50%,-50%)',
-          'width:min(280px,70vw)',
-          'min-height:' + minH,
-          'max-height:' + maxH,
-          'padding:6px 10px',
-          'border-radius:8px',
-          'border:1px solid #4a5578',
-          'background:#2a2140',
-          'color:#f4ecd8',
-          'font-size:14px',
-          'font-family:inherit',
-          'resize:none',
-          'z-index:99999',
-          'display:none',
-        ].join(';');
-        document.body.appendChild(ta);
-      }
-      ta.value = '';
-      ta.disabled = false;
-      ta.style.display = 'block';
-      return ta;
+    // M15 Bug A: HTML modal — 替代浮动 textarea. 整个 modal card 都是 HTML,
+    // 这样输入框真正嵌在 modal card 内, 不会被 Phaser 内部 z-index/事件拦截.
+    getOrCreateReviveModal: function () {
+      var root = document.getElementById('phaser-revive-modal');
+      if (root) return root;
+      // 全屏 fixed 容器
+      root = document.createElement('div');
+      root.id = 'phaser-revive-modal';
+      root.style.cssText = [
+        'position:fixed', 'inset:0',
+        'display:none',
+        'z-index:99999',
+        'align-items:center', 'justify-content:center',
+        'font-family:inherit',
+      ].join(';');
+      // 半透明 backdrop
+      var backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.style.cssText = [
+        'position:absolute', 'inset:0',
+        'background:rgba(20,12,6,0.45)',
+      ].join(';');
+      root.appendChild(backdrop);
+      // modal card
+      var card = document.createElement('div');
+      card.className = 'modal-card';
+      card.style.cssText = [
+        'position:relative',
+        'max-width:500px', 'width:min(500px,calc(100vw - 32px))',
+        'padding:24px',
+        'border-radius:12px',
+        'background:#3A2140',
+        'border:2px solid rgba(255,217,138,0.5)',
+        'box-shadow:0 10px 40px rgba(0,0,0,0.6)',
+        'color:#FFD98A',
+      ].join(';');
+      // 标题
+      var h3 = document.createElement('h3');
+      h3.textContent = '💧 渴死啦 · 告诉我一个小秘密';
+      h3.style.cssText = [
+        'margin:0 0 14px 0',
+        'font-size:18px', 'font-weight:bold',
+        'color:#FFD98A', 'text-align:center',
+      ].join(';');
+      card.appendChild(h3);
+      // textarea — 真正嵌在 modal card 内
+      var ta = document.createElement('textarea');
+      ta.className = 'modal-textarea';
+      ta.maxLength = 500;
+      ta.placeholder = '一句话秘密…';
+      ta.style.cssText = [
+        'display:block',
+        'width:100%', 'box-sizing:border-box',
+        'min-height:80px', 'max-height:140px',
+        'padding:8px 10px',
+        'border-radius:6px',
+        'border:1px solid #4a5578',
+        'background:#2A2140',
+        'color:#F4ECD8',
+        'font-size:14px',
+        'font-family:inherit',
+        'resize:none',
+        'outline:none',
+      ].join(';');
+      card.appendChild(ta);
+      // 按钮行
+      var btnRow = document.createElement('div');
+      btnRow.className = 'modal-buttons';
+      btnRow.style.cssText = [
+        'display:flex', 'gap:12px', 'justify-content:center',
+        'margin-top:16px',
+      ].join(';');
+      // 发送按钮 (粉色)
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'btn-send';
+      sendBtn.type = 'button';
+      sendBtn.style.cssText = [
+        'flex:1', 'max-width:180px',
+        'padding:10px 16px',
+        'border:none', 'border-radius:8px',
+        'background:#F6B5C8', 'color:#2A190E',
+        'font-size:14px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(sendBtn);
+      // 放弃按钮 (深色)
+      var giveupBtn = document.createElement('button');
+      giveupBtn.className = 'btn-giveup';
+      giveupBtn.type = 'button';
+      giveupBtn.textContent = '放弃';
+      giveupBtn.style.cssText = [
+        'flex:1', 'max-width:180px',
+        'padding:10px 16px',
+        'border:none', 'border-radius:8px',
+        'background:#2A2140', 'color:#A8D8C0',
+        'border:1px solid #4A5578',
+        'font-size:14px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(giveupBtn);
+      card.appendChild(btnRow);
+      root.appendChild(card);
+      document.body.appendChild(root);
+
+      // show/hide API
+      root.show = function () { root.style.display = 'flex'; ta.value = ''; ta.disabled = false; };
+      root.hide = function () { root.style.display = 'none'; };
+
+      // 按钮点击 → 走 scene.submitSecret / scene.giveUp
+      sendBtn.addEventListener('click', function () {
+        if (root._scene && typeof root._scene.submitSecret === 'function') {
+          root._scene.submitSecret(!!root._forceRestart);
+        }
+      });
+      giveupBtn.addEventListener('click', function () {
+        if (root._scene && typeof root._scene.giveUp === 'function') {
+          root._scene.giveUp();
+        }
+      });
+
+      return root;
     },
 
     hideRevive: function () {
       this.modalContainer.setVisible(false);
-      var ta = document.getElementById('phaser-revive-text');
-      if (ta) ta.style.display = 'none';
+      var modal = document.getElementById('phaser-revive-modal');
+      if (modal && modal.hide) modal.hide();
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
       this.pauseContainer.setVisible(true);
     },
 
-    submitSecret: async function (forceRestart, ta) {
-      var text = (ta.value || '').trim();
+    // M15 Bug A: 重构 — modal 自己管 textarea + buttons + forceRestart, 不再传 ta 参数
+    submitSecret: async function (forceRestart) {
+      var modal = document.getElementById('phaser-revive-modal');
+      var ta = modal ? modal.querySelector('textarea') : null;
+      var sendBtn = modal ? modal.querySelector('.btn-send') : null;
+      var text = (ta && ta.value ? ta.value : '').trim();
       if (!text) return;
       ta.disabled = true;
+      if (sendBtn) sendBtn.disabled = true;
 
       if (!this.sessionId) {
         await this.ensureSession();
       }
       if (!this.sessionId) {
         ta.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
         return;
       }
       try {
@@ -1288,9 +1377,11 @@ _sumSelectedPrice: function (ids) {
           }
         } else {
           ta.disabled = false;
+          if (sendBtn) sendBtn.disabled = false;
         }
       } catch (e) {
         ta.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
       }
     },
 
@@ -1635,63 +1726,123 @@ _sumSelectedPrice: function (ids) {
 
   // ==================== M9.5e Voyage 动画 ====================
 // 关 0 通关 → ResultScene → 点继续 → playVoyageAnimation() → 1.8s → window.location.href 到 next 关
-// 在 ResultScene 上画海面 + 卡塔尔-伊朗地图层 + 船 + 字幕. 只用 graphics 内联, 不引外部资源.
+// 在 ResultScene 上画真实中东世界地图 + 船 + 字幕. 只用 graphics 内联, 不引外部资源.
 //
-// M12 Bug 7: 加卡塔尔-伊朗地图层 (Doha pin + Bandar Abbas pin + dashed gold path)
-//            用 d3.geoMercator 算 2 港口投影 (与 world-map 一致 center [60,32] scale 440 translate [640,360])
-//            Doha = (51.53, 25.30), Bandar Abbas = (56.27, 27.18)
+// M15 Bug B: 替换深蓝海背景 → 真实中东世界地图 (Qatar/Saudi/UAE/Iran/Oman + 周边)
+//            - 预取 countries-110m.json (BootScene 后台 fetch)
+//            - d3.geoMercator center [60,32] scale 440 translate [640,360]
+//            - d3.geoPath → SVG d 字符串 → 解析 M/L/Z → Phaser Graphics
+//            - 沙漠色国家 vs 普通陆地色
 // M12 Bug 6: voyage 分支 —— 含归家之心 → 去程; 不含 → 半途回程 (船走 60% 调头回 Doha)
+
+// SVG path d 字符串 → Phaser Graphics moveTo/lineTo (110m 分辨率只用 M/L/Z/H/V, 跳过曲线)
+function __qatarDrawSvgPath(graphics, dStr, strokeStyle, fillStyle) {
+  if (!dStr) return;
+  if (strokeStyle) graphics.lineStyle.apply(graphics, strokeStyle);
+  if (fillStyle) graphics.fillStyle.apply(graphics, fillStyle);
+  // tokenize: 命令字符 + 数字
+  var tokens = [];
+  var re = /([MLZHVCSQTAmlzhvcsqta])|(-?\d+\.?\d*(?:e[-+]?\d+)?)/gi;
+  var m;
+  while ((m = re.exec(dStr)) !== null) {
+    if (m[1]) tokens.push(m[1]);
+    else if (m[2]) tokens.push(parseFloat(m[2]));
+  }
+  var i = 0;
+  var cx = 0, cy = 0;       // current point (绝对坐标)
+  var sx = 0, sy = 0;       // subpath start (Z 回这里)
+  var inFill = !!fillStyle;
+  graphics.beginPath();
+  while (i < tokens.length) {
+    var cmd = tokens[i++];
+    if (typeof cmd === 'number') {
+      // 数字开头的隐式重复上一命令 (M 后默认 L)
+      cmd = '__repeat__';
+      i--; // 回退让循环重新读数字
+    }
+    if (cmd === 'M' || cmd === 'm') {
+      var x = tokens[i++], y = tokens[i++];
+      if (cmd === 'm' && (cx !== 0 || cy !== 0)) { x += cx; y += cy; }
+      cx = x; cy = y; sx = x; sy = y;
+      graphics.moveTo(cx, cy);
+      // M 后跟多对数字 → 隐式 L
+      var nextCmd = tokens[i];
+      while (typeof nextCmd === 'number') {
+        var lx = tokens[i++], ly = tokens[i++];
+        cx = lx; cy = ly;
+        graphics.lineTo(cx, cy);
+        nextCmd = tokens[i];
+      }
+    } else if (cmd === 'L' || cmd === 'l' || cmd === '__repeat__') {
+      var lx = tokens[i++], ly = tokens[i++];
+      if (cmd === 'l' || cmd === '__repeat__' && false) { /* absolute path uses absolute */ }
+      cx = lx; cy = ly;
+      graphics.lineTo(cx, cy);
+      // L 后跟多对数字 → 继续 L
+      var next = tokens[i];
+      while (typeof next === 'number') {
+        cx = tokens[i++]; cy = tokens[i++];
+        graphics.lineTo(cx, cy);
+        next = tokens[i];
+      }
+    } else if (cmd === 'H' || cmd === 'h') {
+      var hx = tokens[i++];
+      cx = (cmd === 'h') ? cx + hx : hx;
+      graphics.lineTo(cx, cy);
+    } else if (cmd === 'V' || cmd === 'v') {
+      var vy = tokens[i++];
+      cy = (cmd === 'v') ? cy + vy : vy;
+      graphics.lineTo(cx, cy);
+    } else if (cmd === 'Z' || cmd === 'z') {
+      graphics.closePath();
+      cx = sx; cy = sy;
+      // SVG 路径 Z 后下一命令若是 M, beginPath 已重置
+    } else if (cmd === 'C' || cmd === 'c' || cmd === 'S' || cmd === 's' ||
+               cmd === 'Q' || cmd === 'q' || cmd === 'T' || cmd === 't' ||
+               cmd === 'A' || cmd === 'a') {
+      // 跳过曲线参数 (按命令消耗合理参数数), 落到端点
+      // C/S: 6 params (3 control+end pairs); c/s: 同样 6
+      // Q/T: 4 params; q/t: 4
+      // A: 7 params; a: 7
+      var paramCount = (cmd === 'C' || cmd === 'c' || cmd === 'S' || cmd === 's') ? 6 :
+                       (cmd === 'Q' || cmd === 'q' || cmd === 'T' || cmd === 't') ? 4 : 7;
+      var endX, endY;
+      // 最后一对是 end point
+      for (var p = 0; p < paramCount - 2; p += 2) {
+        var px = tokens[i++], py = tokens[i++];
+        if ((cmd === 'c' || cmd === 's' || cmd === 'q' || cmd === 't' || cmd === 'a') && (px !== 0 || py !== 0)) {
+          // 简化: 跳过详细转换, 只取最后一个点
+        }
+        void px; void py;
+      }
+      endX = tokens[i++]; endY = tokens[i++];
+      if (cmd === 'c' || cmd === 's' || cmd === 'q' || cmd === 't' || cmd === 'a') {
+        // 相对坐标
+        endX += cx; endY += cy;
+      }
+      cx = endX; cy = endY;
+      graphics.lineTo(cx, cy);
+    } else {
+      // 未知 token (比如 __repeat__ 失败) → 跳过
+      break;
+    }
+  }
+  if (inFill) graphics.fillPath();
+  else graphics.strokePath();
+}
+
 ResultScene.prototype.buildVoyageContainer = function () {
   var self = this;
   this.voyageContainer = this.add.container(0, 0);
   this.voyageContainer.setDepth(3000);  // 盖住所有 ResultScene UI
   this.voyageContainer.setVisible(false);
 
-  // 1) 海面背景 (深蓝渐变 + 海浪)
+  // ===== M15 Bug B: 真实中东世界地图背景 =====
+  // 1) 海面深蓝底 (覆盖整个画布, 国家不画的位置 = 海洋)
   var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
   this.voyageContainer.add(seaBg);
-  // 海面渐变 layer (上深下浅)
-  var grad = this.add.graphics();
-  grad.fillGradientStyle(0x1B3A5E, 0x1B3A5E, 0x4A7AAB, 0x4A7AAB, 1);
-  grad.fillRect(0, 360, 1280, 360);
-  this.voyageContainer.add(grad);
 
-  // 2) 太阳 (橙黄圆, 渐隐在海平面)
-  var sun = this.add.circle(960, 320, 50, 0xFFD98A, 0.9);
-  var halo = this.add.circle(960, 320, 80, 0xFFD98A, 0.25);
-  this.voyageContainer.add(halo);
-  this.voyageContainer.add(sun);
-
-  // 3) 海浪 (3 层弧线)
-  var wave1 = this.add.graphics();
-  wave1.lineStyle(2, 0xA8D8C0, 0.6);
-  wave1.beginPath();
-  for (var x = 0; x <= 1280; x += 20) {
-    var y = 460 + Math.sin(x * 0.025) * 8;
-    if (x === 0) wave1.moveTo(x, y); else wave1.lineTo(x, y);
-  }
-  wave1.strokePath();
-  var wave2 = this.add.graphics();
-  wave2.lineStyle(2, 0xA8D8C0, 0.45);
-  wave2.beginPath();
-  for (var x = 0; x <= 1280; x += 20) {
-    var y = 520 + Math.sin(x * 0.02 + 1) * 10;
-    if (x === 0) wave2.moveTo(x, y); else wave2.lineTo(x, y);
-  }
-  wave2.strokePath();
-  var wave3 = this.add.graphics();
-  wave3.lineStyle(3, 0xFFFFFF, 0.4);
-  wave3.beginPath();
-  for (var x = 0; x <= 1280; x += 20) {
-    var y = 600 + Math.sin(x * 0.018 + 2) * 12;
-    if (x === 0) wave3.moveTo(x, y); else wave3.lineTo(x, y);
-  }
-  wave3.strokePath();
-  this.voyageContainer.add([wave1, wave2, wave3]);
-
-  // ===== M12 Bug 7: 卡塔尔-伊朗地图层 (Doha → Bandar Abbas) =====
-  // 用 d3.geoMercator (跟 world-map.html 一致配置) 算 2 个港口投影
-  // 注意: 这个 voyage 在 voyageContainer (deep 3000) 上画, 不影响主舞台地图
+  // 2) d3 Mercator 投影 (与 world-map.html 一致)
   var voyageProjection = null;
   var dohaXY = null, bandarXY = null;
   if (window.d3 && window.d3.geoMercator) {
@@ -1710,6 +1861,72 @@ ResultScene.prototype.buildVoyageContainer = function () {
   if (!dohaXY || !bandarXY) {
     dohaXY = [480, 460];
     bandarXY = [760, 420];
+  }
+
+  // 3) 画国家轮廓 (若 window.__qatarCountriesGeo 已就绪)
+  //    - 沙漠色国家 (中东+北非重点) vs 普通陆地
+  //    - 只画 viewport 范围内的国家 (用简单 bbox 粗筛)
+  var DESERT_NAMES = new Set([
+    'Saudi Arabia','United Arab Emirates','Qatar','Bahrain','Kuwait',
+    'Oman','Yemen','Iran','Iraq','Jordan','Syria','Israel','Egypt',
+    'Turkmenistan','Uzbekistan','Kazakhstan','Afghanistan','Pakistan',
+    'Western Sahara','Mauritania','Algeria','Libya','Sudan','Mali','Niger','Chad',
+  ]);
+  if (window.__qatarCountriesGeo && voyageProjection && window.d3 && window.d3.geoPath) {
+    try {
+      var geoPath = window.d3.geoPath(voyageProjection);
+      var features = window.__qatarCountriesGeo.features || [];
+      // viewport 范围 (大约 longitude 38-82, latitude 12-52) — 用 bbox 粗筛
+      var lngMin = 38, lngMax = 82, latMin = 8, latMax = 52;
+      for (var fi = 0; fi < features.length; fi++) {
+        var feat = features[fi];
+        var nm = (feat.properties && feat.properties.name) || '';
+        // 计算 feature 中心 (粗筛用)
+        var coords = feat.geometry && feat.geometry.coordinates;
+        if (!coords) continue;
+        // 简化: 通过 d3.geoBounds 算 bbox
+        var bounds = window.d3.geoBounds(feat);
+        var cxLng = (bounds[0][0] + bounds[1][0]) / 2;
+        var cxLat = (bounds[0][1] + bounds[1][1]) / 2;
+        if (cxLng < lngMin - 5 || cxLng > lngMax + 5) continue;
+        if (cxLat < latMin - 5 || cxLat > latMax + 5) continue;
+        // 取 d 字符串
+        var dStr = geoPath(feat);
+        if (!dStr) continue;
+        // 沙漠色 vs 普通陆地
+        var fillColor = DESERT_NAMES.has(nm) ? 0xD4B07A : 0xB5A082;
+        var g = this.add.graphics();
+        __qatarDrawSvgPath(g, dStr,
+          [0.7, 0x4A2E1A, 0.85],  // strokeStyle: width 0.7, color #4A2E1A, alpha 0.85
+          [fillColor, 0.95]);        // fillStyle: 沙色 / 普通色
+        this.voyageContainer.add(g);
+      }
+    } catch (e) {
+      console.warn('[voyage] map draw failed:', e);
+    }
+  } else {
+    // 兜底: 画一个大浅沙色 ellipse 当陆地
+    console.warn('[voyage] __qatarCountriesGeo not ready, drawing fallback landmass');
+    var fallbackLand = this.add.graphics();
+    fallbackLand.fillStyle(0xD4B07A, 0.85);
+    fallbackLand.fillEllipse(640, 380, 1000, 380);
+    fallbackLand.lineStyle(0.7, 0x4A2E1A, 0.85);
+    fallbackLand.strokeEllipse(640, 380, 1000, 380);
+    this.voyageContainer.add(fallbackLand);
+  }
+
+  // 4) 海浪 (细线, 几条) — 盖在地图上, 弱化
+  for (var wi = 0; wi < 3; wi++) {
+    var wg = this.add.graphics();
+    wg.lineStyle(1, 0xA8D8C0, 0.18);
+    wg.beginPath();
+    var yBase = 500 + wi * 50;
+    for (var wx = 0; wx <= 1280; wx += 24) {
+      var wy = yBase + Math.sin(wx * 0.022 + wi * 1.3) * 5;
+      if (wx === 0) wg.moveTo(wx, wy); else wg.lineTo(wx, wy);
+    }
+    wg.strokePath();
+    this.voyageContainer.add(wg);
   }
 
   // 4a) 中段海域轮廓 - 简化的卡塔尔-伊朗海域 (用 sphere path 裁切中东)

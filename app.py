@@ -1464,14 +1464,7 @@ def api_game_reward_claim():
             'UPDATE game_sessions SET last_seen_at=CURRENT_TIMESTAMP, nickname=? WHERE session_id=?',
             (nickname, session_id),
         )
-        existing = conn.execute(
-            "SELECT 1 FROM game_reward_log WHERE session_id=? AND level_id=? AND kind='reward'",
-            (session_id, level),
-        ).fetchone()
-        if existing:
-            conn.commit()
-            return jsonify({'success': True, 'duplicate': True, 'triggered': False})
-        # 先落去重行再发 webhook：避免并发双击各发一次
+        # M15 Bug C: 移除 dedup —— 每次 claim 都发 webhook + 落 log (用于 audit)
         conn.execute(
             "INSERT INTO game_reward_log (session_id, level_id, kind, message_length) "
             "VALUES (?, ?, 'reward', NULL)",

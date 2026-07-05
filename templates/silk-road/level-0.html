@@ -46,6 +46,8 @@
      d3-geo 需要 d3-array (dependencies 写在 d3-geo.min.js 头部). 顺序: array → geo. #}
   <script src="{{ url_for('static', filename='vendor/world-atlas/d3-array.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/world-atlas/d3-geo.min.js') }}"></script>
+  {# M15 Bug B: voyage 地图层需要 topojson-client 解析 countries-110m.json #}
+  <script src="{{ url_for('static', filename='vendor/world-atlas/topojson-client.min.js') }}"></script>
 
   {# 关卡数据 → game.js #}
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
