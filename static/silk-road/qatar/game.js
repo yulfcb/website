@@ -2149,88 +2149,39 @@ ResultScene.prototype.buildVoyageContainer = function () {
   this.voyageBandarXY = bandarXY;
   this.voyageCurve = { mx: mx, my: my };  // Bezier control point
 
-  // 5) 邮轮 (船头指向前进方向 + 翻转动效)
-// M18 Bug 6: 用 Phaser Graphics 画邮轮 (船身 + 船头尖端 + 上层建筑 + 桅杆 + 旗帜)
+  // 5) 帆船 (船头指向前进方向 + 翻转动效)
+// M18 Bug 6: 用 Phaser Graphics 画帆船 (船身 + 船头三角 + 上层建筑 + 桅杆 + 旗帜)
 //           船头朝 +X 方向 (旋转 origin=容器中心), 沿 Bezier 路径用 setRotation(angle) 切线对齐.
 //           返程时 scaleX=-1 镜像 (Graphics 没有 setFlipX, 用 scaleX).
-// M19: 邮轮整体放大 3 倍 — 总长 ~100px, 大船不再是"小导弹"
-//      船头朝 +X, 船头扁平带 logo, 船尾圆弧, 3 层上层建筑, 2 烟囱带白烟
+// M20: 撤销 M19 的"大邮轮" — 用户反馈太丑, 恢复 M18 简洁三角帆船风格
   var shipContainer = this.add.container(dohaXY[0], dohaXY[1]);
-  // 1) 船身 (深蓝填充, 长方形 72×18, 中心原点)
+  // 船身 (深蓝填充, 长方形 24×10)
   var shipHull = this.add.graphics();
   shipHull.fillStyle(0x1B3A5B, 1);
-  shipHull.fillRect(-36, -9, 72, 18);
-  // 船身下侧暗影 (右半加深, 模拟立体感)
-  shipHull.fillStyle(0x0E2238, 1);
-  shipHull.fillRect(-36, 3, 72, 6);
-  // 2) 船头 (扁平 + logo 金色圆牌, 不用三角尖) — 船头在 +X 端
+  shipHull.fillRect(-12, -5, 24, 10);
+  // 船头 (金色三角尖端在前)
   var shipBow = this.add.graphics();
   shipBow.fillStyle(0xD4A017, 1);
-  // 船头扁平矩形 (36→40), 略凸出船身
-  shipBow.fillRect(36, -9, 4, 18);
-  // 船头 logo 圆牌 (金色, +X 端)
-  shipBow.fillStyle(0xFFD700, 1);
-  shipBow.fillCircle(38, 0, 3);
-  shipBow.fillStyle(0x8B6B3A, 1);
-  shipBow.fillCircle(38, 0, 1.5);
-  // 3) 船尾 (圆弧, 用 fillCircle 切一半 + 矩形) — 船尾在 -X 端
+  shipBow.fillTriangle(12, -5, 12, 5, 22, 0);
+  // 船尾 (深色矩形)
   var shipStern = this.add.graphics();
   shipStern.fillStyle(0x0E2238, 1);
-  // 圆弧 (用 ellipse 模拟)
-  shipStern.fillEllipse(-36, 0, 8, 18);
-  // 船尾深色填充 (跟船身下侧暗影融合)
-  shipStern.fillStyle(0x08182A, 1);
-  shipStern.fillEllipse(-38, 0, 6, 18);
-  // 4) 上层建筑 — 3 层 (主甲板 / 船桥 / 桅杆)
+  shipStern.fillRect(-12, -5, 4, 10);
+  // 上层建筑 (小方块在船身中后部)
   var shipCabin = this.add.graphics();
-  // 主甲板 (棕色, 在船身中后部 -36 到 0)
-  shipCabin.fillStyle(0xD4B07A, 1);
-  shipCabin.fillRect(-32, -16, 40, 7);
-  // 主甲板舷窗 (4 个小白点)
-  shipCabin.fillStyle(0xFFD98A, 1);
-  for (var wi = 0; wi < 4; wi++) {
-    shipCabin.fillRect(-28 + wi * 8, -14, 3, 2);
-  }
-  // 船桥 (白色, 在主甲板上方中后部)
-  shipCabin.fillStyle(0xF4ECD8, 1);
-  shipCabin.fillRect(-22, -22, 18, 6);
-  // 船桥窗户 (3 个)
-  shipCabin.fillStyle(0x1B3A5E, 1);
-  for (var bwi = 0; bwi < 3; bwi++) {
-    shipCabin.fillRect(-19 + bwi * 6, -20, 3, 2);
-  }
-  // 桅杆底座 (深色, 在船桥中后)
-  shipCabin.fillStyle(0x5C4A2E, 1);
-  shipCabin.fillRect(-16, -28, 2, 6);
-  // 5) 烟囱 2 个 (深灰 + 白烟 tweens 预留位置)
-  var shipFunnels = this.add.graphics();
-  // 烟囱 1 (前, 深灰)
-  shipFunnels.fillStyle(0x3A4A5E, 1);
-  shipFunnels.fillRect(-6, -30, 5, 14);
-  // 烟囱 1 顶部红条
-  shipFunnels.fillStyle(0xB03030, 1);
-  shipFunnels.fillRect(-6, -30, 5, 2);
-  // 烟囱 2 (后, 深灰)
-  shipFunnels.fillStyle(0x3A4A5E, 1);
-  shipFunnels.fillRect(4, -30, 5, 14);
-  // 烟囱 2 顶部红条
-  shipFunnels.fillStyle(0xB03030, 1);
-  shipFunnels.fillRect(4, -30, 5, 2);
-  // 6) 桅杆 + 旗帜 (高耸在船桥上方)
+  shipCabin.fillStyle(0x8B7355, 1);
+  shipCabin.fillRect(-4, -8, 8, 3);
+  // 桅杆 (竖线)
   var shipMast = this.add.graphics();
-  // 桅杆 (竖线, 棕色)
   shipMast.fillStyle(0x5C4A2E, 1);
-  shipMast.fillRect(-15, -42, 1, 14);
-  // 桅杆顶部横杆
-  shipMast.fillRect(-18, -42, 7, 1);
-  // 旗帜 (金色, 三角)
-  shipMast.fillStyle(0xFFD700, 1);
-  shipMast.fillTriangle(-11, -42, -11, -36, -4, -39);
-  shipMast.fillStyle(0xB03030, 1);
-  shipMast.fillTriangle(-11, -42, -11, -39, -7, -40);
-  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipFunnels, shipMast]);
+  shipMast.fillRect(0, -8, 1, -10);
+  // 旗帜 (金色小条)
+  var shipFlag = this.add.graphics();
+  shipFlag.fillStyle(0xFFD700, 1);
+  shipFlag.fillRect(1, -18, 10, 5);
+  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipMast, shipFlag]);
   this.shipContainer = shipContainer;
-  // M19: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
+  // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
   this.shipContainer.setRotation(0);
   this.voyageContainer.add(shipContainer);
 
@@ -2392,11 +2343,37 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
     }
 
     // 终点检测
-    if (!self.voyageReturnMode && self.voyageT >= 1.0 && self.voyageHasHeart) {
-      // 去程结束 + 有归家之心 → 终点 (Bandar)
-      self.voyageDone = true;
-      self._showVoyageContinueButton();
-      return;
+    // M20 Bug B: 没归家之心时, 即使 ship 跨过 t=1.0 (中点 delayedCall 没触发 / 帧跳过)
+    //          也必须强制跳回中点 + 触发返程 — 否则船永远卡在 Bandar, voyageDone=false
+    if (!self.voyageReturnMode && self.voyageT >= 1.0) {
+      if (self.voyageHasHeart) {
+        // 有归家之心 → 终点 (Bandar) 弹 continue 按钮
+        self.voyageDone = true;
+        self._showVoyageContinueButton();
+        return;
+      } else {
+        // 没归家之心 → 兜底: 强制跳回中点 + 800ms 后启动返程 (缩短 1500→800ms)
+        self.voyageT = 0.5;
+        self.voyageMidpointReached = true;
+        if (self.voyageNoHeartMessage) {
+          self.voyageNoHeartMessage.setAlpha(1);
+          self.time.delayedCall(800, function () {
+            if (self.voyageDone) return;
+            self.tweens.add({
+              targets: self.voyageNoHeartMessage,
+              alpha: 0,
+              duration: 300,
+            });
+            self.voyageReturnMode = true;
+            self.voyageSpeed = 1 / 4;
+          });
+        } else {
+          // 极端情况: 文字不存在, 直接启动返程
+          self.voyageReturnMode = true;
+          self.voyageSpeed = 1 / 4;
+        }
+        return;
+      }
     }
     if (self.voyageReturnMode && self.voyageT <= 0.0 && !self.voyageHasHeart) {
       // 返程结束 → 回到 Doha
