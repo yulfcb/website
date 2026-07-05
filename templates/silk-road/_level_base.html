@@ -169,6 +169,13 @@
   <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
     <source src="{{ url_for('static', filename='silk-road/qatar/audio/silk-road-bgm.wav') }}" type="audio/wav">
   </audio>
+  {# M17: SFX 通道 — 每个 sfx-* 是独立 audio, 多次触发会重置 currentTime 重叠播放 #}
+  <audio id="sfx-click"     src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-click.wav') }}"     preload="auto" style="display:none"></audio>
+  <audio id="sfx-button"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-button.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-pickup"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-pickup.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-exchange"  src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-exchange.wav') }}"  preload="auto" style="display:none"></audio>
+  <audio id="sfx-voyage"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-voyage.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-die"       src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-die.wav') }}"       preload="auto" style="display:none"></audio>
   {# M9.4 世界地图浮动按钮（关 1-5 通用）#}
   <a class="silk-fab-map" href="{{ url_for('silk_road_world_map') }}" aria-label="世界地图" title="世界地图">🗺️</a>
   {# M4 跨关进度条 #}

@@ -18,6 +18,13 @@
   <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
     <source src="{{ url_for('static', filename='silk-road/qatar/audio/silk-road-bgm.wav') }}" type="audio/wav">
   </audio>
+  {# M17: SFX 通道 — 每个 sfx-* 是独立 audio, 多次触发会重置 currentTime 重叠播放 #}
+  <audio id="sfx-click"     src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-click.wav') }}"     preload="auto" style="display:none"></audio>
+  <audio id="sfx-button"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-button.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-pickup"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-pickup.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-exchange"  src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-exchange.wav') }}"  preload="auto" style="display:none"></audio>
+  <audio id="sfx-voyage"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-voyage.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-die"       src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-die.wav') }}"       preload="auto" style="display:none"></audio>
 
   {# M8: Phaser 容器 —— game.js 在这里挂 canvas #}
   <div id="qatar-game"></div>

@@ -33,6 +33,20 @@
     DEAD:    0,
   };
 
+  // ==================== M17 SFX 助手 ====================
+  // 多次触发同一 sfx 会重置 currentTime, 不会因音频重叠被吞.
+  // id 直接对应 <audio id="sfx-{id}"> 元素. 各 scene/全局回调里直接调 window.playQatarSfx().
+  window.playQatarSfx = function (id, volume) {
+    var a = document.getElementById('sfx-' + id);
+    if (!a) return;
+    try {
+      a.volume = volume != null ? volume : 0.5;
+      a.currentTime = 0;
+      var p = a.play();
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+    } catch (e) {}
+  };
+
   // —— session / nickname ——
   var nickname = (localStorage.getItem('silkroad_nickname') || '小卡').slice(0, 20);
   var SESSION_ID = localStorage.getItem('silkroad_session_id') || '';
@@ -363,6 +377,7 @@
           self.keys[key] = true;
           bg.setFillStyle(0xFFD98A, 0.95);
           arrow.setColor('#2A190E');
+          window.playQatarSfx('click', 0.4);  // M17: dpad 按下 click
           self.tryMove(key);
         };
         var release = function () {
@@ -406,6 +421,7 @@
       var audioZone = this.add.zone(110, 100, 48, 48).setInteractive({ useHandCursor: true });
       audioZone.on('pointerdown', function () {
         if (!bgmAudio) return;
+        window.playQatarSfx('button', 0.4);  // M17: BGM toggle button blip
         if (bgmAudio.paused) {
           // 取消静音 + 播放
           bgmAudio.muted = false;
@@ -656,6 +672,7 @@
       this.state = 'PICKUP';
       this.currentGiftId = g.id;
       this.modalContainer.removeAll(true);
+      window.playQatarSfx('pickup', 0.5);  // M17: 拾起物品 chime
 
       // 背景遮罩（吸收点击，不响应回调）
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 透明度 0.78->0.45
@@ -689,7 +706,10 @@
           fontSize: '11px', color: '#C9B89A',
         }).setOrigin(0.5);
         var zone = self.add.zone(0, dy, 380, 56).setInteractive({ useHandCursor: true });
-        zone.on('pointerdown', callback);
+        zone.on('pointerdown', function () {
+          window.playQatarSfx('button', 0.4);  // M17: modal 按钮 blip
+          callback();
+        });
         return [bg, label, subT, zone];
       };
 
@@ -768,6 +788,7 @@
       }).setOrigin(0.5);
       var btnZone = this.add.zone(0, 100, 200, 56).setInteractive({ useHandCursor: true });
       btnZone.on('pointerdown', function () {
+        window.playQatarSfx('button', 0.4);  // M17: 拾满 modal "知道了"
         self.modalContainer.setVisible(false);
         self.joystickContainer.setVisible(true);
         self.actionContainer && self.actionContainer.setVisible(true);
@@ -872,6 +893,7 @@
             // 3) 重算总价 (丢弃的 gift price 减掉, 新 gift price 加上)
             self._updatePriceHud();
             self.luggageText.setText('🧳 行李 ' + self.luggageCount + ' / ' + L.LUGGAGE_MAX);
+            window.playQatarSfx('button', 0.4);  // M17: replace modal 丢弃按钮 blip
             // 4) 关闭 modal + 走正常 closeGiftModal 流程 (更新 HUD/状态)
             self.modalContainer.setVisible(false);
             self.closeGiftModal();
@@ -904,6 +926,7 @@
       }).setOrigin(0.5);
       var cancelZone = self.add.zone(0, cancelY, 200, 50).setInteractive({ useHandCursor: true });
       cancelZone.on('pointerdown', function () {
+        window.playQatarSfx('button', 0.4);  // M17: replace modal 取消按钮 blip
         // 玩家取消 → 新 gift 不入桶 (跟之前 'drop' 一样), 走 closeGiftModal 流程
         self.modalContainer.setVisible(false);
         self.closeGiftModal();
@@ -966,6 +989,7 @@
         var ticketZone = this.add.zone(-100, 130, 180, 56).setInteractive({ useHandCursor: true });
         // M12 Bug 6: 点击进入兑换选择 modal, 不是直接兑换
         ticketZone.on('pointerdown', function () {
+          window.playQatarSfx('button', 0.4);  // M17: 港口 "兑换船票" 按钮 blip
           self._showExchangeModal();
         });
 
@@ -976,6 +1000,7 @@
         }).setOrigin(0.5);
         var laterZone = this.add.zone(100, 130, 140, 56).setInteractive({ useHandCursor: true });
         laterZone.on('pointerdown', function () {
+          window.playQatarSfx('button', 0.4);  // M17: 港口 "暂时不要" 按钮 blip
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
@@ -1009,6 +1034,7 @@
         }).setOrigin(0.5);
         var laterZone2 = this.add.zone(100, 130, 140, 56).setInteractive({ useHandCursor: true });
         laterZone2.on('pointerdown', function () {
+          window.playQatarSfx('button', 0.4);  // M17: 港口 "知道了" 按钮 blip
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
@@ -1029,6 +1055,7 @@
         }).setOrigin(0.5);
         var btnZone = this.add.zone(0, 130, 160, 56).setInteractive({ useHandCursor: true });
         btnZone.on('pointerdown', function () {
+          window.playQatarSfx('button', 0.4);  // M17: 兜底 "知道了" 按钮 blip
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
@@ -1086,6 +1113,7 @@ _showTicketModal: function () {
   }).setOrigin(0.5);
   var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
   goZone.on('pointerdown', function () {
+    window.playQatarSfx('button', 0.4);  // M17: "起航" 按钮 blip
     self.modalContainer.setVisible(false);
     // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件就能上船
     var canExchangeNow = self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
@@ -1237,6 +1265,8 @@ _showExchangeModal: function () {
       var exZone = self.add.zone(-80, 215, 200, 50).setInteractive({ useHandCursor: true });
       self.modalContainer.add(exZone);
       exZone.on('pointerdown', function () {
+        window.playQatarSfx('button', 0.4);   // M17: 兑换按钮 blip
+        window.playQatarSfx('exchange', 0.55); // M17: 兑换船票 chime (上升琶音)
         self._ticketExchanged = true;
         self._showTicketModal();
       });
@@ -1252,6 +1282,7 @@ _showExchangeModal: function () {
     var cancelZone = self.add.zone(80, 215, 140, 50).setInteractive({ useHandCursor: true });
     self.modalContainer.add(cancelZone);
     cancelZone.on('pointerdown', function () {
+      window.playQatarSfx('button', 0.4);  // M17: 兑换 modal 取消按钮 blip
       self.modalContainer.setVisible(false);
       self.joystickContainer.setVisible(true);
       self.actionContainer && self.actionContainer.setVisible(true);
@@ -1307,6 +1338,7 @@ _sumSelectedPrice: function (ids) {
       // 保存 forceRestart 给 submitSecret 用
       modal._forceRestart = !!forceRestart;
       modal._scene = this;
+      window.playQatarSfx('die', 0.5);  // M17: 渴死 sad tone
       modal.show();
 
       this.joystickContainer.setVisible(false);
@@ -1432,11 +1464,13 @@ _sumSelectedPrice: function (ids) {
 
       // 按钮点击 → 走 scene.submitSecret / scene.giveUp
       sendBtn.addEventListener('click', function () {
+        window.playQatarSfx('button', 0.4);  // M17: 复活 modal "发送·继续" 按钮 blip
         if (root._scene && typeof root._scene.submitSecret === 'function') {
           root._scene.submitSecret(!!root._forceRestart);
         }
       });
       giveupBtn.addEventListener('click', function () {
+        window.playQatarSfx('button', 0.4);  // M17: 复活 modal "放弃" 按钮 blip
         if (root._scene && typeof root._scene.giveUp === 'function') {
           root._scene.giveUp();
         }
@@ -2207,6 +2241,9 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   var self = this;
   // 默认 true (向后兼容)
   if (hasHomeHeart === undefined) hasHomeHeart = true;
+
+  // M17: voyage 出发 whoosh + chime (BGM 淡出前先播, 避免淡到 0 听不到)
+  window.playQatarSfx('voyage', 0.6);
 
   // M14 Bug B: voyage 期间 BGM 淡出 (避免关 1 也继承播放)
   var bgmAudio = document.getElementById('silk-road-bgm');
