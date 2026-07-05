@@ -14,6 +14,11 @@
 </head>
 <body>
 
+  {# M14 Bug B: BGM — 30s 循环 WAV, 中东 pentatonic 音阶, 由 BootScene 首次手势解锁播放 #}
+  <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
+    <source src="{{ url_for('static', filename='silk-road/qatar/audio/silk-road-bgm.wav') }}" type="audio/wav">
+  </audio>
+
   {# M8: Phaser 容器 —— game.js 在这里挂 canvas #}
   <div id="qatar-game"></div>
 

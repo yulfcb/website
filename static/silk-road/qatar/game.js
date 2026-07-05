@@ -55,6 +55,25 @@
       this.add.text(640, 360, '加载中…', {
         fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
+
+      // M14 Bug B: BGM 解锁 + 卸载清理
+      // 浏览器 autoplay policy: audio 必须等用户首次手势后才能 unmute + play.
+      // 用 once: true 自动解绑, 不污染后续事件.
+      document.addEventListener('pointerdown', function unlockBgm() {
+        var a = document.getElementById('silk-road-bgm');
+        if (a) {
+          a.muted = false;
+          a.volume = 0.4;
+          var p = a.play();
+          if (p && typeof p.catch === 'function') p.catch(function () {});
+        }
+      }, { once: true });
+      // 关掉页面时也暂停 BGM, 避免后台 tab 继续跑音频
+      window.addEventListener('beforeunload', function () {
+        var a = document.getElementById('silk-road-bgm');
+        if (a) a.pause();
+      });
+
       // 短暂延迟 → IntroScene（保留 0 ms 也行；这里 30 ms 让浏览器渲一帧）
       // 用闭包 self 引 BootScene，避免 time.delayedCall 把 args 当 this（Phaser 3 API）
       this.time.delayedCall(30, function () {
@@ -362,6 +381,27 @@
       var pauseZone = this.add.zone(60, 100, 48, 48).setInteractive({ useHandCursor: true });
       pauseZone.on('pointerdown', function () { self.togglePause(); });
       this.pauseContainer = this.add.container(0, 0, [pauseBg, this.pauseBtnText, pauseZone]);
+
+      // M14 Bug B: BGM 开关按钮 (左上, 紧邻暂停按钮右边)
+      var bgmAudio = document.getElementById('silk-road-bgm');
+      var audioBg = this.add.circle(110, 100, 24, 0x4A2E1A, 0.92)
+        .setStrokeStyle(2, 0x5fb3a0, 0.6);
+      this.audioBtnText = this.add.text(110, 100, '🔊', { fontSize: '20px' }).setOrigin(0.5);
+      var audioZone = this.add.zone(110, 100, 48, 48).setInteractive({ useHandCursor: true });
+      audioZone.on('pointerdown', function () {
+        if (!bgmAudio) return;
+        if (bgmAudio.paused) {
+          // 取消静音 + 播放
+          bgmAudio.muted = false;
+          var p = bgmAudio.play();
+          if (p && typeof p.catch === 'function') p.catch(function () {});
+          self.audioBtnText.setText('🔊');
+        } else {
+          bgmAudio.pause();
+          self.audioBtnText.setText('🔇');
+        }
+      });
+      this.audioContainer = this.add.container(0, 0, [audioBg, this.audioBtnText, audioZone]);
 
       // —— Modal 容器（礼物 modal / 老商人 popup / 复活 modal 共用）——
       // M9.5b: modalContainer 移到 (640, 240) (中上), 不挡 dpad 区域 (左下 620)
@@ -970,49 +1010,53 @@ _showExchangeModal: function () {
     }
     bucketIds.sort(function (a, b) { return a - b; });
 
-    for (var r = 0; r < bucketIds.length; r++) {
-      var gid = bucketIds[r];
+    // M14: 修复 Bug A — 把所有 row 内容包进 modalContainer, 防止 6 行 checkbox 渲染到 scene root
+    for (var row = 0; row < bucketIds.length; row++) {
+      var gid = bucketIds[row];
       var g = null;
       for (var j = 0; j < L.gifts.length; j++) {
         if (L.gifts[j].id === gid) { g = L.gifts[j]; break; }
       }
       if (!g) continue;
-      var ry = startY + r * rowH;
+      var ry = startY + row * rowH;
       var isChecked = self._selectedGiftIds.indexOf(gid) !== -1;
 
       // checkbox 圆角矩形
       var cbBg = self.add.rectangle(-220, ry, 18, 18, isChecked ? 0x5fb3a0 : 0x2A1F18, 1)
         .setStrokeStyle(2, 0xFFD98A, 0.8);
+      self.modalContainer.add(cbBg);
       if (isChecked) {
-        self.add.text(-220, ry, '✓', {
+        self.modalContainer.add(self.add.text(-220, ry, '✓', {
           fontSize: '14px', color: '#0E2A47', fontStyle: 'bold',
-        }).setOrigin(0.5);
+        }).setOrigin(0.5));
       }
 
       // emoji
-      self.add.text(-185, ry, g.emoji, { fontSize: '20px' }).setOrigin(0.5);
+      self.modalContainer.add(self.add.text(-185, ry, g.emoji, { fontSize: '20px' }).setOrigin(0.5));
 
       // 名字
       var nameTxt = self.add.text(-145, ry, g.name, {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
         wordWrap: false,
       }).setOrigin(0, 0.5);
+      self.modalContainer.add(nameTxt);
       nameTxt.setFixedSize(160, 16);
 
       // 价格
-      self.add.text(60, ry, '¥' + g.price, {
+      self.modalContainer.add(self.add.text(60, ry, '¥' + g.price, {
         fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0, 0.5);
+      }).setOrigin(0, 0.5));
 
       // 提示归家之心
       if (gid === 4) {
-        self.add.text(120, ry, '🏠 归家之心', {
+        self.modalContainer.add(self.add.text(120, ry, '🏠 归家之心', {
           fontSize: '10px', color: '#F6B5C8', fontStyle: 'italic',
-        }).setOrigin(0, 0.5);
+        }).setOrigin(0, 0.5));
       }
 
       // 整行点击区 (点 checkbox 整行切换)
       var rowZone = self.add.zone(0, ry, 400, rowH).setInteractive({ useHandCursor: true });
+      self.modalContainer.add(rowZone);
       rowZone.on('pointerdown', (function (id) {
         return function () {
           var idx = self._selectedGiftIds.indexOf(id);
@@ -1032,6 +1076,7 @@ _showExchangeModal: function () {
     var totalTxt = self.add.text(-30, 175, '已选 ' + self._selectedCount + ' 件 · 总价 ¥' + self._selectedPrice + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
       fontSize: '12px', color: '#A8D8C0', fontStyle: 'bold',
     }).setOrigin(0.5);
+    self.modalContainer.add(totalTxt);
 
     var canSubmit = self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD
       && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
@@ -1040,12 +1085,14 @@ _showExchangeModal: function () {
     var exBg = self.add.rectangle(-80, 215, 200, 50,
       canSubmit ? 0x5fb3a0 : 0x4A4A4A, canSubmit ? 1 : 0.6)
       .setStrokeStyle(1, canSubmit ? 0xFFD98A : 0x888888, canSubmit ? 0.7 : 0.4);
-    self.add.text(-80, 215, '🎫 兑换船票', {
+    self.modalContainer.add(exBg);
+    self.modalContainer.add(self.add.text(-80, 215, '🎫 兑换船票', {
       fontSize: '15px', color: canSubmit ? '#0E2A47' : '#888888', fontStyle: 'bold',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5));
 
     if (canSubmit) {
       var exZone = self.add.zone(-80, 215, 200, 50).setInteractive({ useHandCursor: true });
+      self.modalContainer.add(exZone);
       exZone.on('pointerdown', function () {
         self._ticketExchanged = true;
         self._showTicketModal();
@@ -1055,10 +1102,12 @@ _showExchangeModal: function () {
     // 取消按钮
     var cancelBg = self.add.rectangle(80, 215, 140, 50, 0x1B3A5E, 1)
       .setStrokeStyle(1, 0x5fb3a0, 0.6);
-    self.add.text(80, 215, '取消', {
+    self.modalContainer.add(cancelBg);
+    self.modalContainer.add(self.add.text(80, 215, '取消', {
       fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5));
     var cancelZone = self.add.zone(80, 215, 140, 50).setInteractive({ useHandCursor: true });
+    self.modalContainer.add(cancelZone);
     cancelZone.on('pointerdown', function () {
       self.modalContainer.setVisible(false);
       self.joystickContainer.setVisible(true);
@@ -1068,9 +1117,9 @@ _showExchangeModal: function () {
 
     // 提示行 (总价不够时)
     if (self._selectedCount > 0 && self._selectedPrice < L.PORT_TICKET_PRICE_THRESHOLD) {
-      self.add.text(0, 145, '⚠️ 总价还差 ¥' + (L.PORT_TICKET_PRICE_THRESHOLD - self._selectedPrice), {
+      self.modalContainer.add(self.add.text(0, 145, '⚠️ 总价还差 ¥' + (L.PORT_TICKET_PRICE_THRESHOLD - self._selectedPrice), {
         fontSize: '11px', color: '#F6B5C8',
-      }).setOrigin(0.5);
+      }).setOrigin(0.5));
     }
 
     self.modalContainer.setVisible(true);
@@ -1581,6 +1630,8 @@ _sumSelectedPrice: function (ids) {
     },
     scene: [BootScene, IntroScene, PlayScene, ResultScene],
   });
+  // M14: 暴露到 window 方便 e2e 验证 (modal 长度, BGM toggle, voyage fadeout 等)
+  window.__qatarGame = game;
 
   // ==================== M9.5e Voyage 动画 ====================
 // 关 0 通关 → ResultScene → 点继续 → playVoyageAnimation() → 1.8s → window.location.href 到 next 关
@@ -1791,6 +1842,25 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   var self = this;
   // 默认 true (向后兼容)
   if (hasHomeHeart === undefined) hasHomeHeart = true;
+
+  // M14 Bug B: voyage 期间 BGM 淡出 (避免关 1 也继承播放)
+  var bgmAudio = document.getElementById('silk-road-bgm');
+  if (bgmAudio && !bgmAudio.paused) {
+    var startVol = bgmAudio.volume;
+    self.tweens.add({
+      targets: { v: startVol },
+      v: 0,
+      duration: 1800,
+      ease: 'Linear',
+      onUpdate: function (tween) {
+        bgmAudio.volume = tween.getValue();
+      },
+      onComplete: function () {
+        bgmAudio.pause();
+        bgmAudio.volume = startVol; // 恢复音量, 下次播放还用 0.4
+      },
+    });
+  }
 
   this.voyageContainer.setVisible(true);
 
