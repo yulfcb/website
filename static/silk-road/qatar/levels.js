@@ -25,7 +25,7 @@ window.QATAR_LEVEL = {
   gifts: [
     { id: 0, x: 540,  y: 500, name: '沙漠玫瑰',    hint: '国家博物馆',         emoji: '🌹',  placeId: 'national_museum', price: 30 },
     { id: 1, x: 420,  y: 230, name: '古兰经',      hint: '伊斯兰博物馆',       emoji: '📖',  placeId: 'islamic_museum',  price: 40 },
-    { id: 2, x: 700,  y: 400, name: '猎鹰',        hint: '瓦其夫集市',         emoji: '🦅',  placeId: 'souq_waqif',     price: 25 },
+    { id: 2, x: 700,  y: 400, name: '游隼',        hint: '瓦其夫集市',         emoji: '🦅',  placeId: 'souq_waqif',     price: 25 },
     { id: 3, x: 1130, y: 300, name: '波斯湾珍珠',  hint: '波斯湾珍珠',         emoji: '🦪',  placeId: 'corniche',        price: 35 },
     // Bug 2: 天然气 emoji 🔥 → 🏭 (LNG 厂更合适, Bug 6 进一步用 Graphics 绘)
     { id: 4, x: 200,  y: 220, name: '天然气',      hint: '北部气田',           emoji: '🏭',  placeId: 'ras_laffan',      price: 60 },

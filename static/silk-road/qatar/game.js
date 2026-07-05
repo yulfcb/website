@@ -252,7 +252,7 @@
       //             视觉间距 = 22 + 16 (chip half h) + 10 = 48px, 比 M12 紧凑但仍分开.
       // M15 Part 2: 7 → 8 gifts, 大力神杯 id 从 6 移到 7 (PNG 同前).
       // M16 Bug 6: gift id=0 (沙漠玫瑰), id=4 (天然气 LNG), id=6 (火炬塔) 用 Graphics 自定义
-      //            其他保留 emoji (归家之心 ❤️, 古兰经 📖, 猎鹰 🦅, 珍珠 🦪, 大力神杯 🏆)
+      //            其他保留 emoji (归家之心 ❤️, 古兰经 📖, 游隼 🦅, 珍珠 🦪, 大力神杯 🏆)
       this.giftSprites = [];
       L.gifts.forEach(function (g) {
         var sprite;
