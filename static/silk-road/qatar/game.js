@@ -164,7 +164,7 @@
       // M9.1: 不做 narrative card 改做一行显眼的小卡
       // M12 Bug 3: 「礼物」→「物品」; 任务描述改为「收集 8 件物品 → 去 Doha Port 兑换船票」
       // M15 Part 2: 6 → 8 (加 Ras Laffan 天然气 + NMoQ 沙漠玫瑰).
-      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 8 件物品，然后去 Doha Port 兑换去伊朗的船票 🛳️', {
+      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 8 件物品，然后去 Doha Port 用物品兑换船票，准备出发 🚢', {
         fontSize: '16px', color: '#F4ECD8', fontStyle: 'italic', wordWrap: { width: 1000 },
       }).setOrigin(0.5);
 
@@ -327,7 +327,7 @@
       this.giftBuckets = {};
       this.currentGiftId = null;
       this.state = 'PLAYING';          // PLAYING | PICKUP | RESULT | DEAD
-      this.paused = false;
+      this.paused = false;  // M18 Bug 4: 保留 paused 字段 (因为 update/_movementUpdate/tryMove 仍检查它, 永不触发)
       this.moveCount = 0;
       this.merchantShown = false;
       this.npcFrame = 0;
@@ -405,15 +405,10 @@
       // 用户从未用过 — 删掉避免误会, 场景更干净.
       // (actionContainer 占位已删除)
 
-      // —— 暂停按钮（左上 Phaser Zone）——
-      var pauseBg = this.add.circle(60, 100, 24, 0x4A2E1A, 0.92)
-        .setStrokeStyle(2, 0xFFD98A, 0.6);
-      this.pauseBtnText = this.add.text(60, 100, '⏸', { fontSize: '20px' }).setOrigin(0.5);
-      var pauseZone = this.add.zone(60, 100, 48, 48).setInteractive({ useHandCursor: true });
-      pauseZone.on('pointerdown', function () { self.togglePause(); });
-      this.pauseContainer = this.add.container(0, 0, [pauseBg, this.pauseBtnText, pauseZone]);
+      // M18 Bug 4: 取消暂停按钮 —— 不再有暂停键和暂停图标
+      // (BGM 开关按钮移到 (60, 100))
 
-      // M14 Bug B: BGM 开关按钮 (左上, 紧邻暂停按钮右边)
+      // M14 Bug B: BGM 开关按钮 (左上, 暂停位置)
       var bgmAudio = document.getElementById('silk-road-bgm');
       var audioBg = this.add.circle(110, 100, 24, 0x4A2E1A, 0.92)
         .setStrokeStyle(2, 0x5fb3a0, 0.6);
@@ -591,12 +586,6 @@
       }
     },
 
-    // ==================== 暂停 ====================
-    togglePause: function () {
-      this.paused = !this.paused;
-      this.pauseBtnText.setText(this.paused ? '▶' : '⏸');
-    },
-
     // ==================== 水分 ====================
     changeWater: function (delta) {
       this.water = Math.max(0, Math.min(L.WATER_MAX, +(this.water + delta).toFixed(2)));
@@ -731,7 +720,7 @@
       // 隐藏 joystick / action / pause —— 避免 modal 打开时还能点
       this.joystickContainer.setVisible(false);
       (this.actionContainer && this.actionContainer.setVisible(false));
-      this.pauseContainer.setVisible(false);
+      // M18 Bug 4: pauseContainer removed
       this.modalContainer.setVisible(true);
     },
 
@@ -755,7 +744,7 @@
       // 恢复 joystick / action / pause
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
-      this.pauseContainer.setVisible(true);
+      // M18 Bug 4: pauseContainer removed
     },
 
     // M11 part 3: 拾满 8 件 → 弹 pickup-done modal, 提示去港口兑换船票
@@ -776,8 +765,8 @@
       this.modalContainer.add(this.add.text(0, -55, '物品都拾齐了！', {
         fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
-      // M12 Bug 3 + Bug 4: 「去港口 ⚓ 兑换船票」改"去 Doha Port 用物品兑换船票"
-      this.modalContainer.add(this.add.text(0, -15, '去 Doha Port ⚓ 用物品兑换船票\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
+      // M12 Bug 3 + Bug 4 + M18 Bug 7: 「去 Doha Port 用物品兑换船票」改"去 Doha Port 用物品兑换船票，准备出发"
+      this.modalContainer.add(this.add.text(0, -15, '去 Doha Port ⚓ 用物品兑换船票，准备出发\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
         fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 380 },
       }).setOrigin(0.5));
 
@@ -792,14 +781,14 @@
         self.modalContainer.setVisible(false);
         self.joystickContainer.setVisible(true);
         self.actionContainer && self.actionContainer.setVisible(true);
-        self.pauseContainer.setVisible(true);
+        // M18 Bug 4: pauseContainer removed
       });
 
       this.modalContainer.add([btnBg, btnText, btnZone]);
       // 不显示 dpad (玩家需要走去港口)
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
-      this.pauseContainer.setVisible(true);
+      // M18 Bug 4: pauseContainer removed
       this.modalContainer.setVisible(true);
     },
 
@@ -936,7 +925,7 @@
       // 隐藏 joystick / pause (跟其他 modal 一致)
       this.joystickContainer.setVisible(false);
       (this.actionContainer && this.actionContainer.setVisible(false));
-      this.pauseContainer.setVisible(false);
+      // M18 Bug 4: pauseContainer removed
       this.modalContainer.setVisible(true);
     },
 
@@ -978,12 +967,14 @@
       if (canExchange) {
         // ✅ 全部满足 → 兑换船票主按钮 (可点)
         // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件 + 总价 ≥¥170 就能兑换
-        this.modalContainer.add(this.add.text(0, 30, '好！让我帮你换一张去伊朗的船票 🚢', {
+        // M18 Bug 7: 文案改 "用物品兑换船票，准备出发" (不再指定目的地)
+        this.modalContainer.add(this.add.text(0, 30, '用物品兑换船票，准备出发 🚢', {
           fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic', wordWrap: { width: 380 },
         }).setOrigin(0.5));
 
         var ticketBg = this.add.rectangle(-100, 130, 180, 56, 0x5fb3a0, 1);
-        var ticketText = this.add.text(-100, 130, '🎫 兑换船票', {
+        // M18 Bug 7: 按钮文字 "兑换船票" → "坐船出发"
+        var ticketText = this.add.text(-100, 130, '坐船出发 →', {
           fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
         }).setOrigin(0.5);
         var ticketZone = this.add.zone(-100, 130, 180, 56).setInteractive({ useHandCursor: true });
@@ -1004,7 +995,7 @@
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
-          self.pauseContainer.setVisible(true);
+          // M18 Bug 4: pauseContainer removed
         });
 
         this.modalContainer.add([ticketBg, ticketText, ticketZone, laterBg, laterText, laterZone]);
@@ -1022,7 +1013,8 @@
         // 禁用按钮 (灰色)
         var disabledBg = this.add.rectangle(-100, 130, 180, 56, 0x4A4A4A, 0.6)
           .setStrokeStyle(1, 0x888888, 0.4);
-        var disabledText = this.add.text(-100, 130, '🎫 兑换船票', {
+        // M18 Bug 7: 按钮文字同步改为 "坐船出发"
+        var disabledText = this.add.text(-100, 130, '坐船出发 →', {
           fontSize: '15px', color: '#888888', fontStyle: 'bold',
         }).setOrigin(0.5);
         // 不挂 interactive, 点了不响应
@@ -1038,7 +1030,7 @@
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
-          self.pauseContainer.setVisible(true);
+          // M18 Bug 4: pauseContainer removed
         });
 
         this.modalContainer.add([disabledBg, disabledText, laterBg2, laterText2, laterZone2]);
@@ -1059,14 +1051,14 @@
           self.modalContainer.setVisible(false);
           self.joystickContainer.setVisible(true);
           self.actionContainer && self.actionContainer.setVisible(true);
-          self.pauseContainer.setVisible(true);
+          // M18 Bug 4: pauseContainer removed
         });
         this.modalContainer.add([btnBg, btnText, btnZone]);
       }
 
       this.joystickContainer.setVisible(false);
       (this.actionContainer && this.actionContainer.setVisible(false));
-      this.pauseContainer.setVisible(false);
+      // M18 Bug 4: pauseContainer removed
       this.modalContainer.setVisible(true);
     },
 
@@ -1086,11 +1078,12 @@ _showTicketModal: function () {
     .setStrokeStyle(2, 0x5fb3a0, 0.7);
   this.modalContainer.add(card);
 
-  // M12 Bug 6: 检查 _selectedGiftIds 含归家之心 (gift id=4) 决定分支文案
-  var hasHomeHeart = this._selectedGiftIds && this._selectedGiftIds.indexOf(4) !== -1;
-  var titleTxt = hasHomeHeart ? '船票已兑换！' : '船票已兑换 — 但...';
+  // M18 Bug 7: 检查 _selectedGiftIds 含归家之心 (gift id=5) 决定分支文案
+  var hasHomeHeart = this._selectedGiftIds && this._selectedGiftIds.indexOf(5) !== -1;
+  // M18 Bug 7: 文案统一为「船票已到手，准备出发!」, 不再区分目的地
+  var titleTxt = '船票已到手，准备出发！';
   var subTxt = hasHomeHeart
-    ? '波斯湾之旅已开启\n下一站: 伊朗 🐪'
+    ? '波斯湾之旅已开启 🛳️'
     : '🛳️ 没有归家之心 · 这趟不会带你到伊朗';
 
   this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
@@ -1105,8 +1098,8 @@ _showTicketModal: function () {
     fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 360 },
   }).setOrigin(0.5));
 
-  // 大按钮 "起航" (M12 Bug 6: 文案分支)
-  var btnTxt = hasHomeHeart ? '起航前往伊朗 →' : '起航 →';
+  // 大按钮 "坐船出发" (M18 Bug 7: 文案统一, 不再区分目的地)
+  var btnTxt = '坐船出发 →';
   var goBg = this.add.rectangle(0, 100, 300, 60, 0x5fb3a0, 1);
   var goText = this.add.text(0, 100, btnTxt, {
     fontSize: '17px', color: '#0E2A47', fontStyle: 'bold',
@@ -1124,7 +1117,7 @@ _showTicketModal: function () {
       // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
       self.joystickContainer.setVisible(true);
       self.actionContainer && self.actionContainer.setVisible(true);
-      self.pauseContainer.setVisible(true);
+      // M18 Bug 4: pauseContainer removed
     }
   });
 
@@ -1159,7 +1152,8 @@ _showExchangeModal: function () {
     self.modalContainer.add(card);
 
     self.modalContainer.add(self.add.text(0, -190, '⚓', { fontSize: '44px' }).setOrigin(0.5));
-    self.modalContainer.add(self.add.text(0, -150, '选择要兑换的物品', {
+    // M18 Bug 7: 标题改 "选择要兑换的物品"
+    self.modalContainer.add(self.add.text(0, -150, '用物品兑换船票，准备出发', {
       fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
     }).setOrigin(0.5));
     self.modalContainer.add(self.add.text(0, -123, '勾选 ≥1 件 · 总价 ≥ ¥' + L.PORT_TICKET_PRICE_THRESHOLD + ' 才能兑换', {
@@ -1219,7 +1213,7 @@ _showExchangeModal: function () {
       }).setOrigin(0, 0.5));
 
       // 提示归家之心 (M15 Part 2: emoji 🏠 → ❤️)
-      if (gid === 4) {
+      if (gid === 5) {
         self.modalContainer.add(self.add.text(120, ry, '❤️ 归家之心', {
           fontSize: '10px', color: '#F6B5C8', fontStyle: 'italic',
         }).setOrigin(0, 0.5));
@@ -1249,19 +1243,23 @@ _showExchangeModal: function () {
     }).setOrigin(0.5);
     self.modalContainer.add(totalTxt);
 
+    // M18 Bug 1: 必须 luggage 包含归家之心 (gift id=5) 才能走「坐船出发」分支
+    var hasHeart = self._selectedGiftIds.indexOf(5) !== -1;
     var canSubmit = self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD
       && self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD;
+    var canSubmitWithHeart = canSubmit && hasHeart;
 
-    // 兑换船票按钮 (亮色/灰色取决于 canSubmit)
+    // 兑换船票按钮 (亮色/灰色取决于 canSubmitWithHeart)
     var exBg = self.add.rectangle(-80, 215, 200, 50,
-      canSubmit ? 0x5fb3a0 : 0x4A4A4A, canSubmit ? 1 : 0.6)
-      .setStrokeStyle(1, canSubmit ? 0xFFD98A : 0x888888, canSubmit ? 0.7 : 0.4);
+      canSubmitWithHeart ? 0x5fb3a0 : 0x4A4A4A, canSubmitWithHeart ? 1 : 0.6)
+      .setStrokeStyle(1, canSubmitWithHeart ? 0xFFD98A : 0x888888, canSubmitWithHeart ? 0.7 : 0.4);
     self.modalContainer.add(exBg);
-    self.modalContainer.add(self.add.text(-80, 215, '🎫 兑换船票', {
-      fontSize: '15px', color: canSubmit ? '#0E2A47' : '#888888', fontStyle: 'bold',
+    // M18 Bug 7: 按钮文字改「🚢 坐船出发」
+    self.modalContainer.add(self.add.text(-80, 215, '🚢 坐船出发', {
+      fontSize: '15px', color: canSubmitWithHeart ? '#0E2A47' : '#888888', fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    if (canSubmit) {
+    if (canSubmitWithHeart) {
       var exZone = self.add.zone(-80, 215, 200, 50).setInteractive({ useHandCursor: true });
       self.modalContainer.add(exZone);
       exZone.on('pointerdown', function () {
@@ -1286,12 +1284,18 @@ _showExchangeModal: function () {
       self.modalContainer.setVisible(false);
       self.joystickContainer.setVisible(true);
       self.actionContainer && self.actionContainer.setVisible(true);
-      self.pauseContainer.setVisible(true);
+      // M18 Bug 4: pauseContainer removed
     });
 
     // 提示行 (总价不够时)
     if (self._selectedCount > 0 && self._selectedPrice < L.PORT_TICKET_PRICE_THRESHOLD) {
       self.modalContainer.add(self.add.text(0, 145, '⚠️ 总价还差 ¥' + (L.PORT_TICKET_PRICE_THRESHOLD - self._selectedPrice), {
+        fontSize: '11px', color: '#F6B5C8',
+      }).setOrigin(0.5));
+    }
+    // M18 Bug 1: 没勾归家之心 → 提示 "需要归家之心才能兑换"
+    if (canSubmit && !hasHeart) {
+      self.modalContainer.add(self.add.text(0, 145, '❤️ 需要归家之心才能兑换', {
         fontSize: '11px', color: '#F6B5C8',
       }).setOrigin(0.5));
     }
@@ -1332,18 +1336,16 @@ _sumSelectedPrice: function (ids) {
       // M15 Bug A: 纯 HTML <div> modal — 替代 Phaser 浮动 DOM textarea 方案
       // 整个 modal card 用 HTML 渲染, Phaser 只触发 show/hide
       var modal = this.getOrCreateReviveModal();
-      // 设置按钮文案: M9.5g 强制原地复活 → 「发送·继续」
+      // M18 Bug 5: 按钮文案 → 「复活」
       var sendBtn = modal.querySelector('.btn-send');
-      if (sendBtn) sendBtn.textContent = forceRestart ? '发送·继续' : '发送·复活';
-      // 保存 forceRestart 给 submitSecret 用
-      modal._forceRestart = !!forceRestart;
+      if (sendBtn) sendBtn.textContent = '复活';
       modal._scene = this;
       window.playQatarSfx('die', 0.5);  // M17: 渴死 sad tone
       modal.show();
 
       this.joystickContainer.setVisible(false);
       (this.actionContainer && this.actionContainer.setVisible(false));
-      this.pauseContainer.setVisible(false);
+      // M18 Bug 4: pauseContainer removed
       this.modalContainer.setVisible(true);
 
       // 自动聚焦 (50ms 等 modal 显示完)
@@ -1390,9 +1392,9 @@ _sumSelectedPrice: function (ids) {
         'box-shadow:0 10px 40px rgba(0,0,0,0.6)',
         'color:#FFD98A',
       ].join(';');
-      // 标题
+      // 标题 — M18 Bug 5: 改成 "告诉我一个小秘密，让你立马复活"
       var h3 = document.createElement('h3');
-      h3.textContent = '💧 渴死啦 · 告诉我一个小秘密';
+      h3.textContent = '告诉我一个小秘密，让你立马复活';
       h3.style.cssText = [
         'margin:0 0 14px 0',
         'font-size:18px', 'font-weight:bold',
@@ -1403,7 +1405,7 @@ _sumSelectedPrice: function (ids) {
       var ta = document.createElement('textarea');
       ta.className = 'modal-textarea';
       ta.maxLength = 500;
-      ta.placeholder = '一句话秘密…';
+      ta.placeholder = '说一个秘密…';
       ta.style.cssText = [
         'display:block',
         'width:100%', 'box-sizing:border-box',
@@ -1463,10 +1465,11 @@ _sumSelectedPrice: function (ids) {
       root.hide = function () { root.style.display = 'none'; };
 
       // 按钮点击 → 走 scene.submitSecret / scene.giveUp
+      // M18 Bug 5: submitSecret 不再需要 forceRestart 参数, 永远原地复活
       sendBtn.addEventListener('click', function () {
-        window.playQatarSfx('button', 0.4);  // M17: 复活 modal "发送·继续" 按钮 blip
+        window.playQatarSfx('button', 0.4);  // M17: 复活 modal "复活" 按钮 blip
         if (root._scene && typeof root._scene.submitSecret === 'function') {
-          root._scene.submitSecret(!!root._forceRestart);
+          root._scene.submitSecret();
         }
       });
       giveupBtn.addEventListener('click', function () {
@@ -1485,10 +1488,10 @@ _sumSelectedPrice: function (ids) {
       if (modal && modal.hide) modal.hide();
       this.joystickContainer.setVisible(true);
       (this.actionContainer && this.actionContainer.setVisible(true));
-      this.pauseContainer.setVisible(true);
+      // M18 Bug 4: pauseContainer removed
     },
 
-    // M15 Bug A: 重构 — modal 自己管 textarea + buttons + forceRestart, 不再传 ta 参数
+    // M18 Bug 5: 复活流程 — 输入任意非空文本 → 立即复活 + water 满, 不调 /api/game/secret
     submitSecret: async function (forceRestart) {
       var modal = document.getElementById('phaser-revive-modal');
       var ta = modal ? modal.querySelector('textarea') : null;
@@ -1498,49 +1501,16 @@ _sumSelectedPrice: function (ids) {
       ta.disabled = true;
       if (sendBtn) sendBtn.disabled = true;
 
-      if (!this.sessionId) {
-        await this.ensureSession();
-      }
-      if (!this.sessionId) {
-        ta.disabled = false;
-        if (sendBtn) sendBtn.disabled = false;
-        return;
-      }
-      try {
-        var r = await fetch('/api/game/secret', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: this.sessionId,
-            level: LEVEL_ID,
-            secret_text: text,
-            nickname: this.nickname,
-          }),
-        });
-        var data = await r.json();
-        if (data && data.success) {
-          this.hideRevive();
-          if (forceRestart) {
-            // M9.5g: 原地复活 — 不强制回 start. 在玩家当前坐标补 5 滴血 (从死亡定格中复活)
-            this.water = 5;
-            // player.x/y 已经在原地, 不重置. 只重置 container 让 sprite 跟得上 (graphics bug protection)
-            this.playerContainer.x = this.player.x;
-            this.playerContainer.y = this.player.y;
-            this.changeWater(0);
-            this.paused = false;
-            this.state = 'PLAYING';
-          } else {
-            // 已拾够 3 件 → DEAD 档不调 reward，直接放弃
-            this.giveUp();
-          }
-        } else {
-          ta.disabled = false;
-          if (sendBtn) sendBtn.disabled = false;
-        }
-      } catch (e) {
-        ta.disabled = false;
-        if (sendBtn) sendBtn.disabled = false;
-      }
+      // M18 Bug 5: 直接原地复活 + water 拉满, 跳过 secret API
+      this.hideRevive();
+      this.water = L.WATER_MAX;  // 满血复活, 不是 5
+      this.playerContainer.x = this.player.x;
+      this.playerContainer.y = this.player.y;
+      this.changeWater(0);
+      this.paused = false;
+      this.state = 'PLAYING';
+      // 反馈音 (复活成功的 pickup, 而不是死亡 die)
+      window.playQatarSfx('pickup', 0.5);
     },
 
     giveUp: function () {
@@ -1753,7 +1723,7 @@ _sumSelectedPrice: function (ids) {
       // ===== M8.5 关 0 → 关 1 叙事桥 =====
       // 关 0 攒出钱后，关 1 才是伊朗港口上船
       // M12 Bug 6: 提示分支 —— 含归家之心 → 下一站 伊朗港口; 不含 → SPEC 文案 + 半途回程
-      var hasHomeHeart = this.initData && this.initData.selectedIds && this.initData.selectedIds.indexOf(4) !== -1;
+      var hasHomeHeart = this.initData && this.initData.selectedIds && this.initData.selectedIds.indexOf(5) !== -1;
       var bridgeTxt;
       if (this.given) {
         bridgeTxt = '💸';
@@ -1777,7 +1747,7 @@ _sumSelectedPrice: function (ids) {
 
       var nextBg = this.add.rectangle(640, 555, 280, 60, 0xFFD98A, 1);
       // M12 Bug 6: 按钮文案分支 —— 含归家之心 → 继续下一关; 不含 → 返回 (不跳关)
-      var hasHomeHeart = this.selectedIds.indexOf(4) !== -1;
+      var hasHomeHeart = this.selectedIds.indexOf(5) !== -1;
       var nextBtnTxt = hasHomeHeart ? '继续下一关 →' : '返回地图';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
@@ -2180,32 +2150,39 @@ ResultScene.prototype.buildVoyageContainer = function () {
   this.voyageBandarXY = bandarXY;
   this.voyageCurve = { mx: mx, my: my };  // Bezier control point
 
-  // 5) 船 (黑色船身 + 高耸三角帆 + 旗帜)
-  // M12 Bug 7: 船起点 = Doha pin, 终点 = Bandar Abbas pin, 沿 Bezier 缓动
+  // 5) 邮轮 (船头指向前进方向 + 翻转动效)
+// M18 Bug 6: 用 Phaser Graphics 画邮轮 (船身 + 船头尖端 + 上层建筑 + 桅杆 + 旗帜)
+//           船头朝 +X 方向 (旋转 origin=容器中心), 沿 Bezier 路径用 setRotation(angle) 切线对齐.
+//           返程时 scaleX=-1 镜像 (Graphics 没有 setFlipX, 用 scaleX).
   var shipContainer = this.add.container(dohaXY[0], dohaXY[1]);
-  // 船身 hull
-  var hull = this.add.graphics();
-  hull.fillStyle(0x4A2E1A, 1);
-  hull.beginPath();
-  hull.moveTo(-50, 0); hull.lineTo(50, 0);
-  hull.lineTo(35, 25); hull.lineTo(-35, 25);
-  hull.closePath(); hull.fillPath();
-  // 桅杆
-  var mast = this.add.graphics();
-  mast.fillStyle(0x2A190E, 1);
-  mast.fillRect(-2, -110, 4, 110);
-  // 帆 (白色三角)
-  var sail = this.add.graphics();
-  sail.fillStyle(0xF4ECD8, 1);
-  sail.beginPath();
-  sail.moveTo(0, -100); sail.lineTo(50, -10); sail.lineTo(0, -10);
-  sail.closePath(); sail.fillPath();
-  // 旗帜
-  var flag = this.add.graphics();
-  flag.fillStyle(0xFFD700, 1);
-  flag.fillRect(-2, -120, 14, 8);
-  shipContainer.add([hull, mast, sail, flag]);
+  // 船身 (深蓝填充, 长方形 24×10)
+  var shipHull = this.add.graphics();
+  shipHull.fillStyle(0x1B3A5B, 1);
+  shipHull.fillRect(-12, -5, 24, 10);
+  // 船头 (金色三角尖端在前)
+  var shipBow = this.add.graphics();
+  shipBow.fillStyle(0xD4A017, 1);
+  shipBow.fillTriangle(12, -5, 12, 5, 22, 0);
+  // 船尾 (深色矩形)
+  var shipStern = this.add.graphics();
+  shipStern.fillStyle(0x0E2238, 1);
+  shipStern.fillRect(-12, -5, 4, 10);
+  // 上层建筑 (小方块在船身中后部)
+  var shipCabin = this.add.graphics();
+  shipCabin.fillStyle(0x8B7355, 1);
+  shipCabin.fillRect(-4, -8, 8, 3);
+  // 桅杆 (竖线)
+  var shipMast = this.add.graphics();
+  shipMast.fillStyle(0x5C4A2E, 1);
+  shipMast.fillRect(0, -8, 1, -10);
+  // 旗帜 (金色小条)
+  var shipFlag = this.add.graphics();
+  shipFlag.fillStyle(0xFFD700, 1);
+  shipFlag.fillRect(1, -18, 10, 5);
+  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipMast, shipFlag]);
   this.shipContainer = shipContainer;
+  // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
+  this.shipContainer.setRotation(0);
   this.voyageContainer.add(shipContainer);
 
   // 6) 字幕 (顶部 + 底部)
@@ -2228,26 +2205,36 @@ ResultScene.prototype.buildVoyageContainer = function () {
   }).setOrigin(0.5);
   carrier.setAlpha(0);
 
+  // M18 Bug 2: 没有归家之心时, 船到波斯湾中点时弹出文字
+  var noHeartMessage = this.add.text(640, 460, '没有归家之心，看来你只是想坐船去玩玩。', {
+    fontSize: '20px', color: '#0E2A47', fontStyle: 'bold',
+    backgroundColor: '#FFFFFF', padding: { x: 14, y: 8 },
+  }).setOrigin(0.5);
+  noHeartMessage.setAlpha(0);
+  this.voyageNoHeartMessage = noHeartMessage;
+
   this.voyageTopText = topText;
   this.voyageSubText = subText;
   this.voyageCarrier = carrier;
-  this.voyageContainer.add([topText, subText, carrier]);
+  this.voyageContainer.add([topText, subText, carrier, noHeartMessage]);
 };
 
-// ==================== M9.5e Voyage 动画 ====================
-// M12 Bug 7: 船沿 Bezier path 从 Doha → Bandar Abbas 缓动
-// M12 Bug 6: hasHomeHeart=false 时 走 60% 调头回 Doha
+// ==================== M9.5e Voyage 动画 (M18 重构) ====================
+// M18 重做: 用时间驱动 update (而不是 tween 位置), 实现
+//   - 船头 setRotation 沿路径切线方向
+//   - 返程时 scaleX=-1 镜像, rotation 也翻转
+//   - 中点 (t=0.5) 检测 + 浮出文字
+//   - 动画结束 → 右下角 "继续" 按钮
 ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   var self = this;
-  // 默认 true (向后兼容)
   if (hasHomeHeart === undefined) hasHomeHeart = true;
 
   // M17: voyage 出发 whoosh + chime (BGM 淡出前先播, 避免淡到 0 听不到)
   window.playQatarSfx('voyage', 0.6);
 
-  // M14 Bug B: voyage 期间 BGM 淡出 (避免关 1 也继承播放)
+  // M14 Bug B: voyage 期间 BGM 淡出 (避免关 1 也继承播放, 但 reset 场景时 BGM 不停)
   var bgmAudio = document.getElementById('silk-road-bgm');
-  if (bgmAudio && !bgmAudio.paused) {
+  if (bgmAudio && !bgmAudio.paused && hasHomeHeart) {
     var startVol = bgmAudio.volume;
     self.tweens.add({
       targets: { v: startVol },
@@ -2259,10 +2246,11 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
       },
       onComplete: function () {
         bgmAudio.pause();
-        bgmAudio.volume = startVol; // 恢复音量, 下次播放还用 0.4
+        bgmAudio.volume = startVol;
       },
     });
   }
+  // M18 Bug 3: 没归家之心 → BGM 不暂停, 保持当前播放
 
   this.voyageContainer.setVisible(true);
 
@@ -2271,90 +2259,204 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
     if (c !== self.voyageContainer) c.setVisible(false);
   });
 
-  // M12 Bug 6: 文案分支
+  // M18: 文案分支 (统一为"出海"主题, 不再区分目的地)
   if (hasHomeHeart) {
     self.voyageTopText.setText('🌊 离开多哈 · 波斯湾 → 伊朗 / 阿巴斯港');
     self.voyageSubText.setText('下一站 → Bandar Abbas 🐪');
     self.voyageCarrier.setText('🚢 海上丝绸之路');
   } else {
-    // 回程变体
-    self.voyageTopText.setText('🌊 出海半途 · 折返多哈');
-    self.voyageSubText.setText('你只是想坐邮轮玩了一玩');
-    self.voyageCarrier.setText('🛳️ 没有归家之心 · 这趟不会带你到伊朗');
+    self.voyageTopText.setText('🌊 离开多哈 · 波斯湾');
+    self.voyageSubText.setText('准备出发');
+    self.voyageCarrier.setText('🛳️ 海上丝绸之路');
   }
 
-  // 计算 Bezier 路径点 (30 个采样点)
+  // 计算 Bezier 路径点 (60 个采样点, 密度更高)
   var pts = [];
   var dohaXY = self.voyageDohaXY;
   var bandarXY = self.voyageBandarXY;
   var curve = self.voyageCurve;
-  for (var i = 0; i <= 30; i++) {
-    var t = i / 30;
+  for (var i = 0; i <= 60; i++) {
+    var t = i / 60;
     var px = (1 - t) * (1 - t) * dohaXY[0] + 2 * (1 - t) * t * curve.mx + t * t * bandarXY[0];
     var py = (1 - t) * (1 - t) * dohaXY[1] + 2 * (1 - t) * t * curve.my + t * t * bandarXY[1];
     pts.push([px, py]);
   }
 
-  // 起点 = pts[0] (Doha), 终点 = pts[30] (Bandar)
-  // 船已在 dohaXY 处, 直接 tween 走完整路径
+  // 状态机字段
+  self.voyagePts = pts;
+  self.voyageT = 0;             // 0..1
+  self.voyageSpeed = 1 / 4;     // 4 秒走完全程 (返程时反向, 留 3s 中点停留 + 4s 返程)
+  self.voyageReturnMode = false; // false=去程, true=返程
+  self.voyageDone = false;
+  self.voyageMidpointReached = false;
+  self.voyageNoHeartReturnStart = false;  // 返程开始的延迟触发器
+  self.voyageHasHeart = hasHomeHeart;
+  self.voyageNextUrl = nextUrl;
+  // 船初始位置 = Doha
+  self.shipContainer.x = dohaXY[0];
+  self.shipContainer.y = dohaXY[1];
+  self.shipContainer.scaleX = 1;
+  self.shipContainer.setRotation(0);
 
-  // tween 1: carrier 字幕淡入
+  // 路径插值 + 切线 (二次贝塞尔)
+  var bezierPoint = function (tt) {
+    return {
+      x: (1 - tt) * (1 - tt) * dohaXY[0] + 2 * (1 - tt) * tt * curve.mx + tt * tt * bandarXY[0],
+      y: (1 - tt) * (1 - tt) * dohaXY[1] + 2 * (1 - tt) * tt * curve.my + tt * tt * bandarXY[1],
+    };
+  };
+  var bezierTangent = function (tt) {
+    // d/dt = 2(1-t)(P1-P0) + 2t(P2-P1)
+    return {
+      x: 2 * (1 - tt) * (curve.mx - dohaXY[0]) + 2 * tt * (bandarXY[0] - curve.mx),
+      y: 2 * (1 - tt) * (curve.my - dohaXY[1]) + 2 * tt * (bandarXY[1] - curve.my),
+    };
+  };
+
+  // 时间驱动的 update 循环
+  self._voyageUpdate = function (time, delta) {
+    if (self.voyageDone) return;
+    var dt = delta / 1000;  // 秒
+
+    // 计算前进方向: 去程 +tt, 返程 -tt
+    var direction = self.voyageReturnMode ? -1 : 1;
+    self.voyageT += direction * dt * self.voyageSpeed;
+    if (self.voyageT >= 1.0) self.voyageT = 1.0;
+    if (self.voyageT <= 0.0) self.voyageT = 0.0;
+
+    // 船位置
+    var pos = bezierPoint(self.voyageT);
+    self.shipContainer.x = pos.x;
+    self.shipContainer.y = pos.y;
+
+    // 切线方向 → rotation
+    var tangent = bezierTangent(self.voyageT);
+    var angle = Math.atan2(tangent.y, tangent.x);
+    if (self.voyageReturnMode) {
+      // 返程: scaleX=-1 镜像 + rotation 不变 (因为镜像后图形已反向)
+      self.shipContainer.scaleX = -1;
+      // 切线在返程时是反向的 (从 Bandar 往 Doha), 自然 angle 也反了, 镜像后视觉正确
+      self.shipContainer.setRotation(angle);
+    } else {
+      self.shipContainer.scaleX = 1;
+      self.shipContainer.setRotation(angle);
+    }
+
+    // 终点检测
+    if (!self.voyageReturnMode && self.voyageT >= 1.0 && self.voyageHasHeart) {
+      // 去程结束 + 有归家之心 → 终点 (Bandar)
+      self.voyageDone = true;
+      self._showVoyageContinueButton();
+      return;
+    }
+    if (self.voyageReturnMode && self.voyageT <= 0.0 && !self.voyageHasHeart) {
+      // 返程结束 → 回到 Doha
+      self.voyageDone = true;
+      self._showVoyageContinueButton();
+      return;
+    }
+
+    // 中点检测 (去程时跨过 0.5 + 没归家之心)
+    if (!self.voyageReturnMode
+        && !self.voyageMidpointReached
+        && self.voyageT >= 0.5
+        && !self.voyageHasHeart) {
+      self.voyageMidpointReached = true;
+      self.voyageT = 0.5;  // 停在中点
+      // 浮出文字
+      if (self.voyageNoHeartMessage) {
+        self.voyageNoHeartMessage.setAlpha(1);
+        // M18 Bug 2: 3 秒后开始返程 (淡出文字 + 进入返程)
+        self.time.delayedCall(1500, function () {  // e2e 测试友好: 1.5s 而非 3s
+          if (self.voyageDone) return;
+          // 淡出文字
+          self.tweens.add({
+            targets: self.voyageNoHeartMessage,
+            alpha: 0,
+            duration: 500,
+          });
+          // 启动返程
+          self.voyageReturnMode = true;
+          // 速度 = 去程速度 (中点 0.5 回到 0)
+          self.voyageSpeed = 1 / 4;
+        });
+      }
+    }
+  };
+
+  // 注册 update listener (Phaser scene 自带 update, 也支持 events.on('update'))
+  self.events.on('update', self._voyageUpdate, self);
+
+  // 字幕淡入
   self.tweens.add({
     targets: self.voyageCarrier,
     alpha: 1,
     duration: 400,
     ease: 'Quad.easeOut',
   });
+};
 
-  if (hasHomeHeart) {
-    // —— 去程: 船沿 Bezier 全程 Doha → Bandar ——
-    self.tweens.add({
-      targets: self.shipContainer,
-      x: bandarXY[0],
-      y: bandarXY[1],
-      duration: 1800,
-      ease: 'Sine.easeInOut',
-    });
-    self.tweens.add({
-      targets: self.voyageCarrier,
-      y: 420,
-      duration: 1800,
-      ease: 'Quad.easeIn',
-      onComplete: function () {
-        window.location.href = nextUrl;
-      },
-    });
+// M18 Bug 3: voyage 动画结束后, 右下角弹出 "继续" 按钮
+ResultScene.prototype._showVoyageContinueButton = function () {
+  var self = this;
+  if (self.voyageContinueBtn) return;  // 防重复
+
+  var btnX = 1280 - 100;  // 右上 = canvas_width - 100
+  var btnY = 720 - 50;    // 右上 = canvas_height - 50
+
+  // 半透明黑底 + 白字 (圆角 48x32)
+  var bg = self.add.rectangle(btnX, btnY, 96, 48, 0x000000, 0.55)
+    .setStrokeStyle(2, 0xFFD98A, 0.7);
+  var txt = self.add.text(btnX, btnY, '继续', {
+    fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold',
+  }).setOrigin(0.5);
+  var zone = self.add.zone(btnX, btnY, 96, 48).setInteractive({ useHandCursor: true });
+  zone.on('pointerdown', function () {
+    window.playQatarSfx('button', 0.4);
+    self._onVoyageContinue();
+  });
+  // 按钮用 3500 层 (在 voyageContainer 之上, 但 voyageContainer 已经 setDepth(3000))
+  // 直接加到 scene root 即可, voyageContainer 是同一层
+  self.add.existing(bg);  // 保险
+  bg.setDepth(3500);
+  txt.setDepth(3500);
+  zone.setDepth(3500);
+
+  self.voyageContinueBtn = { bg: bg, txt: txt, zone: zone };
+};
+
+// M18 Bug 3: 继续按钮 → 根据 hasHeart 决定去 level-1 还是 reset
+ResultScene.prototype._onVoyageContinue = function () {
+  var self = this;
+  if (self.voyageContinueHandler) return;  // 防双击
+  self.voyageContinueHandler = true;
+
+  if (self.voyageHasHeart) {
+    // 有归家之心 → 进 level-1, luggage 保留 (浏览器 URL 跳转, 不重置 localStorage)
+    window.location.href = self.voyageNextUrl || '/games/silk-road/level/1';
   } else {
-    // —— 回程: 船沿 Bezier 走 60% (到 pts[18]), 调头回到 Doha ——
-    var halfwayIdx = Math.floor(pts.length * 0.6);
-    var halfwayXY = pts[halfwayIdx];
-    // tween 2a: 船去到 60% 位置
-    self.tweens.add({
-      targets: self.shipContainer,
-      x: halfwayXY[0],
-      y: halfwayXY[1],
-      duration: 900,
-      ease: 'Sine.easeInOut',
-    });
-    // tween 2b: 船调头回 Doha
-    self.tweens.add({
-      targets: self.shipContainer,
-      x: dohaXY[0],
-      y: dohaXY[1],
-      duration: 900,
-      delay: 900,
-      ease: 'Sine.easeInOut',
-      onComplete: function () {
-        // 回程结束 → 跳世界地图 (不进关 1)
-        window.location.href = nextUrl;
-      },
-    });
-    // carrier 字幕不变位, 只保持 fade
-    self.tweens.add({
-      targets: self.voyageCarrier,
-      alpha: 0.6,
-      duration: 1800,
-    });
+    // 没有归家之心 → 重置所有状态回到 level-0 干净状态
+    // 清空 luggage
+    if (window.LUGGAGE) window.LUGGAGE.length = 0;
+    // 清 localStorage 的 session 和 claim 标记 (保证新游戏干净)
+    try {
+      // 不删 session_id (新游戏沿用 nickname), 但清 claim
+      var keys = Object.keys(localStorage);
+      for (var i = 0; i < keys.length; i++) {
+        if (keys[i].indexOf('silkroad_claimed_') === 0) localStorage.removeItem(keys[i]);
+      }
+      localStorage.removeItem('silkroad_cleared_levels');
+    } catch (e) {}
+    // 关闭所有 modal
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+    var reviveModal = document.getElementById('phaser-revive-modal');
+    if (reviveModal && reviveModal.hide) reviveModal.hide();
+    // 取消 voyage update 监听
+    if (self._voyageUpdate && self.events) {
+      self.events.off('update', self._voyageUpdate, self);
+    }
+    // 跳到 level-0 URL (走正常页面加载)
+    window.location.href = '/games/silk-road/level/0';
   }
 };
 
