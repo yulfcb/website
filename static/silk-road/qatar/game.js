@@ -1107,21 +1107,10 @@ _showTicketModal: function () {
   }).setOrigin(0.5);
   var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
   goZone.on('pointerdown', function () {
-    alert('price=' + self._selectedPrice + ' count=' + self._selectedCount + ' threshold=' + L.PORT_TICKET_PRICE_THRESHOLD + ' min=' + L.MIN_LUGGAGE_TO_BOARD);
     window.playQatarSfx('button', 0.4);  // M17: "起航" 按钮 blip
     self.modalContainer.setVisible(false);
-    // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件就能上船
-    var canExchangeNow = self._selectedPrice >= L.PORT_TICKET_PRICE_THRESHOLD
-      && self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD;
-    if (canExchangeNow) {
-      self.enterResult();
-      alert('enterResult called');
-    } else {
-      // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
-      self.joystickContainer.setVisible(true);
-      self.actionContainer && self.actionContainer.setVisible(true);
-      // M18 Bug 4: pauseContainer removed
-    }
+    // Fix: 船票已兑换（_ticketExchanged=true），直接进入 voyage，不再检查已清零的 _selectedPrice/_selectedCount
+    self.enterResult();
   });
 
   this.modalContainer.add([goBg, goText, goZone]);
