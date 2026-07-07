@@ -1755,13 +1755,18 @@ _sumSelectedPrice: function (ids) {
       }).setOrigin(0.5);
       var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
       var self = this;
-      nextZone.on('pointerdown', function () {
+      var triggerVoyage = function (eventName) {
+        console.log('[M23.9 voyage]', eventName, 'hasHomeHeart=', hasHomeHeart, 'voyageContainer.visible=', self.voyageContainer ? self.voyageContainer.visible : 'none');
         // M19: 统一 "坐船出发" 触发点 — 根据 hasHomeHeart 决定 nextUrl
         //   有归家之心 → /games/silk-road/level/1 (下一关)
         //   无归家之心 → /games/silk-road/world-map (返程后回地图)
         var nextUrl = hasHomeHeart ? '/games/silk-road/level/1' : '/games/silk-road/world-map';
         self.playVoyageAnimation(nextUrl, hasHomeHeart);
-      });
+      };
+      nextZone.on('pointerdown', function () { triggerVoyage('pointerdown'); });
+      nextZone.on('pointerup', function () { triggerVoyage('pointerup'); });
+      // iOS Safari fallback: 直接绑 DOM click 事件 (绕过 Phaser zone 在某些 iOS 版本不响应的问题)
+      nextZone.on('gameobjectdown', function () { triggerVoyage('gameobjectdown'); });
 
       // 调用 webhook
       if (this.given) {
@@ -2200,6 +2205,7 @@ ResultScene.prototype.buildVoyageContainer = function () {
 ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   var self = this;
   if (hasHomeHeart === undefined) hasHomeHeart = true;
+  console.log('[M23.9 voyage] playVoyageAnimation START hasHomeHeart=', hasHomeHeart, 'nextUrl=', nextUrl);
 
   // M17: voyage 出发 whoosh + chime (BGM 淡出前先播, 避免淡到 0 听不到)
   window.playQatarSfx('voyage', 0.6);
@@ -2225,6 +2231,7 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   // M18 Bug 3: 没归家之心 → BGM 不暂停, 保持当前播放
 
   this.voyageContainer.setVisible(true);
+  console.log('[M23.9 voyage] voyageContainer.setVisible(true), children=', this.voyageContainer.list.length);
 
   // 隐藏所有 ResultScene UI 元素
   this.children.list.forEach(function (c) {
@@ -2387,6 +2394,7 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
 
   // 注册 update listener (Phaser scene 自带 update, 也支持 events.on('update'))
   self.events.on('update', self._voyageUpdate, self);
+  console.log('[M23.9 voyage] update listener registered, voyageT=', self.voyageT, 'voyageSpeed=', self.voyageSpeed);
 };
 
 // M18 Bug 3: voyage 动画结束后, 右下角弹出 "继续" 按钮
