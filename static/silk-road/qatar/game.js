@@ -1749,10 +1749,14 @@ _sumSelectedPrice: function (ids) {
       //   - 勾了 id=5 兑换了 → selectedIds 没 id=5 → 中点返航
       //   - 没勾 id=5 (没消耗) → selectedIds 还有 id=5 → 到 Bandar
       var hasHomeHeart = this.selectedIds.indexOf(5) !== -1;
-      var nextBtnTxt = '🚢 坐船出发';
+      // M23.11: DEAD 档 (玩家放弃复活) → 按钮文字改「🏜️ 返回地图」+ 灰色样式
+      //   不走 voyage 动画, onclick 直接跳 world-map. 避免玩家看到"没有归家之心"再返程的歧义.
+      var isDeadTier = this.tier === 'DEAD';
+      var nextBtnTxt = isDeadTier ? '🏜️ 返回地图' : '🚢 坐船出发';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
-        fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
+        fontSize: '20px', color: isDeadTier ? '#666666' : '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
+      if (isDeadTier) nextBg.setFillStyle(0x888888, 1);
       var nextZone = this.add.zone(640, 555, 280, 60).setInteractive({ useHandCursor: true });
       var self = this;
       var triggerVoyage = function (eventName) {
@@ -1760,13 +1764,45 @@ _sumSelectedPrice: function (ids) {
         // M19: 统一 "坐船出发" 触发点 — 根据 hasHomeHeart 决定 nextUrl
         //   有归家之心 → /games/silk-road/level/1 (下一关)
         //   无归家之心 → /games/silk-road/world-map (返程后回地图)
+        // M23.11: DEAD 档直接跳 world-map, 不走 voyage 动画
+        if (isDeadTier) {
+          window.playQatarSfx('button', 0.4);
+          self._hideVoyageDomBtn();
+          window.location.href = '/games/silk-road/world-map';
+          return;
+        }
         var nextUrl = hasHomeHeart ? '/games/silk-road/level/1' : '/games/silk-road/world-map';
+        self._hideVoyageDomBtn();
         self.playVoyageAnimation(nextUrl, hasHomeHeart);
       };
       nextZone.on('pointerdown', function () { triggerVoyage('pointerdown'); });
       nextZone.on('pointerup', function () { triggerVoyage('pointerup'); });
       // iOS Safari fallback: 直接绑 DOM click 事件 (绕过 Phaser zone 在某些 iOS 版本不响应的问题)
       nextZone.on('gameobjectdown', function () { triggerVoyage('gameobjectdown'); });
+
+      // M23.11: DOM 兜底按钮 — 解决 iOS Safari / 部分 Mac Chrome 对 Phaser Zone pointerdown
+      //   不响应的问题. 在 canvas (640, 555) 同位置覆盖一个 HTML <button>, 通过
+      //   canvas.getBoundingClientRect() 动态算屏幕坐标 (FIT letterbox 也兼容).
+      //   跨渲染器 (WebGL / Canvas fallback) 都稳定.
+      this._createVoyageDomBtn(nextBtnTxt, isDeadTier);
+      this._positionVoyageDomBtn();
+      this._showVoyageDomBtn();
+      this._bindVoyageDomBtnHandler(triggerVoyage, hasHomeHeart, isDeadTier);
+      // 窗口 resize / orientationchange 重算位置 (iOS Safari 横竖屏切换)
+      var resizeHandler = function () {
+        if (self._positionVoyageDomBtn) self._positionVoyageDomBtn();
+      };
+      this._voyageDomResizeHandler = resizeHandler;
+      window.addEventListener('resize', resizeHandler);
+      window.addEventListener('orientationchange', resizeHandler);
+      // scene shutdown 时清理 DOM 按钮 + resize 监听 (避免下个 scene 还在)
+      this.events.once('shutdown', function () {
+        if (self._voyageDomResizeHandler) {
+          window.removeEventListener('resize', self._voyageDomResizeHandler);
+          window.removeEventListener('orientationchange', self._voyageDomResizeHandler);
+        }
+        if (self._destroyVoyageDomBtn) self._destroyVoyageDomBtn();
+      });
 
       // 调用 webhook
       if (this.given) {
@@ -2466,6 +2502,104 @@ ResultScene.prototype._onVoyageContinue = function () {
     // 跳到 level-0 URL (走正常页面加载)
     window.location.href = '/games/silk-road/level/0';
   }
+};
+
+// ==================== M23.11: DOM 兜底按钮 (ResultScene voyage 触发) ====================
+// iOS Safari / 部分 Mac Chrome 对 Phaser Zone 的 pointerdown 不响应 → 用户点 voyage 按钮无反应.
+// 解决: 在 (640, 555) 同位置覆盖一个 HTML <button>, onclick 直接触发 voyage. 完全绕过 Phaser Zone.
+//   跨渲染器 (WebGL / Canvas fallback) 都稳定 (DOM 是浏览器底层, 跟 Phaser 渲染管线无关).
+// 位置通过 canvas.getBoundingClientRect() 动态算屏幕坐标 → 兼容 Phaser FIT letterbox.
+ResultScene.prototype._createVoyageDomBtn = function (txt, isDeadTier) {
+  if (this.voyageDomBtn) return;
+  var btn = document.createElement('button');
+  btn.id = 'qatar-voyage-dom-btn';
+  btn.type = 'button';
+  btn.textContent = txt;
+  var bg = isDeadTier ? '#888888' : '#FFD98A';
+  var fg = isDeadTier ? '#666666' : '#2A190E';
+  var border = isDeadTier ? '#AAAAAA' : '#FFE9B0';
+  btn.style.cssText = [
+    'position:fixed',
+    'z-index:9000',                // 高于 canvas (1), 低于 modal (99999)
+    'background:' + bg,
+    'color:' + fg,
+    'border:2px solid ' + border,
+    'border-radius:0',
+    'font-family:inherit',
+    'font-weight:bold',
+    'cursor:pointer',
+    'box-shadow:0 4px 12px rgba(0,0,0,0.3)',
+    'touch-action:manipulation',
+    '-webkit-tap-highlight-color:transparent',
+    'display:none',                // create 后才显示
+    'pointer-events:auto',
+    'user-select:none',
+    '-webkit-user-select:none',
+  ].join(';');
+  document.body.appendChild(btn);
+  this.voyageDomBtn = btn;
+};
+
+ResultScene.prototype._positionVoyageDomBtn = function () {
+  if (!this.voyageDomBtn) return;
+  var canvas = (window.__qatarGame && window.__qatarGame.canvas) || null;
+  if (!canvas) return;
+  var rect = canvas.getBoundingClientRect();
+  // canvas 物理像素 = 1280x720, 屏幕像素 = rect.width/height
+  // Phaser FIT 模式 + autoCenter 会 letterbox, 屏幕位置 ≠ canvas 内部坐标
+  var sx = rect.width / 1280;
+  var sy = rect.height / 720;
+  var cx = rect.left + 640 * sx;   // 按钮中心 X (屏幕像素)
+  var cy = rect.top + 555 * sy;    // 按钮中心 Y (屏幕像素)
+  var w = 280 * sx;
+  var h = 60 * sy;
+  this.voyageDomBtn.style.left = (cx - w / 2) + 'px';
+  this.voyageDomBtn.style.top = (cy - h / 2) + 'px';
+  this.voyageDomBtn.style.width = w + 'px';
+  this.voyageDomBtn.style.height = h + 'px';
+  this.voyageDomBtn.style.fontSize = (20 * sy) + 'px';
+  this.voyageDomBtn.style.lineHeight = h + 'px';  // 文字垂直居中
+};
+
+ResultScene.prototype._showVoyageDomBtn = function () {
+  if (this.voyageDomBtn) this.voyageDomBtn.style.display = 'block';
+};
+
+ResultScene.prototype._hideVoyageDomBtn = function () {
+  if (this.voyageDomBtn) this.voyageDomBtn.style.display = 'none';
+};
+
+ResultScene.prototype._destroyVoyageDomBtn = function () {
+  if (this.voyageDomBtn && this.voyageDomBtn.parentNode) {
+    this.voyageDomBtn.parentNode.removeChild(this.voyageDomBtn);
+  }
+  this.voyageDomBtn = null;
+};
+
+ResultScene.prototype._bindVoyageDomBtnHandler = function (triggerVoyage, hasHomeHeart, isDeadTier) {
+  if (!this.voyageDomBtn) return;
+  var self = this;
+  var triggered = false;
+  this.voyageDomBtn.addEventListener('click', function (e) {
+    if (triggered) return;
+    triggered = true;
+    e.preventDefault();
+    e.stopPropagation();
+    var tag = isDeadTier ? 'M23.11 voyage-dom DEAD' : 'M23.11 voyage-dom click';
+    console.log('[' + tag + '] hasHomeHeart=' + hasHomeHeart);
+    // 直接复用 triggerVoyage 逻辑 (Phaser Zone 路径已经写好的逻辑, 避免重复)
+    if (typeof triggerVoyage === 'function') {
+      triggerVoyage('dom-click');
+    }
+  });
+  // iOS 触摸响应 (部分 iOS Safari 不响应 button click 但响应 touchend)
+  this.voyageDomBtn.addEventListener('touchend', function (e) {
+    if (triggered) return;
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[M23.11 voyage-dom touchend] hasHomeHeart=' + hasHomeHeart);
+    if (typeof triggerVoyage === 'function') triggerVoyage('dom-touchend');
+  });
 };
 
   // ==================== M16 Bug 6: 自定义 Graphics 礼物 sprite ====================
