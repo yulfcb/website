@@ -2597,25 +2597,36 @@ ResultScene.prototype._bindVoyageDomBtnHandler = function (triggerVoyage, hasHom
   if (!this.voyageDomBtn) return;
   var self = this;
   var triggered = false;
-  this.voyageDomBtn.addEventListener('click', function (e) {
+
+  // 统一的触发逻辑 (供 click / touchend / pointerdown 共用)
+  function _fireVoyage(e, source) {
     if (triggered) return;
     triggered = true;
     e.preventDefault();
     e.stopPropagation();
-    var tag = isDeadTier ? 'M23.11 voyage-dom DEAD' : 'M23.11 voyage-dom click';
+    var tag = isDeadTier ? 'M24.1 voyage-dom DEAD' : 'M24.1 voyage-dom ' + source;
     console.log('[' + tag + '] hasHomeHeart=' + hasHomeHeart);
-    // 直接复用 triggerVoyage 逻辑 (Phaser Zone 路径已经写好的逻辑, 避免重复)
+    // M24.1 手机端调试 alert — 确认按钮事件是否触发
+    //   如果 alert 弹出但 voyage 没播放 → triggerVoyage 内部有 bug
+    //   如果 alert 不弹出 → 按钮事件没绑定上或被遮挡
+    try { alert('voyage btn clicked (' + source + ')'); } catch (err) {}
     if (typeof triggerVoyage === 'function') {
-      triggerVoyage('dom-click');
+      triggerVoyage('dom-' + source);
     }
+  }
+
+  // M24.1 click — 桌面浏览器主路径
+  this.voyageDomBtn.addEventListener('click', function (e) {
+    _fireVoyage(e, 'click');
   });
   // iOS 触摸响应 (部分 iOS Safari 不响应 button click 但响应 touchend)
   this.voyageDomBtn.addEventListener('touchend', function (e) {
-    if (triggered) return;
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('[M23.11 voyage-dom touchend] hasHomeHeart=' + hasHomeHeart);
-    if (typeof triggerVoyage === 'function') triggerVoyage('dom-touchend');
+    _fireVoyage(e, 'touchend');
+  });
+  // M24.1 pointerdown — 移动端最可靠的事件 (比 click/touchend 早, 不受 300ms 延迟影响)
+  //   Android Chrome / iOS Safari 都稳定响应 pointerdown
+  this.voyageDomBtn.addEventListener('pointerdown', function (e) {
+    _fireVoyage(e, 'pointerdown');
   });
 };
 
