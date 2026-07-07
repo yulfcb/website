@@ -1107,7 +1107,7 @@ _showTicketModal: function () {
   }).setOrigin(0.5);
   var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
   goZone.on('pointerdown', function () {
-    alert('test');
+    alert('price=' + self._selectedPrice + ' count=' + self._selectedCount + ' threshold=' + L.PORT_TICKET_PRICE_THRESHOLD + ' min=' + L.MIN_LUGGAGE_TO_BOARD);
     window.playQatarSfx('button', 0.4);  // M17: "起航" 按钮 blip
     self.modalContainer.setVisible(false);
     // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件就能上船
@@ -1115,6 +1115,7 @@ _showTicketModal: function () {
       && self._selectedCount >= L.MIN_LUGGAGE_TO_BOARD;
     if (canExchangeNow) {
       self.enterResult();
+      alert('enterResult called');
     } else {
       // 没满足条件不允许通关 — 关闭 modal 给玩家继续走
       self.joystickContainer.setVisible(true);
