@@ -2611,9 +2611,8 @@ ResultScene.prototype._bindVoyageDomBtnHandler = function (triggerVoyage, hasHom
     var tag = isDeadTier ? 'M24.1 voyage-dom DEAD' : 'M24.1 voyage-dom ' + source;
     console.log('[' + tag + '] hasHomeHeart=' + hasHomeHeart);
     // M24.1 手机端调试 alert — 确认按钮事件是否触发
-    //   如果 alert 弹出但 voyage 没播放 → triggerVoyage 内部有 bug
-    //   如果 alert 不弹出 → 按钮事件没绑定上或被遮挡
-    try { alert('voyage btn clicked (' + source + ')'); } catch (err) {}
+    //   如果 triggerVoyage 内部有 bug → voyage 不会播放
+    //   如果按钮事件没绑定上或被遮挡 → triggerVoyage 不会被调用
     if (typeof triggerVoyage === 'function') {
       triggerVoyage('dom-' + source);
     }
