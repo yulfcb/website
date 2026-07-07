@@ -1752,7 +1752,7 @@ _sumSelectedPrice: function (ids) {
       // M23.11: DEAD 档 (玩家放弃复活) → 按钮文字改「🏜️ 返回地图」+ 灰色样式
       //   不走 voyage 动画, onclick 直接跳 world-map. 避免玩家看到"没有归家之心"再返程的歧义.
       var isDeadTier = this.tier === 'DEAD';
-      var nextBtnTxt = isDeadTier ? '🏜️ 返回地图' : '🚢 坐船出发';
+      var nextBtnTxt = isDeadTier ? '🏜️ 返回地图' : '🚢 坐船出发咯';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: isDeadTier ? '#666666' : '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
