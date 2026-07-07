@@ -224,6 +224,16 @@ python3 scripts/check_anniversaries.py
 
 e2e 验证：海 RGB(88,133,155) 接近 D、船 89×63 像素、色差 161、pageerror=0
 
+### M23.2 (2026-07-07) — voyage 船再放大一倍
+
+用户手机自查反馈：船还不够大，要求"再放大一倍"。
+
+- 船 scale：0.25 → 0.50（屏显 92×65 → 180×130，用户要求"再放大一倍"）
+- 不动港口 pin（用户确认"先不删"）：Doha ⚓ + Bandar 🐪
+- 不动港口文字 label：Doha + Bandar Abbas
+- 不动海色（D `#4A8FB8`，M23.1 状态）
+- e2e：船 scale 0.5（Phaser API），displayWidth=200（image bbox），2 个港口 Arcs（dohaXY 366,511 + bandarXY 892,279），'Doha' + 'Bandar Abbas' label 都在，pageerror=0
+
 ## 更新日志
 
 ### 2026-06-16 — UI 文案"VPN"→"代理" + 导航栏高亮 bug 修复

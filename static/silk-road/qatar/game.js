@@ -2167,8 +2167,8 @@ ResultScene.prototype.buildVoyageContainer = function () {
 //      shipContainer.scaleX=-1 返程镜像保留 (Image 走 transform pipeline, Container 镜像对子 Image 生效 — M9.3b 验证).
   var shipImg = this.add.image(0, 0, 'voyage-ship');
   shipImg.setOrigin(0.5, 0.5);
-  // M23.1: scale 0.18 → 0.25 (屏显 92×65, 跟 D 海色差 168 协调, 不霸屏)
-  shipImg.setScale(0.25);  // 367px bbox → 92px on screen
+  // M23.2: scale 0.25 → 0.50 (屏显 180×130, 用户要求 "再放大一倍")
+  shipImg.setScale(0.50);  // M23.2 用户要求再放大一倍 (屏显 180×130)
   var shipContainer = this.add.container(dohaXY[0], dohaXY[1], [shipImg]);
   this.shipContainer = shipContainer;
   // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
