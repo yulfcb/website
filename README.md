@@ -242,11 +242,25 @@ e2e 验证：海 RGB(88,133,155) 接近 D、船 89×63 像素、色差 161、pag
    修法: 去程 `shipContainer.scaleX = -1` 镜像, 返程 `scaleX = 1`, 让船头永远朝运动方向
 
 2. **删 "海上丝绸之路" 文字**: voyageCarrier + 字幕淡入 tween 删除 (6 处)
-   保留 topText/subText/noHeartMessage/gulfG.fillEllipse (波斯湾水域椭圆是地图要素不是装饰)
+   保留 topText/subText/noHeartMessage (波斯湾水域椭圆见 M23.4)
 
 3. **修中点返程 (核心 bug)**: voyageMidpointReached 之前只在兜底分支 (t>=1.0) 设
    修法: voyageT 跨过 0.5 立刻设 midpointReached=true + 显示 noHeartMessage, 1.5s 后启动返程
    没归家之心: 船在中点掉头, 不再走到 Bandar 才兜底
+
+### M23.4 (2026-07-07) — voyage 删 gulfG 椭圆 + 兑换船票算归家之心
+
+用户手机自查反馈 2 个问题:
+
+1. **椭圆没删**: gulfG.fillEllipse (line 2087-2096) 之前 M23.3 误判为'地图要素'保留, 实际用户明确要删.
+   - 椭圆宽 841px × 高 120px, 横跨 Doha 和 Bandar 之间, 太显眼
+   - 删整段 4a) 中段海域轮廓 + 注释
+
+2. **兑换船票也算归家之心**: line 1751 `hasHomeHeart = this.selectedIds.indexOf(5) !== -1 || !!this._ticketExchanged`
+   - 之前只看 selectedIds[5], 不看 line 1271 的 _ticketExchanged 标记
+   - M11/M12 引入船票兑换后, 没 id=5 也能兑换船票
+   - 现在: 兑换船票 OR 收集归家之心 → 视为有归家之心
+   - 兑换船票 = 剧情上'有归家之心', 走 Bandar 完整 voyage, 不再中点返程
 
 ## 更新日志
 

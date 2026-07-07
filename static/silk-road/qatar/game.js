@@ -1748,7 +1748,12 @@ _sumSelectedPrice: function (ids) {
       // M19: 按钮文案统一为 "🚢 坐船出发" — 不管有没有归家之心都先上船
       //      没有归家之心 → voyage 中点返程 + 文字提示 → 重置回 level-0
       //      有归家之心 → voyage 到 Bandar → 跳 level-1
-      var hasHomeHeart = this.selectedIds.indexOf(5) !== -1;
+      // M23.4: 兑换船票 (line 1271 self._ticketExchanged = true) 也算有归家之心
+      //   之前只看 selectedIds.indexOf(5), 但 M11/M12 引入船票兑换机制后, 用户即使没 id=5
+      //   也能兑换船票, voyage 触发时仍判定 hasHomeHeart=false → 中点返程.
+      //   现在: 兑换船票 OR 收集归家之心 → 都视为 hasHomeHeart=true
+      //   (注意: 此处 line 1761 才声明 var self = this, 所以这里用 this._ticketExchanged)
+      var hasHomeHeart = this.selectedIds.indexOf(5) !== -1 || !!this._ticketExchanged;
       var nextBtnTxt = '🚢 坐船出发';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
@@ -2083,17 +2088,6 @@ ResultScene.prototype.buildVoyageContainer = function () {
     wg.strokePath();
     this.voyageContainer.add(wg);
   }
-
-  // 4a) 中段海域轮廓 - 简化的卡塔尔-伊朗海域 (用 sphere path 裁切中东)
-  //     这里画个半透明椭圆代表波斯湾区域, 增强"海上"感
-  var gulfG = this.add.graphics();
-  // M23.1: gulfG 海湾半透明 改 SteelBlue Lite #4A8FB8 (D 用户选色)
-  gulfG.fillStyle(0x4A8FB8, 0.35);
-  gulfG.fillEllipse((dohaXY[0] + bandarXY[0]) / 2,
-                    (dohaXY[1] + bandarXY[1]) / 2,
-                    Math.abs(bandarXY[0] - dohaXY[0]) * 1.6,
-                    120);
-  this.voyageContainer.add(gulfG);
 
   // 4b) dashed gold line (船航行路径)
   // Phaser Graphics 3.80 没有 quadraticBezier, 用 lineTo 采样 Bezier 30 个点画 dashed gold line
