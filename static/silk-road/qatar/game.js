@@ -1107,6 +1107,7 @@ _showTicketModal: function () {
   }).setOrigin(0.5);
   var goZone = this.add.zone(0, 100, 300, 60).setInteractive({ useHandCursor: true });
   goZone.on('pointerdown', function () {
+    alert('test');
     window.playQatarSfx('button', 0.4);  // M17: "起航" 按钮 blip
     self.modalContainer.setVisible(false);
     // M16 Bug 4: 移除 hasAllGifts 要求 — 玩家只要带 1 件就能上船
