@@ -1081,13 +1081,11 @@ _showTicketModal: function () {
     .setStrokeStyle(2, 0x5fb3a0, 0.7);
   this.modalContainer.add(card);
 
-  // M18 Bug 7: 检查 _selectedGiftIds 含归家之心 (gift id=5) 决定分支文案
-  var hasHomeHeart = this._selectedGiftIds && this._selectedGiftIds.indexOf(5) !== -1;
   // M18 Bug 7: 文案统一为「船票已到手，准备出发!」, 不再区分目的地
+  // M23.7: 不再在兑换 modal 里剧透「没有归家之心」— 提示放到 voyage 动画中点 (M18 已实现 line 2309)
+  //   不管 selectedIds 有没有 id=5, modal 文案统一, 玩家在 voyage 中点才发现没归家之心
   var titleTxt = '船票已到手，准备出发！';
-  var subTxt = hasHomeHeart
-    ? '波斯湾之旅已开启 🛳️'
-    : '🛳️ 没有归家之心 · 这趟不会带你到伊朗';
+  var subTxt = '波斯湾之旅已开启 🛳️';
 
   this.modalContainer.add(this.add.text(0, -130, '⚓', { fontSize: '52px' }).setOrigin(0.5));
   // M12 Bug 4: 英文 'Doha Port'
