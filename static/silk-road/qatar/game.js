@@ -1100,7 +1100,7 @@ _showTicketModal: function () {
   }).setOrigin(0.5));
 
   // 大按钮 "坐船出发" (M18 Bug 7: 文案统一, 不再区分目的地)
-  var btnTxt = '坐船出发 →';
+  var btnTxt = '坐船出发咯 →';
   var goBg = this.add.rectangle(0, 100, 300, 60, 0x5fb3a0, 1);
   var goText = this.add.text(0, 100, btnTxt, {
     fontSize: '17px', color: '#0E2A47', fontStyle: 'bold',
