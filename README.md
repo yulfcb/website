@@ -208,6 +208,22 @@ python3 scripts/check_anniversaries.py
 - scale = 0.18（原图 bbox 367×258 → 屏显 66×46）
 - 保留 M18 的 `Container.scaleX = -1` 返程镜像逻辑（Image 走 transform pipeline，镜像对子 Image 生效）
 
+### M23.1 (2026-07-07) — voyage 海色改浅蓝 D + 船放大
+
+用户手机自查反馈：M23 船太小 + 船跟海色太接近。
+
+海色（色差 66 → 168，2.5× 提升）：
+- `seaBg`：`#0E2A47` → `#3676A0`（Cerulean 深海）
+- `gulfG`：`#1B3A5E` → `#4A8FB8`（SteelBlue Lite，用户选 D）
+- `dashG` 海浪：`#0E2A47` → `#4A8FB8`（透明度 0.95→0.85）
+- 渐变末（如有）：`#4A7AAB` → `#87CEEB`（SkyBlue 远处地平线）
+
+船 scale：0.18 → 0.25（屏显 66×46 → 92×65，跟 D 海色协调，不霸屏）
+
+🔴 仅改 `voyageContainer` 内 3-4 个深蓝色值；modal/card/backdrop 等其他位置深色保持不变。
+
+e2e 验证：海 RGB(88,133,155) 接近 D、船 89×63 像素、色差 161、pageerror=0
+
 ## 更新日志
 
 ### 2026-06-16 — UI 文案"VPN"→"代理" + 导航栏高亮 bug 修复

@@ -1971,7 +1971,8 @@ ResultScene.prototype.buildVoyageContainer = function () {
 
   // ===== M15 Bug B: 真实中东世界地图背景 =====
   // 1) 海面深蓝底 (覆盖整个画布, 国家不画的位置 = 海洋)
-  var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x0E2A47, 1);
+  // M23.1: 改浅蓝 #3676A0 (Cerulean 深海) — 船跟海色差 66 → 168
+  var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x3676A0, 1);
   this.voyageContainer.add(seaBg);
 
   // 2) d3 Mercator 投影 (M16 Bug 1: fitExtent 卡塔尔→伊朗 bbox, 横跨波斯湾)
@@ -2086,7 +2087,8 @@ ResultScene.prototype.buildVoyageContainer = function () {
   // 4a) 中段海域轮廓 - 简化的卡塔尔-伊朗海域 (用 sphere path 裁切中东)
   //     这里画个半透明椭圆代表波斯湾区域, 增强"海上"感
   var gulfG = this.add.graphics();
-  gulfG.fillStyle(0x1B3A5E, 0.35);
+  // M23.1: gulfG 海湾半透明 改 SteelBlue Lite #4A8FB8 (D 用户选色)
+  gulfG.fillStyle(0x4A8FB8, 0.35);
   gulfG.fillEllipse((dohaXY[0] + bandarXY[0]) / 2,
                     (dohaXY[1] + bandarXY[1]) / 2,
                     Math.abs(bandarXY[0] - dohaXY[0]) * 1.6,
@@ -2115,8 +2117,9 @@ ResultScene.prototype.buildVoyageContainer = function () {
   }
   pathG.strokePath();
   // 虚线盖在金线上 (深蓝 dash, 模拟 dashed look)
+  // M23.1: dash 改 SteelBlue Lite #4A8FB8 (透明度 0.95→0.85 不那么硬)
   var dashG = this.add.graphics();
-  dashG.lineStyle(2.5, 0x0E2A47, 0.95);
+  dashG.lineStyle(2.5, 0x4A8FB8, 0.85);
   for (var d = 0; d < pts.length - 1; d += 2) {
     dashG.beginPath();
     dashG.moveTo(pts[d][0], pts[d][1]);
@@ -2164,7 +2167,8 @@ ResultScene.prototype.buildVoyageContainer = function () {
 //      shipContainer.scaleX=-1 返程镜像保留 (Image 走 transform pipeline, Container 镜像对子 Image 生效 — M9.3b 验证).
   var shipImg = this.add.image(0, 0, 'voyage-ship');
   shipImg.setOrigin(0.5, 0.5);
-  shipImg.setScale(0.18);  // 367px bbox → 66px on screen
+  // M23.1: scale 0.18 → 0.25 (屏显 92×65, 跟 D 海色差 168 协调, 不霸屏)
+  shipImg.setScale(0.25);  // 367px bbox → 92px on screen
   var shipContainer = this.add.container(dohaXY[0], dohaXY[1], [shipImg]);
   this.shipContainer = shipContainer;
   // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
