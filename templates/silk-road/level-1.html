@@ -1,28 +1,27 @@
 {% extends "silk-road/_level_base.html" %}
-{% block title %}关卡 1 · 伊朗·沙漠骆驼{% endblock %}
+{% block title %}关卡 1 · 伊朗·阿巴斯港大巴扎{% endblock %}
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='silk-road/iran/style.css') }}">
+{% endblock %}
 {% block content %}
   <div class="silk-badge">关卡 1 / 5</div>
-  <h1 class="silk-title">{{ level.title if level else '伊朗·沙漠骆驼' }}</h1>
-  {% if level and level.vehicle %}<div class="silk-vehicle">{{ level.vehicle }}</div>{% endif %}
+  <h1 class="silk-title">伊朗 · 阿巴斯港大巴扎</h1>
+  <div class="silk-vehicle">🐪</div>
 
-  <p class="silk-placeholder">穿过沙漠 🐪 —— 连续点击下方骆驼 5 次即可通关</p>
+  {# 游戏容器 — iran/game.js 会填充 DOM #}
+  <div id="iran-game-root"></div>
 
-  <div id="pixi-stage"></div>
-
-  <p id="silk-progress" class="silk-progress">进度 0 / 5</p>
-
-  <button id="silk-start" class="silk-start" type="button">出发 →</button>
-
-  <div id="silk-win" class="silk-win">
-    <p class="silk-quote" id="silk-quote">{{ level.quote if level else '' }}</p>
+  {# 通关面板 (game.js 在通关时直接渲染沙漠场景, 这里保留 fallback 静态 DOM 以防 JS 加载失败) #}
+  <div id="silk-win" class="silk-win" style="display:none">
+    <p class="silk-quote" id="silk-quote">你还记得吗，那晚的沙漠 / 抬头看，整片天都是你的</p>
     <p class="silk-reward" id="silk-reward">+¥13.14</p>
     <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
-    <a id="silk-next" class="silk-next" href="/games/silk-road/end">到家啦 · 查看情书 →</a>
+    <a id="silk-next" class="silk-next" href="/games/silk-road/level/2">继续 → 土耳其 🎈</a>
   </div>
 {% endblock %}
 
 {% block scripts %}
-  {# M11 part 4 — 关 0→关 1 gating: 直接 URL 访问 /level/1 但未通关关 0 时, 弹引导 + 跳关 0 #}
+  {# 关 0→关 1 gating #}
   <script>
     (function() {
       try {
@@ -34,9 +33,10 @@
       } catch (e) {}
     })();
   </script>
-  <script>
-    window.LEVEL_ID = 1;
-  </script>
-  <script src="{{ url_for('static', filename='silk-road/levels.js') }}"></script>
-  <script src="{{ url_for('static', filename='silk-road/level-engine.js') }}"></script>
+  <script>window.LEVEL_ID = 1; window.IRAN_MODE = true;</script>
+  {# 加载卡塔尔关卡数据 (iran/game.js 读 QATAR_LEVEL.gifts 兜底, 不强制依赖) #}
+  <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
+  {# 关 1 独立 DOM 引擎 —— 不走 level-engine.js (保护关 2-5 的 Pixi 旧逻辑) #}
+  <script src="{{ url_for('static', filename='silk-road/iran/game.js') }}"></script>
+  {# _level_base.html 末尾已加载 progress.js, 这里不需要重复 #}
 {% endblock %}

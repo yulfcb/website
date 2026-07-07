@@ -1586,6 +1586,12 @@ _sumSelectedPrice: function (ids) {
         this.dieFromThirst();
         return;
       }
+      // 关 1 伊朗巴扎: 把通关时的选中礼物存到 localStorage, 关 1 读取作为背包商品
+      try {
+        var luggageIds = (this._selectedGiftIds || []).slice();
+        // 关 1 需要看到 8 件全 (默认全部给), 但保留已经勾选的状态
+        localStorage.setItem('silkroad_luggage', JSON.stringify(luggageIds));
+      } catch (e) {}
       this.scene.start('ResultScene', {
         tier: tier,
         picked: this.pickupCount,
