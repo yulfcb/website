@@ -1268,6 +1268,13 @@ _showExchangeModal: function () {
       exZone.on('pointerdown', function () {
         window.playQatarSfx('button', 0.4);   // M17: 兑换按钮 blip
         window.playQatarSfx('exchange', 0.55); // M17: 兑换船票 chime (上升琶音)
+        // M23.5: 兑换船票 = 消耗被勾选的物品, 从行李 _selectedGiftIds 移除
+        //   用户原话: "选中哪些物品兑换成船票。那些物品就会从行李箱里面去除。没选中的, 保留在行李箱"
+        //   - 勾了 id=5 归家之心 → 从行李去掉 → voyage 时 selectedIds 没 id=5 → 中点返航
+        //   - 没勾 id=5 → 保留在行李 → voyage 时 selectedIds 还有 id=5 → 到 Bandar
+        self._selectedGiftIds = [];
+        self._selectedCount = 0;
+        self._selectedPrice = 0;
         self._ticketExchanged = true;
         self._showTicketModal();
       });
@@ -1748,12 +1755,11 @@ _sumSelectedPrice: function (ids) {
       // M19: 按钮文案统一为 "🚢 坐船出发" — 不管有没有归家之心都先上船
       //      没有归家之心 → voyage 中点返程 + 文字提示 → 重置回 level-0
       //      有归家之心 → voyage 到 Bandar → 跳 level-1
-      // M23.4: 兑换船票 (line 1271 self._ticketExchanged = true) 也算有归家之心
-      //   之前只看 selectedIds.indexOf(5), 但 M11/M12 引入船票兑换机制后, 用户即使没 id=5
-      //   也能兑换船票, voyage 触发时仍判定 hasHomeHeart=false → 中点返程.
-      //   现在: 兑换船票 OR 收集归家之心 → 都视为 hasHomeHeart=true
-      //   (注意: 此处 line 1761 才声明 var self = this, 所以这里用 this._ticketExchanged)
-      var hasHomeHeart = this.selectedIds.indexOf(5) !== -1 || !!this._ticketExchanged;
+      // M23.5: 真正看"剩余行李"里有没有 id=5 归家之心 (this.selectedIds 在 ResultScene init 时从 _selectedGiftIds 拷贝)
+      //   兑换船票消耗的物品已经从 _selectedGiftIds 移除 (line 1268 M23.5 修复), 所以剩余行李 = 没消耗的
+      //   - 勾了 id=5 兑换了 → selectedIds 没 id=5 → 中点返航
+      //   - 没勾 id=5 (没消耗) → selectedIds 还有 id=5 → 到 Bandar
+      var hasHomeHeart = this.selectedIds.indexOf(5) !== -1;
       var nextBtnTxt = '🚢 坐船出发';
       var nextText = this.add.text(640, 555, nextBtnTxt, {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
