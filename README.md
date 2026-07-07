@@ -234,6 +234,20 @@ e2e 验证：海 RGB(88,133,155) 接近 D、船 89×63 像素、色差 161、pag
 - 不动海色（D `#4A8FB8`，M23.1 状态）
 - e2e：船 scale 0.5（Phaser API），displayWidth=200（image bbox），2 个港口 Arcs（dohaXY 366,511 + bandarXY 892,279），'Doha' + 'Bandar Abbas' label 都在，pageerror=0
 
+### M23.3 (2026-07-07) — voyage 修船头方向 + 删 carrier + 修中点返程
+
+用户手机自查反馈 3 个动画问题:
+
+1. **船头方向**: sprite 原图桅杆在船后部 (桅杆顶 x=257 > 船底中心 x=246) → 船头朝 -X
+   修法: 去程 `shipContainer.scaleX = -1` 镜像, 返程 `scaleX = 1`, 让船头永远朝运动方向
+
+2. **删 "海上丝绸之路" 文字**: voyageCarrier + 字幕淡入 tween 删除 (6 处)
+   保留 topText/subText/noHeartMessage/gulfG.fillEllipse (波斯湾水域椭圆是地图要素不是装饰)
+
+3. **修中点返程 (核心 bug)**: voyageMidpointReached 之前只在兜底分支 (t>=1.0) 设
+   修法: voyageT 跨过 0.5 立刻设 midpointReached=true + 显示 noHeartMessage, 1.5s 后启动返程
+   没归家之心: 船在中点掉头, 不再走到 Bandar 才兜底
+
 ## 更新日志
 
 ### 2026-06-16 — UI 文案"VPN"→"代理" + 导航栏高亮 bug 修复

@@ -2189,12 +2189,6 @@ ResultScene.prototype.buildVoyageContainer = function () {
   }).setOrigin(0.5);
   subText.setFixedSize(1100, 24);
 
-  // 路线文字带行 (大字出现)
-  var carrier = this.add.text(640, 360, '🚢 海上丝绸之路', {
-    fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
-  }).setOrigin(0.5);
-  carrier.setAlpha(0);
-
   // M18 Bug 2: 没有归家之心时, 船到波斯湾中点时弹出文字
   var noHeartMessage = this.add.text(640, 460, '没有归家之心，看来你只是想坐船去玩玩。', {
     fontSize: '20px', color: '#0E2A47', fontStyle: 'bold',
@@ -2205,8 +2199,7 @@ ResultScene.prototype.buildVoyageContainer = function () {
 
   this.voyageTopText = topText;
   this.voyageSubText = subText;
-  this.voyageCarrier = carrier;
-  this.voyageContainer.add([topText, subText, carrier, noHeartMessage]);
+  this.voyageContainer.add([topText, subText, noHeartMessage]);
 };
 
 // ==================== M9.5e Voyage 动画 (M18 重构) ====================
@@ -2253,11 +2246,9 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   if (hasHomeHeart) {
     self.voyageTopText.setText('🌊 离开多哈 · 波斯湾 → 伊朗 / 阿巴斯港');
     self.voyageSubText.setText('下一站 → Bandar Abbas 🐪');
-    self.voyageCarrier.setText('🚢 海上丝绸之路');
   } else {
     self.voyageTopText.setText('🌊 离开多哈 · 波斯湾');
     self.voyageSubText.setText('准备出发');
-    self.voyageCarrier.setText('🛳️ 海上丝绸之路');
   }
 
   // 计算 Bezier 路径点 (60 个采样点, 密度更高)
@@ -2317,6 +2308,18 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
     if (self.voyageT >= 1.0) self.voyageT = 1.0;
     if (self.voyageT <= 0.0) self.voyageT = 0.0;
 
+    // M23.3: 中点返程检测 — voyageT 跨过 0.5 立刻设 voyageMidpointReached=true
+    //   之前 M21 注释说"中点跨过 0.5 → voyageMidpointReached=true", 但代码漏了,
+    //   导致没归家之心时船一直走到 t=1.0 兜底分支才返程 (用户感觉"没掉头")
+    if (!self.voyageMidpointReached && self.voyageT >= 0.5 && !self.voyageReturnMode) {
+      self.voyageMidpointReached = true;
+      self.voyageMidpointTimer = 0;
+      // 没归家之心才显示 noHeartMessage
+      if (!self.voyageHasHeart && self.voyageNoHeartMessage) {
+        self.voyageNoHeartMessage.setAlpha(1);
+      }
+    }
+
     // 船位置
     var pos = bezierPoint(self.voyageT);
     self.shipContainer.x = pos.x;
@@ -2325,13 +2328,16 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
     // 切线方向 → rotation
     var tangent = bezierTangent(self.voyageT);
     var angle = Math.atan2(tangent.y, tangent.x);
+    // M23.3: sprite 原图船头朝 -X (PIL 验证: 桅杆顶 x=257 > 船底中心 x=246)
+    //        所以去程也用 scaleX=-1 镜像, 让船头朝运动方向 (右上 = Bandar)
+    //        返程 sprite 不镜像 (默认朝 -X = 朝 Doha), 船头也朝运动方向
     if (self.voyageReturnMode) {
-      // 返程: scaleX=-1 镜像 + rotation 不变 (因为镜像后图形已反向)
-      self.shipContainer.scaleX = -1;
-      // 切线在返程时是反向的 (从 Bandar 往 Doha), 自然 angle 也反了, 镜像后视觉正确
+      // 返程: sprite 默认朝 -X = 朝 Doha 方向 = 跟返程一致, 不镜像
+      self.shipContainer.scaleX = 1;
       self.shipContainer.setRotation(angle);
     } else {
-      self.shipContainer.scaleX = 1;
+      // 去程: sprite 朝 -X, 镜像 (scaleX=-1) 后朝 +X = 朝 Bandar 方向
+      self.shipContainer.scaleX = -1;
       self.shipContainer.setRotation(angle);
     }
 
@@ -2367,8 +2373,9 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
 
     // M21 Bug: 中点返程触发 — 改用每帧倒计时 (voyageMidpointTimer) 替代 delayedCall
     //   delayedCall 在 Phaser headless 模式下不稳定, 改用确定性逻辑.
-    //   中点跨过 0.5 → voyageMidpointReached=true → voyageMidpointTimer 开始累计
-    //   达到 voyageMidpointDelay (1.5s) → voyageReturnMode=true
+    //   M23.3: 中点跨过 0.5 → voyageMidpointReached=true (上面新加的触发代码)
+    //         → voyageMidpointTimer 开始累计
+    //         达到 voyageMidpointDelay (1.5s) → voyageReturnMode=true
     if (!self.voyageReturnMode
         && self.voyageMidpointReached
         && !self.voyageHasHeart) {
@@ -2391,14 +2398,6 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
 
   // 注册 update listener (Phaser scene 自带 update, 也支持 events.on('update'))
   self.events.on('update', self._voyageUpdate, self);
-
-  // 字幕淡入
-  self.tweens.add({
-    targets: self.voyageCarrier,
-    alpha: 1,
-    duration: 400,
-    ease: 'Quad.easeOut',
-  });
 };
 
 // M18 Bug 3: voyage 动画结束后, 右下角弹出 "继续" 按钮
