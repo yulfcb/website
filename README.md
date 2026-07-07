@@ -198,6 +198,16 @@ cd personal-website
 python3 scripts/check_anniversaries.py
 ```
 
+## silk-road voyage 迭代日志（M 系列）
+
+### M23 (2026-07-07) — voyage 帆船换 sprite
+
+- 删 6 个 Phaser.Graphics（船身/船头/船尾/上层建筑/桅杆/旗帜）
+- 改用 OpenGameArt.org `2nd_ship_new_4.png`（暗红剪影，CC0，Unlucky Studio Pirates Game Assets）
+- 路径：`static/silk-road/qatar/assets/ships/2nd_ship_new_4.png`
+- scale = 0.18（原图 bbox 367×258 → 屏显 66×46）
+- 保留 M18 的 `Container.scaleX = -1` 返程镜像逻辑（Image 走 transform pipeline，镜像对子 Image 生效）
+
 ## 更新日志
 
 ### 2026-06-16 — UI 文案"VPN"→"代理" + 导航栏高亮 bug 修复

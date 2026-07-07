@@ -62,6 +62,9 @@
       // so all scenes can reference it by key 'world-cup-trophy'.
       this.load.image('world-cup-trophy',
         '/static/vendor/silk-road/trophy/world-cup-trophy-128.png');
+      // M23: voyage ship sprite (D — 2nd_ship_new_4 暗红剪影, CC0 OpenGameArt)
+      this.load.image('voyage-ship',
+        '/static/silk-road/qatar/assets/ships/2nd_ship_new_4.png');
     },
     create: function () {
       var self = this;
@@ -2154,32 +2157,15 @@ ResultScene.prototype.buildVoyageContainer = function () {
 //           船头朝 +X 方向 (旋转 origin=容器中心), 沿 Bezier 路径用 setRotation(angle) 切线对齐.
 //           返程时 scaleX=-1 镜像 (Graphics 没有 setFlipX, 用 scaleX).
 // M20: 撤销 M19 的"大邮轮" — 用户反馈太丑, 恢复 M18 简洁三角帆船风格
-  var shipContainer = this.add.container(dohaXY[0], dohaXY[1]);
-  // 船身 (深蓝填充, 长方形 24×10)
-  var shipHull = this.add.graphics();
-  shipHull.fillStyle(0x1B3A5B, 1);
-  shipHull.fillRect(-12, -5, 24, 10);
-  // 船头 (金色三角尖端在前)
-  var shipBow = this.add.graphics();
-  shipBow.fillStyle(0xD4A017, 1);
-  shipBow.fillTriangle(12, -5, 12, 5, 22, 0);
-  // 船尾 (深色矩形)
-  var shipStern = this.add.graphics();
-  shipStern.fillStyle(0x0E2238, 1);
-  shipStern.fillRect(-12, -5, 4, 10);
-  // 上层建筑 (小方块在船身中后部)
-  var shipCabin = this.add.graphics();
-  shipCabin.fillStyle(0x8B7355, 1);
-  shipCabin.fillRect(-4, -8, 8, 3);
-  // 桅杆 (竖线)
-  var shipMast = this.add.graphics();
-  shipMast.fillStyle(0x5C4A2E, 1);
-  shipMast.fillRect(0, -8, 1, -10);
-  // 旗帜 (金色小条)
-  var shipFlag = this.add.graphics();
-  shipFlag.fillStyle(0xFFD700, 1);
-  shipFlag.fillRect(1, -18, 10, 5);
-  shipContainer.add([shipHull, shipBow, shipStern, shipCabin, shipMast, shipFlag]);
+// M23: 用真实 PNG sprite 替代 M18-M22 的 Phaser.Graphics 程序绘制船
+//      D = 2nd_ship_new_4 (暗红剪影, CC0 OpenGameArt, scale=0.18)
+//      原图 400x400, bbox 367x258 → 屏显 ~66x46 px
+//      setOrigin(0.5) 保证 sprite 中心对齐 dohaXY (替代 M18 Graphics 的 (0,0) 居中行为).
+//      shipContainer.scaleX=-1 返程镜像保留 (Image 走 transform pipeline, Container 镜像对子 Image 生效 — M9.3b 验证).
+  var shipImg = this.add.image(0, 0, 'voyage-ship');
+  shipImg.setOrigin(0.5, 0.5);
+  shipImg.setScale(0.18);  // 367px bbox → 66px on screen
+  var shipContainer = this.add.container(dohaXY[0], dohaXY[1], [shipImg]);
   this.shipContainer = shipContainer;
   // M18 Bug 6: 默认旋转 0 → 船头朝 +X (即朝向 Bandar)
   this.shipContainer.setRotation(0);
