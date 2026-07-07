@@ -976,8 +976,8 @@
         }).setOrigin(0.5));
 
         var ticketBg = this.add.rectangle(-100, 130, 180, 56, 0x5fb3a0, 1);
-        // M18 Bug 7: 按钮文字 "兑换船票" → "坐船出发"
-        var ticketText = this.add.text(-100, 130, '坐船出发 →', {
+        // M23.8: 按钮文字改回「兑换船票」(港口 NPC 主按钮文案)
+        var ticketText = this.add.text(-100, 130, '兑换船票 →', {
           fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
         }).setOrigin(0.5);
         var ticketZone = this.add.zone(-100, 130, 180, 56).setInteractive({ useHandCursor: true });
@@ -1016,8 +1016,8 @@
         // 禁用按钮 (灰色)
         var disabledBg = this.add.rectangle(-100, 130, 180, 56, 0x4A4A4A, 0.6)
           .setStrokeStyle(1, 0x888888, 0.4);
-        // M18 Bug 7: 按钮文字同步改为 "坐船出发"
-        var disabledText = this.add.text(-100, 130, '坐船出发 →', {
+        // M23.8: 文案改回「兑换船票」
+        var disabledText = this.add.text(-100, 130, '兑换船票', {
           fontSize: '15px', color: '#888888', fontStyle: 'bold',
         }).setOrigin(0.5);
         // 不挂 interactive, 点了不响应
@@ -1248,8 +1248,8 @@ _showExchangeModal: function () {
       canSubmit ? 0x5fb3a0 : 0x4A4A4A, canSubmit ? 1 : 0.6)
       .setStrokeStyle(1, canSubmit ? 0xFFD98A : 0x888888, canSubmit ? 0.7 : 0.4);
     self.modalContainer.add(exBg);
-    // M18 Bug 7: 按钮文字改「🚢 坐船出发」
-    self.modalContainer.add(self.add.text(-80, 215, '🚢 坐船出发', {
+    // M23.8: 兑换物品 modal 主按钮文案改「🛳️ 兑换船票」
+    self.modalContainer.add(self.add.text(-80, 215, '🛳️ 兑换船票', {
       fontSize: '15px', color: canSubmit ? '#0E2A47' : '#888888', fontStyle: 'bold',
     }).setOrigin(0.5));
 
