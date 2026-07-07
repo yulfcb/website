@@ -1215,13 +1215,6 @@ _showExchangeModal: function () {
         fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0, 0.5));
 
-      // 提示归家之心 (M15 Part 2: emoji 🏠 → ❤️)
-      if (gid === 5) {
-        self.modalContainer.add(self.add.text(120, ry, '❤️ 归家之心', {
-          fontSize: '10px', color: '#F6B5C8', fontStyle: 'italic',
-        }).setOrigin(0, 0.5));
-      }
-
       // 整行点击区 (点 checkbox 整行切换)
       var rowZone = self.add.zone(0, ry, 400, rowH).setInteractive({ useHandCursor: true });
       self.modalContainer.add(rowZone);
@@ -1728,15 +1721,13 @@ _sumSelectedPrice: function (ids) {
 
       // ===== M8.5 关 0 → 关 1 叙事桥 =====
       // 关 0 攒出钱后，关 1 才是伊朗港口上船
-      // M12 Bug 6: 提示分支 —— 含归家之心 → 下一站 伊朗港口; 不含 → SPEC 文案 + 半途回程
-      var hasHomeHeart = this.initData && this.initData.selectedIds && this.initData.selectedIds.indexOf(5) !== -1;
+      // M23.6: 简化叙事桥 — 不再分「有/无归家之心」分支. 不管有没有 id=5 都走 voyage 动画,
+      //   中点返航逻辑在 _voyageUpdate 里统一处理 (没 id=5 时到 t=0.5 自动返航).
       var bridgeTxt;
       if (this.given) {
         bridgeTxt = '💸';
-      } else if (hasHomeHeart) {
-        bridgeTxt = '🛳️ 用这一关攒的钱，下一站 → 伊朗港口 (Bandar Abbas) 上船';
       } else {
-        bridgeTxt = '🌊 你只是想坐邮轮玩一玩 · 没有收集到归家之心 (关 5 礼物)';
+        bridgeTxt = '🛳️ 用这一关攒的钱，下一站 → 伊朗港口 (Bandar Abbas) 上船';
       }
       this.add.text(640, 475, bridgeTxt, {
         fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic',
