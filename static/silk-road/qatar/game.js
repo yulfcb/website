@@ -2315,6 +2315,12 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   self.voyageMidpointDelay = hasHomeHeart ? 9999 : 1.5;  // 有心时永远不触发返程
   self.voyageHasHeart = hasHomeHeart;
   self.voyageNextUrl = nextUrl;
+  // M24: 真实 wall clock 起点 (Phaser update 在 headless / 后台 tab / FPS<60 时
+  //   delta 参数仍是目标值 16.67ms 而非实际经过时间, 导致 voyageT 推进极慢.
+  //   用 Date.now() 计真实 dt, 保证动画速率跟墙钟一致.)
+  self._voyageLastRealTime = (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now();
   // 船初始位置 = Doha
   self.shipContainer.x = dohaXY[0];
   self.shipContainer.y = dohaXY[1];
@@ -2339,7 +2345,18 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   // 时间驱动的 update 循环
   self._voyageUpdate = function (time, delta) {
     if (self.voyageDone) return;
-    var dt = delta / 1000;  // 秒
+    // M24: 用真实 wall clock 算 dt, 不依赖 Phaser 的 delta 参数.
+    //   Phaser headless / 后台 tab / FPS<60 时 delta 仍报 16.67ms (目标值),
+    //   导致 voyageT 推进极慢. 用 performance.now() 计真实经过时间.
+    var now = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+    var realDelta = now - self._voyageLastRealTime;
+    // 防御: 负值 (tab 切换后 first frame) 或异常大值 (>1s, 可能是暂停后恢复)
+    if (realDelta < 0) realDelta = 0;
+    if (realDelta > 1000) realDelta = 16.67;  // 暂停后恢复当 1 帧
+    self._voyageLastRealTime = now;
+    var dt = realDelta / 1000;  // 秒
 
     // 计算前进方向: 去程 +tt, 返程 -tt
     var direction = self.voyageReturnMode ? -1 : 1;
