@@ -1250,13 +1250,26 @@ _showExchangeModal: function () {
       exZone.on('pointerdown', function () {
         window.playQatarSfx('button', 0.4);   // M17: 兑换按钮 blip
         window.playQatarSfx('exchange', 0.55); // M17: 兑换船票 chime (上升琶音)
-        // M23.5: 兑换船票 = 消耗被勾选的物品, 从行李 _selectedGiftIds 移除
-        //   用户原话: "选中哪些物品兑换成船票。那些物品就会从行李箱里面去除。没选中的, 保留在行李箱"
-        //   - 勾了 id=5 归家之心 → 从行李去掉 → voyage 时 selectedIds 没 id=5 → 中点返航
-        //   - 没勾 id=5 → 保留在行李 → voyage 时 selectedIds 还有 id=5 → 到 Bandar
-        self._selectedGiftIds = [];
-        self._selectedCount = 0;
-        self._selectedPrice = 0;
+        // Fix: 兑换船票只消耗勾选的物品，没勾选的保留在行李
+        // _selectedGiftIds = 勾选的要消耗的 → 移除后剩余 = 未勾选的 bucket 物品
+        var exchangedIds = self._selectedGiftIds.slice(); // 被消耗的
+        var allBucketIds = [];
+        var bkeys = Object.keys(self.giftBuckets);
+        for (var bi = 0; bi < bkeys.length; bi++) {
+          if (self.giftBuckets[bkeys[bi]] === 'bucket') {
+            allBucketIds.push(parseInt(bkeys[bi], 10));
+          }
+        }
+        // 剩余 = bucket 里不在 exchangedIds 中的
+        var remaining = [];
+        for (var ri = 0; ri < allBucketIds.length; ri++) {
+          if (exchangedIds.indexOf(allBucketIds[ri]) === -1) {
+            remaining.push(allBucketIds[ri]);
+          }
+        }
+        self._selectedGiftIds = remaining;
+        self._selectedCount = remaining.length;
+        self._selectedPrice = self._sumSelectedPrice(remaining);
         self._ticketExchanged = true;
         self._showTicketModal();
       });
