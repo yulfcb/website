@@ -1977,7 +1977,12 @@ ResultScene.prototype.buildVoyageContainer = function () {
   // ===== M15 Bug B: 真实中东世界地图背景 =====
   // 1) 海面深蓝底 (覆盖整个画布, 国家不画的位置 = 海洋)
   // M23.1: 改浅蓝 #3676A0 (Cerulean 深海) — 船跟海色差 66 → 168
-  var seaBg = this.add.rectangle(640, 360, 1280, 720, 0x3676A0, 1);
+  // M23.10: Rectangle → Graphics fillRect. 用户手机截屏 PIL 分析显示 Rectangle
+  //   在 Canvas 渲染器下 seaBg 不渲染 (chromium e2e 38% 海色, 用户手机 0.005%).
+  //   Graphics fillRect 跨 WebGL/Canvas 渲染器更稳定.
+  var seaBg = this.add.graphics();
+  seaBg.fillStyle(0x3676A0, 1);
+  seaBg.fillRect(0, 0, 1280, 720);
   this.voyageContainer.add(seaBg);
 
   // 2) d3 Mercator 投影 (M16 Bug 1: fitExtent 卡塔尔→伊朗 bbox, 横跨波斯湾)
@@ -2230,6 +2235,8 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   }
   // M18 Bug 3: 没归家之心 → BGM 不暂停, 保持当前播放
 
+  // M23.10: force refresh - 某些 viewport 缩放下 Phaser 渲染管线需要重置可见性
+  this.voyageContainer.setVisible(false);
   this.voyageContainer.setVisible(true);
   console.log('[M23.9 voyage] voyageContainer.setVisible(true), children=', this.voyageContainer.list.length);
 
