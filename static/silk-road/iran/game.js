@@ -1,20 +1,25 @@
-// 伊朗·阿巴斯港大巴扎 —— 关 1 游戏引擎 (M3: 商店"卖"模式 + 水壶系统 + 行李箱)
+// 伊朗·阿巴斯港大巴扎 —— 关 1 游戏引擎 (M4: 货币系统 + 水壶可视化)
 //
 // 重做原因：原 Iran 关是纯 DOM 卡片游戏，太简单。仿关 0 (Qatar) 的 Phaser 模式：
 // 玩家控制人物在沙漠地图上行走，
-// - 走访 6 个波斯商贩 (地毯/藏红花/茶/陶/骆驼/水壶) — **反复交易**
+// - 走访 🏦 交易中心把行李物品换成伊朗里亚尔 (﷼)
+// - 用里亚尔在 6 家波斯商贩 (地毯/藏红花/茶/陶/骆驼/水壶) 买商品
 // - 走访 2 个绿洲给水壶灌水
 // - 集齐 **2 个水壶 + 2 壶都满 10L** 启程去土耳其 (Bazargan 巴扎尔甘边境)
 // - 携带行李箱 (quantity-based 同类型可多件) 跨级
 //
-// M3 范围：
-//   - 商店"卖"模式: 每家卖自家商品 (地毯/藏红花/茶/陶器/骆驼/水壶), 玩家花 1 件行李物品换
-//   - 反复交易: 没有 merchantDone 一次性, 只要有行李物品就能继续买
+// M4 范围：
+//   - 货币系统: 玩家有 `this.coins` 余额, 中心用行李物品换里亚尔, 商贩收里亚尔卖货
+//   - 交易中心 (🏦): 起点附近, 反复可兑换, 归家之心 ❤️ 不可兑换
+//   - 水壶 HUD 可视化: 进度条 + 数字, 灌水时有 +10L 浮动反馈, 空水壶红色警告
+//   - HUD 5 项: 🫗水壶 / 💰余额 / 🐪骑乘 / 🧳行李 / 🔊BGM
+//   - 缺水不再直接死亡, 显示警告 toast; 仍不能过境 (需要 2 壶满水)
+//
+// M3 范围 (保留):
 //   - 水壶系统: 玩家拥有 N 个水壶, 每个满 10L; 行走 -0.1L (从当前水壶扣);
 //     绿洲自动把最空的水壶灌满 (除非都满)
 //   - 出口条件: 2 壶 + 2 壶都满水 + 走到左上方巴扎尔甘 → camera fade → 跳下一关
 //   - 行李箱 (🧳): quantity-based 物品数组, localStorage `silkroad_luggage` 新格式
-//   - HUD 4 项: 💧水壶 / 🐪骑乘 / 🧳行李 / 🔊BGM
 //   - 骆驼视觉: emoji 40px+, 人物骑在上方 (略缩小)
 //
 // 复用关 0 (qatar/game.js) 的代码：
@@ -188,6 +193,34 @@
         self.merchantSprites.push(sp);
       });
 
+      // —— M4: 交易中心 (🏦) —— 起点附近, 货币兑换站
+      var ex = L.exchange;
+      var exHalo = this.add.graphics();
+      exHalo.fillStyle(0xD4AF37, 0.35);  // 金色光晕
+      exHalo.fillCircle(0, 0, 26);
+      var exBg = this.add.graphics();
+      exBg.fillStyle(0x4A2E1A, 0.85);
+      exBg.fillRoundedRect(-22, -16, 44, 32, 6);
+      exBg.lineStyle(2, 0xFFD98A, 0.7);
+      exBg.strokeRoundedRect(-22, -16, 44, 32, 6);
+      var exEmoji = this.add.text(0, 0, ex.emoji, { fontSize: '28px' }).setOrigin(0.5);
+      var exLabel = this.add.text(0, 30, ex.label, {
+        fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 3, wordWrap: false,
+      }).setOrigin(0.5);
+      exLabel.setFixedSize(110, 14);
+      this.exchangeSprite = this.add.container(ex.x, ex.y + 10, [exHalo, exBg, exEmoji, exLabel]);
+      this.exchangeSprite.exchangeData = ex;
+      this.exchangeSprite.bobPhase = Math.random() * Math.PI * 2;
+      this.exchangeSprite.setDepth(20);
+      // 大点击区域 (跟商贩一致 160x160)
+      var exHit = this.add.zone(ex.x, ex.y + 10, 160, 160)
+        .setInteractive({ useHandCursor: true });
+      exHit.on('pointerdown', function () { self.tryOpenExchange(); });
+      exHit.setDepth(21);
+      this.exchangeSprite.hitZone = exHit;
+      this.exchangeBubble = null;
+
       // —— 出口 (巴扎尔甘 → 土耳其, 左上角) ——
       var exitBg = this.add.graphics();
       exitBg.fillStyle(0xFFD98A, 0.5);
@@ -217,31 +250,38 @@
       this.playerContainer.setDepth(30);
       this.playerSprite = { shadow: shadow, elf: elf, avatarId: avatarId };
 
-      // —— 状态 (M3) ——
+      // —— 状态 (M4) ——
       this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
       // 水壶: 玩家拥有的水壶列表 [{capacity, water}], 初始空
       this.jugs = [];
       // 行李: 物品数组 [{id, qty}]
       this.luggage = this._loadLuggage();
+      // M4: 货币余额 (伊朗里亚尔 ﷼)
+      this.coins = 0;
       this.camelMode = false;
       this.currentMerchantId = null;
-      this.selectedLuggageId = null;  // 交易 modal 选中的行李物品
       this.exitActive = false;
       this.merchantShownId = null;
       this.state = 'PLAYING';
       this._exitTriggered = false;
       this._exitingIran = false;  // 防止重复触发离场动画
+      this._lastEmptyWarnAt = 0;   // 上次"水壶空"警告时间戳
 
-      // —— HUD（顶部条，4 项） ——
+      // —— HUD（顶部条，5 项） ——
       var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x2A1606, 0.92);
 
-      // 1. 💧 水壶 (左)
-      this.jugText = this.add.text(120, 30, this._jugHudText(), {
-        fontSize: '15px', color: '#FFD98A', fontStyle: 'bold',
+      // 1. 🫗 水壶可视化 (左) — 容器: 数量 + 每壶进度条
+      this.jugHudContainer = this.add.container(80, 36);
+      this.jugHudContainer.setDepth(100);
+
+      // 2. 💰 余额 (中左) — 新增 M4
+      this.coinText = this.add.text(310, 30, this._coinHudText(), {
+        fontSize: '15px', color: '#D4AF37', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 2,
       }).setOrigin(0.5);
 
-      // 2. 🐪 骑乘切换 (中左)
-      this.camelBtn = this.add.text(420, 30, '🚶 步行', {
+      // 3. 🐪 骑乘切换 (中)
+      this.camelBtn = this.add.text(520, 30, '🚶 步行', {
         fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
         backgroundColor: '#1B5E8A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
@@ -249,17 +289,17 @@
       this.camelBtn.on('pointerdown', function () { self.toggleCamelMode(); });
       this._updateCamelBtn();
 
-      // 3. 🧳 行李箱 (中右)
-      this.luggageBtn = this.add.text(680, 30, '🧳 行李箱 (' + this._luggageTotalCount() + ')', {
+      // 4. 🧳 行李箱 (中右)
+      this.luggageBtn = this.add.text(770, 30, '🧳 行李箱 (' + this._luggageTotalCount() + ')', {
         fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
       this.luggageBtn.setInteractive({ useHandCursor: true });
       this.luggageBtn.on('pointerdown', function () { self.openLuggageModal(); });
 
-      // 4. 🔊 BGM 按钮 (右)
+      // 5. 🔊 BGM 按钮 (右)
       var bgmMuted = getBgmMuted();
-      this.bgmBtn = this.add.text(900, 30, bgmMuted ? '🔇' : '🔊', {
+      this.bgmBtn = this.add.text(1080, 30, bgmMuted ? '🔇' : '🔊', {
         fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 8, y: 2 },
       }).setOrigin(0.5);
@@ -267,7 +307,7 @@
       this.bgmBtn.on('pointerdown', function () { self.toggleBgm(); });
 
       // 任务提示
-      this.add.text(640, 80, '🎯 走访商贩换商品 → 集齐 2 壶满水 → 巴扎尔甘启程去土耳其', {
+      this.add.text(640, 80, '🎯 去交易中心换里亚尔 → 购买 2 个水壶 → 灌满水 → 巴扎尔甘过境', {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
       }).setOrigin(0.5);
 
@@ -346,9 +386,9 @@
       this.modalContainer.setDepth(2000);
       this.modalContainer.setVisible(false);
 
-      // —— 开局教程提示 (M3: 引导去水壶商) ——
+      // —— 开局教程提示 (M4: 引导去交易中心) ——
       this.time.delayedCall(800, function () {
-        self.showToast('💡 先去地图中部的水壶商人那儿买 2 个水壶 🫗', 2800);
+        self.showToast('💡 先去右边的交易中心 🏦 把行李换成里亚尔', 2800);
       });
 
       // —— DOM 辅助 ——
@@ -610,19 +650,8 @@
       this._refreshHudCounts();
     },
 
-    // ==================== 水壶 (M3) ====================
-    _jugHudText: function () {
-      if (this.jugs.length === 0) {
-        return '🫗 0/' + L.TARGET_JUGS + '  (无水壶)';
-      }
-      var n = this.jugs.length;
-      var cur = this._currentJugIndex();
-      if (cur < 0) {
-        return '🫗 ' + n + '/' + L.TARGET_JUGS + '  (未持有)';
-      }
-      var cj = this.jugs[cur];
-      return '🫗 ' + n + '/' + L.TARGET_JUGS + '  💧' + cj.water.toFixed(1) + '/' + L.JUG_CAPACITY;
-    },
+    // ==================== 水壶 (M3 + M4 可视化) ====================
+    // M4: 用 container 重绘 — 每个水壶一条进度条 + 数字, 整体视觉清晰
     _currentJugIndex: function () {
       // 找到第一个水 > 0 的水壶
       for (var i = 0; i < this.jugs.length; i++) {
@@ -674,9 +703,73 @@
       for (var i = 0; i < this.jugs.length; i++) n += this.jugs[i].water;
       return n;
     },
+    _allJugsEmpty: function () {
+      if (this.jugs.length === 0) return false;
+      return this._totalWater() <= 0;
+    },
+
+    // M4: 货币 HUD 文本
+    _coinHudText: function () {
+      return '💰 ' + this.coins + ' ﷼';
+    },
+
+    // M4: 重绘水壶 HUD — 容器内含 "🫗 N/2" + 每壶进度条 + 数字
+    _renderJugHud: function () {
+      if (!this.jugHudContainer) return;
+      this.jugHudContainer.removeAll(true);
+
+      // 标题: 数量徽章
+      var title = this.add.text(0, -16, '🫗 ' + this.jugs.length + '/' + L.TARGET_JUGS, {
+        fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 2,
+      }).setOrigin(0, 0.5);
+      this.jugHudContainer.add(title);
+
+      if (this.jugs.length === 0) {
+        var hint = this.add.text(0, 6, '（去水壶商买 🫗）', {
+          fontSize: '10px', color: '#C9B89A', fontStyle: 'italic',
+        }).setOrigin(0, 0.5);
+        this.jugHudContainer.add(hint);
+        return;
+      }
+
+      // 每个水壶一行: 进度条 + 数字
+      var maxVisible = Math.min(this.jugs.length, L.TARGET_JUGS);
+      var barW = 130;
+      var barH = 11;
+      var rowGap = 16;
+      var startY = -2;
+      for (var i = 0; i < maxVisible; i++) {
+        var j = this.jugs[i];
+        var pct = Math.max(0, Math.min(1, j.water / L.JUG_CAPACITY));
+        var isEmpty = j.water <= 0;
+        var isFull = j.water >= L.JUG_CAPACITY;
+        var rowY = startY + i * rowGap;
+
+        // 背景条 (深色)
+        var bg = this.add.rectangle(0, rowY, barW, barH, 0x1A1208, 0.95)
+          .setStrokeStyle(1, isEmpty ? 0xC04848 : 0x6B4423, isEmpty ? 0.9 : 0.5)
+          .setOrigin(0, 0.5);
+        this.jugHudContainer.add(bg);
+        // 水量条 (绿色 / 满时金色)
+        if (pct > 0) {
+          var fillColor = isFull ? 0xD4AF37 : 0x6EC1E4;  // 满 = 金, 半/低 = 蓝
+          var fill = this.add.rectangle(0, rowY, barW * pct, barH, fillColor, 0.95)
+            .setOrigin(0, 0.5);
+          this.jugHudContainer.add(fill);
+        }
+        // 数字标签
+        var numColor = isEmpty ? '#FF8A8A' : (isFull ? '#D4AF37' : '#F4ECD8');
+        var numTxt = this.add.text(barW + 6, rowY, j.water.toFixed(1) + 'L', {
+          fontSize: '10px', color: numColor, fontStyle: 'bold',
+        }).setOrigin(0, 0.5);
+        this.jugHudContainer.add(numTxt);
+      }
+    },
 
     _refreshHudCounts: function () {
-      if (this.jugText) this.jugText.setText(this._jugHudText());
+      this._renderJugHud();
+      if (this.coinText) this.coinText.setText(this._coinHudText());
       if (this.luggageBtn) this.luggageBtn.setText('🧳 行李箱 (' + this._luggageTotalCount() + ')');
       this._updateCamelBtn();
     },
@@ -690,6 +783,12 @@
         var sp = this.merchantSprites[i];
         sp.bobPhase += 0.04;
         sp.list[1].y = Math.sin(sp.bobPhase) * 2;
+      }
+
+      // 交易中心 bob (M4)
+      if (this.exchangeSprite) {
+        this.exchangeSprite.bobPhase += 0.04;
+        this.exchangeSprite.list[2].y = Math.sin(this.exchangeSprite.bobPhase) * 2;
       }
 
       // 出口 bob + 激活脉冲
@@ -718,6 +817,7 @@
       // 距离检测
       if (this.state === 'PLAYING') {
         this._checkMerchantProximity();
+        this._checkExchangeProximity();
         this._checkExitProximity();
       }
     },
@@ -769,9 +869,13 @@
       // 扣水 (从当前水壶)
       var drank = this._drinkFromCurrentJug(waterDelta);
       this._refreshHudCounts();
-      // 死亡条件: 有水壶但全部空了 (0 水壶时行走不消耗也不死 — 玩家先要买水壶)
-      if (this.jugs.length > 0 && this._totalWater() <= 0) {
-        if (this.state === 'PLAYING') this.dieFromThirst();
+      // M4: 缺水警告 — 不再直接死亡, 显示红色 toast (节流每 1.5s 一次)
+      if (this._allJugsEmpty()) {
+        var now = Date.now();
+        if (now - this._lastEmptyWarnAt > 1500 && this.state === 'PLAYING') {
+          this._lastEmptyWarnAt = now;
+          this.showWarningToast('⚠️ 水壶空了！找绿洲 💧 灌水');
+        }
       }
 
       // 绿洲碰撞
@@ -805,10 +909,24 @@
         if (Math.sqrt(dx * dx + dy * dy) < 80) {
           if (!o._lastTouch || Date.now() - o._lastTouch > 2000) {
             o._lastTouch = Date.now();
+            // 先算"加了多少水", 再填充
+            var dryIdx = this._driestJugIndex();
+            var added = 0;
+            if (dryIdx >= 0) {
+              added = +(L.JUG_CAPACITY - this.jugs[dryIdx].water).toFixed(1);
+            }
             var filled = this._fillDriestJug();
             if (filled !== null) {
               this._refreshHudCounts();
-              this.showFloatingText(o.x, o.y - 30, '💧 水壶 ' + (filled + 1) + ' 已满!');
+              // M4: 灌满反馈 — 浮动文本 + HUD 弹跳
+              this.showFloatingText(o.x, o.y - 30, '💧 灌满！+' + added.toFixed(0) + 'L');
+              if (this.jugHudContainer) {
+                this.tweens.add({
+                  targets: this.jugHudContainer,
+                  scaleX: 1.18, scaleY: 1.18,
+                  duration: 120, yoyo: true, repeat: 1,
+                });
+              }
               window.playIranSfx('pickup', 0.4);
             } else {
               this.showFloatingText(o.x, o.y - 30, '💧 水壶已满');
@@ -840,6 +958,20 @@
         if (this.merchantShownId !== null && nearestDist > 60) {
           this.hideMerchantBubble();
         }
+      }
+    },
+
+    // M4: 交易中心距离检测
+    _checkExchangeProximity: function () {
+      var ex = L.exchange;
+      var dx = this.player.x - ex.x;
+      var dy = this.player.y - ex.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      // 距离 < 60 视为"走近"
+      if (d < 60) {
+        if (!this.exchangeBubble) this.showExchangeBubble();
+      } else {
+        if (this.exchangeBubble) this.hideExchangeBubble();
       }
     },
     showMerchantBubble: function (m) {
@@ -891,6 +1023,45 @@
         this.tryOpenMerchant(this.merchantShownId);
       }
     },
+    // M4: 交易中心气泡
+    showExchangeBubble: function () {
+      if (this.exchangeBubble) return;
+      var self = this;
+      var ex = L.exchange;
+      var bg = this.add.graphics();
+      bg.fillStyle(0x2A1606, 0.92);
+      bg.fillRoundedRect(-60, -16, 120, 32, 8);
+      bg.lineStyle(2, 0xD4AF37, 0.85);
+      bg.strokeRoundedRect(-60, -16, 120, 32, 8);
+      bg.fillTriangle(-5, 16, 5, 16, 0, 22);
+      var txt = this.add.text(0, 0, '💱 兑换', {
+        fontSize: '13px', color: '#D4AF37', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var bubble = this.add.container(ex.x, ex.y - 38, [bg, txt]);
+      bubble.setDepth(50);
+      var bubbleZone = this.add.zone(ex.x, ex.y - 38, 140, 50)
+        .setInteractive({ useHandCursor: true });
+      bubbleZone.setDepth(51);
+      bubbleZone.on('pointerdown', function () { self.tryOpenExchange(); });
+      bubble.bubbleZone = bubbleZone;
+      this.exchangeBubble = bubble;
+    },
+    hideExchangeBubble: function () {
+      if (this.exchangeBubble) {
+        if (this.exchangeBubble.bubbleZone) this.exchangeBubble.bubbleZone.destroy();
+        this.exchangeBubble.destroy();
+        this.exchangeBubble = null;
+      }
+    },
+    // M4: 尝试打开交易中心 modal
+    tryOpenExchange: function () {
+      if (this.state !== 'PLAYING') return;
+      var ex = L.exchange;
+      var dx = this.player.x - ex.x;
+      var dy = this.player.y - ex.y;
+      if (Math.sqrt(dx * dx + dy * dy) >= 60) return;
+      this.openExchangeModal();
+    },
     _findMerchant: function (id) {
       for (var i = 0; i < L.merchants.length; i++) {
         if (L.merchants[i].id === id) return L.merchants[i];
@@ -904,13 +1075,11 @@
       return null;
     },
 
-    // ==================== M3: 交易 modal — 商店"卖"模式 ====================
-    // 玩家从行李里选一件商品 (排除归家之心), 交换商贩的 1 份卖品
-    // 反复可交易, 不设 merchantDone
+    // ==================== M4: 交易 modal — 用里亚尔购买 ====================
+    // 玩家付 price 里亚尔, 获得 1 份商贩卖品; 反复可交易
     openTradeModal: function (m) {
       this.state = 'TRADING';
       this.currentMerchantId = m.id;
-      this.selectedLuggageId = null;
       this.hideMerchantBubble();
       this.modalContainer.removeAll(true);
       window.playIranSfx('button', 0.4);
@@ -939,125 +1108,67 @@
         wordWrap: { width: 580 },
       }).setOrigin(0.5));
 
-      // 我卖 vs 你给
-      this.modalContainer.add(this.add.text(-160, -160, '我卖：', {
-        fontSize: '14px', color: '#F6B5C8', fontStyle: 'bold',
-      }).setOrigin(0, 0.5));
-      this.modalContainer.add(this.add.text(0, -160, m.sells.emoji + ' ' + m.sells.name, {
-        fontSize: '18px', color: '#F6B5C8', fontStyle: 'bold',
-      }).setOrigin(0, 0.5));
-      this.modalContainer.add(this.add.text(-160, -130, '代价：', {
-        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-      }).setOrigin(0, 0.5));
-      this.modalContainer.add(this.add.text(0, -130, '你行李里 1 件商品', {
+      // 大商品展示 + 价格 + 余额
+      this.modalContainer.add(this.add.text(0, -140, m.sells.emoji + '  ' + m.sells.name, {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -90, '💰 价格：' + m.price + ' ﷼', {
+        fontSize: '20px', color: '#D4AF37', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 2,
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -60, '你的余额：' + this.coins + ' ﷼', {
         fontSize: '14px', color: '#A8D8C0',
-      }).setOrigin(0, 0.5));
-
-      // 行李 grid: 显示当前所有有数量的行李物品
-      // 排除归家之心 (id=5) — 不可交易
-      var tradeable = this.luggage.filter(function (e) {
-        return e.id !== HEART_ID && e.qty > 0;
-      });
-      var gridY = -70;
-      var cellW = 130, cellH = 100;
-      var cols = 4;
-      var startX = -cellW * 2 + 20;
-
-      if (tradeable.length === 0) {
-        this.modalContainer.add(this.add.text(0, -10, '（行李箱里没有可交易的商品）', {
-          fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
-        }).setOrigin(0.5));
-      } else {
-        for (var i = 0; i < tradeable.length; i++) {
-          var e = tradeable[i];
-          var it = this._findItem(e.id);
-          if (!it) continue;
-          var col = i % cols, row = Math.floor(i / cols);
-          var cx = startX + col * cellW;
-          var cy = gridY + row * cellH;
-
-          var isSelected = this.selectedLuggageId === e.id;
-          var cellColor = isSelected ? 0xA8D8C0 : 0x4A2E1A;
-          var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, cellColor, isSelected ? 1 : 0.85)
-            .setStrokeStyle(2, isSelected ? 0xFFD98A : 0x6B4423, isSelected ? 1 : 0.4);
-          this.modalContainer.add(cellBg);
-
-          // emoji
-          this.modalContainer.add(this.add.text(cx, cy - 22, it.emoji, { fontSize: '32px' }).setOrigin(0.5));
-          // 名字
-          var nm = this.add.text(cx, cy + 4, it.name, {
-            fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
-            wordWrap: false,
-          }).setOrigin(0.5);
-          nm.setFixedSize(cellW - 28, 14);
-          this.modalContainer.add(nm);
-          // 数量
-          this.modalContainer.add(this.add.text(cx, cy + 22, '×' + e.qty, {
-            fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
-          }).setOrigin(0.5));
-
-          // 点击
-          var zone = this.add.zone(cx, cy, cellW - 16, cellH - 16)
-            .setInteractive({ useHandCursor: true });
-          var itemId = e.id;
-          zone.on('pointerdown', (function (iid) {
-            return function () {
-              self.selectedLuggageId = iid;
-              window.playIranSfx('click', 0.4);
-              self._renderTradeModal(m);
-            };
-          })(itemId));
-          this.modalContainer.add(zone);
-        }
-      }
-
-      // 提示行
-      var tipTxt = '';
-      if (this.selectedLuggageId === null) {
-        tipTxt = '👆 选一件要用来交换的商品';
-      } else {
-        var selItem = this._findItem(this.selectedLuggageId);
-        if (selItem) {
-          tipTxt = '✓ 用 ' + selItem.emoji + ' ' + selItem.name
-            + ' 换 1 份 ' + m.sells.emoji + ' ' + m.sells.name;
-        }
-      }
-      this.modalContainer.add(this.add.text(0, 200, tipTxt, {
-        fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
-        wordWrap: { width: 560 },
       }).setOrigin(0.5));
 
-      // 交易按钮
-      var canTrade = this.selectedLuggageId !== null
-        && this._luggageCount(this.selectedLuggageId) > 0
-        && this.selectedLuggageId !== HEART_ID;
-      var tradeBtnColor = canTrade ? 0xFFD98A : 0x4A4A4A;
-      var tradeBtnTextColor = canTrade ? '#2A190E' : '#888888';
-      var tradeBg = this.add.rectangle(-90, 240, 180, 50, tradeBtnColor, canTrade ? 1 : 0.6)
-        .setStrokeStyle(2, canTrade ? 0xFFE9B0 : 0x888888, canTrade ? 0.8 : 0.3);
-      this.modalContainer.add(tradeBg);
-      this.modalContainer.add(this.add.text(-90, 240, '交易', {
-        fontSize: '17px', color: tradeBtnTextColor, fontStyle: 'bold',
+      // 购买按钮 (够钱金色, 不够灰色)
+      var canBuy = this.coins >= m.price;
+      var buyBtnColor = canBuy ? 0xD4AF37 : 0x4A4A4A;
+      var buyBtnTextColor = canBuy ? '#2A190E' : '#888888';
+      var buyBg = this.add.rectangle(-90, 30, 200, 60, buyBtnColor, canBuy ? 1 : 0.6)
+        .setStrokeStyle(2, canBuy ? 0xFFE9B0 : 0x888888, canBuy ? 0.8 : 0.3);
+      this.modalContainer.add(buyBg);
+      this.modalContainer.add(this.add.text(-90, 30, '购  买', {
+        fontSize: '19px', color: buyBtnTextColor, fontStyle: 'bold',
       }).setOrigin(0.5));
-      if (canTrade) {
-        var tradeZone = this.add.zone(-90, 240, 180, 50).setInteractive({ useHandCursor: true });
-        var itemIdToTrade = this.selectedLuggageId;
-        tradeZone.on('pointerdown', function () {
-          self.doBuy(m, itemIdToTrade);
-        });
-        this.modalContainer.add(tradeZone);
+      if (canBuy) {
+        var buyZone = this.add.zone(-90, 30, 200, 60).setInteractive({ useHandCursor: true });
+        buyZone.on('pointerdown', function () { self.doBuy(m); });
+        this.modalContainer.add(buyZone);
       }
 
       // 关闭按钮
-      var closeBg = this.add.rectangle(90, 240, 140, 50, 0x4A2E1A, 1)
+      var closeBg = this.add.rectangle(90, 30, 160, 60, 0x4A2E1A, 1)
         .setStrokeStyle(1, 0xFFD98A, 0.5);
       this.modalContainer.add(closeBg);
-      this.modalContainer.add(this.add.text(90, 240, '关闭', {
-        fontSize: '15px', color: '#F4ECD8', fontStyle: 'bold',
+      this.modalContainer.add(this.add.text(90, 30, '关闭', {
+        fontSize: '16px', color: '#F4ECD8', fontStyle: 'bold',
       }).setOrigin(0.5));
-      var closeZone = this.add.zone(90, 240, 140, 50).setInteractive({ useHandCursor: true });
+      var closeZone = this.add.zone(90, 30, 160, 60).setInteractive({ useHandCursor: true });
       closeZone.on('pointerdown', function () { self.closeTradeModal(); });
       this.modalContainer.add(closeZone);
+
+      // 提示
+      var tipMsg;
+      if (canBuy) {
+        tipMsg = '✓ 购买后获得 1 份 ' + m.sells.emoji + ' ' + m.sells.name
+          + (m.id === 5 ? ' (空水壶, 需去绿洲灌水)' : '');
+      } else {
+        var lack = m.price - this.coins;
+        tipMsg = '⚠️ 里亚尔不够！还差 ' + lack + ' ﷼ → 去交易中心 🏦';
+      }
+      this.modalContainer.add(this.add.text(0, 110, tipMsg, {
+        fontSize: '13px', color: canBuy ? '#A8D8C0' : '#FFB0B0', fontStyle: 'italic',
+        wordWrap: { width: 580 },
+      }).setOrigin(0.5));
+
+      // 已经拥有的同类商品
+      var customId = -1000 - m.id;
+      var have = this._luggageCount(customId);
+      if (have > 0) {
+        this.modalContainer.add(this.add.text(0, 150, '已拥有：' + m.sells.emoji + ' × ' + have, {
+          fontSize: '12px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5));
+      }
 
       // 隐藏 dpad
       this.joystickContainer.setVisible(false);
@@ -1068,33 +1179,190 @@
       this.modalContainer.setVisible(false);
       this.modalContainer.removeAll(true);
       this.currentMerchantId = null;
-      this.selectedLuggageId = null;
       this.state = 'PLAYING';
       this.joystickContainer.setVisible(true);
     },
 
-    // M3: 商店买入 — 玩家给 1 件行李物品, 获得 1 份商贩卖品
-    //   - 商贩卖品是地标特产: 找到对应 item id, 给行李 +1
-    //   - 如果卖品是商贩特有名(如地毯/藏红花), 用 IRAN_MERCHANT_GOODS 映射
-    //   - 简化: 商贩卖品名(地毯/藏红花/茶/陶器/骆驼/水壶)直接作为新 item 进 luggage (用 name/emoji 自定义)
-    // 这里采用"自定义物品 id" 方案 — 用负数 id 表示 M3 自家商品, 不会跟 QATAR_LEVEL.gifts 冲突
-    doBuy: function (m, itemIdToTrade) {
-      // 1) 扣 1 件玩家给的商品
-      this._removeFromLuggage(itemIdToTrade, 1);
-      // 2) 给 1 份商贩卖品
-      // 用 -1000 - m.id 作为内部 id, 区分 M3 特产
+    // ==================== M4: 交易中心 modal ====================
+    openExchangeModal: function () {
+      this.state = 'EXCHANGE';
+      this.hideExchangeBubble();
+      this.modalContainer.removeAll(true);
+      window.playIranSfx('button', 0.4);
+      this._renderExchangeModal();
+    },
+    _renderExchangeModal: function () {
+      var self = this;
+      this.modalContainer.removeAll(true);
+
+      // 背景遮罩
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
+      this.modalContainer.add(backdrop);
+
+      // card
+      var card = this.add.rectangle(0, 0, 640, 540, 0x2A1606, 1)
+        .setStrokeStyle(2, 0xD4AF37, 0.7);
+      this.modalContainer.add(card);
+
+      // 标题
+      this.modalContainer.add(this.add.text(0, -230, '🏦 阿巴斯港交易中心', {
+        fontSize: '24px', color: '#D4AF37', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, -200, '把行李物品换成伊朗里亚尔 ﷼', {
+        fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
+      }).setOrigin(0.5));
+
+      // 余额显示
+      this.modalContainer.add(this.add.text(0, -170, '💰 当前余额：' + this.coins + ' ﷼', {
+        fontSize: '16px', color: '#D4AF37', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 2,
+      }).setOrigin(0.5));
+
+      // 行李 grid: 可兑换 (有 EXCHANGE_RATES 且 qty>0) + 归家之心 (不可兑换)
+      var gridY = -90;
+      var cellW = 130, cellH = 100;
+      var cols = 4;
+      var startX = -cellW * 2 + 20;
+
+      // 合并可兑换 + 归家之心, 优先可兑换
+      var tradeable = [];
+      var heartEntry = null;
+      for (var i = 0; i < this.luggage.length; i++) {
+        var e = this.luggage[i];
+        if (e.id === HEART_ID) { heartEntry = e; continue; }
+        if (e.qty > 0 && L.EXCHANGE_RATES[e.id] !== undefined) {
+          tradeable.push(e);
+        }
+      }
+      var cells = tradeable.slice();
+      if (heartEntry) cells.push(heartEntry);
+
+      if (cells.length === 0) {
+        this.modalContainer.add(this.add.text(0, -10, '（行李箱里没有可兑换的物品）', {
+          fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
+        }).setOrigin(0.5));
+      } else {
+        for (var i = 0; i < cells.length; i++) {
+          var e = cells[i];
+          var info = this._getLuggageItemInfo(e.id);
+          var rate = L.EXCHANGE_RATES[e.id];
+          var isHeart = e.id === HEART_ID;
+          var col = i % cols, row = Math.floor(i / cols);
+          var cx = startX + col * cellW;
+          var cy = gridY + row * cellH;
+
+          var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, 0x4A2E1A, isHeart ? 0.45 : 0.85)
+            .setStrokeStyle(2, isHeart ? 0xF6B5C8 : 0x6B4423, isHeart ? 0.7 : 0.4);
+          this.modalContainer.add(cellBg);
+
+          // emoji
+          this.modalContainer.add(this.add.text(cx, cy - 26, info.emoji, { fontSize: '32px' }).setOrigin(0.5));
+          // 名字
+          var nm = this.add.text(cx, cy - 4, info.name, {
+            fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
+            wordWrap: false,
+          }).setOrigin(0.5);
+          nm.setFixedSize(cellW - 28, 14);
+          this.modalContainer.add(nm);
+          // 兑换价 / 不可兑换标签
+          if (isHeart) {
+            this.modalContainer.add(this.add.text(cx, cy + 18, '不可兑换', {
+              fontSize: '11px', color: '#F6B5C8', fontStyle: 'bold',
+            }).setOrigin(0.5));
+          } else {
+            this.modalContainer.add(this.add.text(cx, cy + 16, '→ ' + rate + ' ﷼', {
+              fontSize: '12px', color: '#D4AF37', fontStyle: 'bold',
+            }).setOrigin(0.5));
+            this.modalContainer.add(this.add.text(cx, cy + 32, '×' + e.qty, {
+              fontSize: '11px', color: '#FFD98A',
+            }).setOrigin(0.5));
+          }
+
+          // 点击 = 卖出一件 (归家之心不可点)
+          if (!isHeart) {
+            var zone = this.add.zone(cx, cy, cellW - 16, cellH - 16)
+              .setInteractive({ useHandCursor: true });
+            var itemId = e.id;
+            zone.on('pointerdown', (function (iid) {
+              return function () {
+                window.playIranSfx('click', 0.4);
+                self.doExchange(iid);
+              };
+            })(itemId));
+            this.modalContainer.add(zone);
+          }
+        }
+      }
+
+      // 提示行
+      this.modalContainer.add(this.add.text(0, 170, '👆 点击物品 → 卖出一件 → 获得里亚尔', {
+        fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
+      }).setOrigin(0.5));
+
+      // 关闭按钮
+      var closeBg = this.add.rectangle(0, 230, 200, 50, 0xD4AF37, 1)
+        .setStrokeStyle(2, 0xFFE9B0);
+      this.modalContainer.add(closeBg);
+      this.modalContainer.add(this.add.text(0, 230, '关闭', {
+        fontSize: '16px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      var closeZone = this.add.zone(0, 230, 200, 50).setInteractive({ useHandCursor: true });
+      closeZone.on('pointerdown', function () { self.closeExchangeModal(); });
+      this.modalContainer.add(closeZone);
+
+      this.joystickContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+    },
+    doExchange: function (itemId) {
+      var rate = L.EXCHANGE_RATES[itemId];
+      if (rate === undefined) return;  // 不可兑换
+      if (this._luggageCount(itemId) <= 0) {
+        this.showToast('这件物品已卖完', 1200);
+        return;
+      }
+      this._removeFromLuggage(itemId, 1);
+      this.coins += rate;
+      this._refreshHudCounts();
+      window.playIranSfx('exchange', 0.55);
+      window.playIranSfx('pickup', 0.3);
+      this.showToast('💰 获得 ' + rate + ' ﷼', 900);
+      // 重新渲染 modal 刷新余额
+      this._renderExchangeModal();
+    },
+    closeExchangeModal: function () {
+      this.modalContainer.setVisible(false);
+      this.modalContainer.removeAll(true);
+      this.state = 'PLAYING';
+      this.joystickContainer.setVisible(true);
+    },
+
+    // M4: 商店买入 — 玩家付 price 里亚尔, 获得 1 份商贩卖品
+    //   - 卖品用 -1000 - m.id 作为内部 id 进 luggage (跟 M3 兼容)
+    //   - 水壶商 (id=5) 额外给一个空水壶
+    doBuy: function (m) {
+      if (this.coins < m.price) {
+        this.showToast('里亚尔不够！去交易中心 🏦', 1500);
+        window.playIranSfx('click', 0.3);
+        return;
+      }
+      // 1) 扣钱
+      this.coins -= m.price;
+      // 2) 给 1 份商贩卖品 (行李)
       var customId = -1000 - m.id;
       this._addToLuggage(customId, 1);
       // 2b) 水壶商 (id=5) — 同步加一个空水壶到水系统
       if (m.id === 5) {
         this._addJug(0);  // 空水壶, 需要去绿洲灌水
-        this.showToast('交易成功！获得 🫗 空水壶 (去绿洲灌水) ×1', 1500);
-      } else {
-        this.showToast('交易成功！获得 ' + m.sells.emoji + ' ' + m.sells.name + ' ×1', 1200);
       }
-      // 音 + 关闭 modal
+      // 3) HUD 刷新
+      this._refreshHudCounts();
+      // 4) 提示
+      var suffix = m.id === 5 ? ' (空水壶, 去绿洲灌水)' : '';
+      this.showToast('💰 -' + m.price + ' ﷼  获得 ' + m.sells.emoji + ' ' + m.sells.name + ' ×1' + suffix, 1400);
+      // 5) 音
       window.playIranSfx('exchange', 0.55);
       window.playIranSfx('pickup', 0.4);
+      // 6) 关闭 modal
       this.closeTradeModal();
     },
 
@@ -1192,6 +1460,7 @@
 
     tryCloseTopModal: function () {
       if (this.state === 'TRADING') this.closeTradeModal();
+      else if (this.state === 'EXCHANGE') this.closeExchangeModal();
       else if (this.state === 'LUGGAGE') this.closeLuggageModal();
     },
 
@@ -1254,7 +1523,7 @@
         return;
       }
       if (!this._allJugsFull()) {
-        this.showToast('需要 2 壶满水才能过境 → 走绿洲灌水 💧', 2200);
+        this.showToast('需要 2 壶满水才能过境去土耳其', 2200);
         window.playIranSfx('click', 0.3);
         return;
       }
@@ -1356,6 +1625,32 @@
         }).setOrigin(0.5).setDepth(1500);
       } else {
         this._toast.setText(msg);
+        this._toast.setStyle({ color: '#FFD98A', backgroundColor: '#2A1606' });
+      }
+      this._toast.setAlpha(1);
+      if (this._toastTween) this._toastTween.stop();
+      this._toastTween = this.tweens.add({
+        targets: this._toast,
+        alpha: 0,
+        duration: 600,
+        delay: durationMs - 600,
+      });
+    },
+    // M4: 红色警告 toast (用于缺水等警示)
+    showWarningToast: function (msg, durationMs) {
+      durationMs = durationMs || 1500;
+      if (!this._toast) {
+        this._toast = this.add.text(L.CANVAS_W / 2, 130, msg, {
+          fontSize: '15px', color: '#FFD0D0', backgroundColor: '#7A1F1F',
+          padding: { x: 14, y: 8 }, fontStyle: 'bold',
+          stroke: '#2A0606', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(1500);
+      } else {
+        this._toast.setText(msg);
+        this._toast.setStyle({
+          color: '#FFD0D0', backgroundColor: '#7A1F1F',
+          stroke: '#2A0606', strokeThickness: 2,
+        });
       }
       this._toast.setAlpha(1);
       if (this._toastTween) this._toastTween.stop();
