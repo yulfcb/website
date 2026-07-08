@@ -801,14 +801,21 @@
     },
 
     // ==================== M2: 交易 modal ====================
+    // 首次打开：重置 selectedItemId
     openTradeModal: function (m) {
-      var self = this;
       this.state = 'TRADING';
       this.currentMerchantId = m.id;
       this.selectedItemId = null;
       this.hideMerchantBubble();
       this.modalContainer.removeAll(true);
       window.playIranSfx('button', 0.4);
+      this._renderTradeModal(m);
+    },
+
+    // 重渲染：保留 selectedItemId（点背包物品后调用）
+    _renderTradeModal: function (m) {
+      var self = this;
+      this.modalContainer.removeAll(true);
 
       // 背景遮罩
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
@@ -898,7 +905,7 @@
             return function () {
               self.selectedItemId = iid;
               window.playIranSfx('click', 0.4);
-              self.openTradeModal(m);  // 重渲染
+              self._renderTradeModal(m);  // 重渲染（保留 selectedItemId）
             };
           })(itemId));
           this.modalContainer.add(zone);
