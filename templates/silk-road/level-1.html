@@ -1,42 +1,79 @@
-{% extends "silk-road/_level_base.html" %}
-{% block title %}关卡 1 · 伊朗·阿巴斯港大巴扎{% endblock %}
-{% block head_extra %}
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2A1606">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="msapplication-tap-highlight" content="no">
+  <title>关卡 1 · 伊朗·阿巴斯港大巴扎</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='silk-road/iran/style.css') }}">
-{% endblock %}
-{% block content %}
-  <div class="silk-badge">关卡 1 / 5</div>
-  <h1 class="silk-title">伊朗 · 阿巴斯港大巴扎</h1>
-  <div class="silk-vehicle">🐪</div>
+</head>
+<body>
 
-  {# 游戏容器 — iran/game.js 会填充 DOM #}
-  <div id="iran-game-root"></div>
+  {# M1: BGM — 共享卡塔尔的 silk-road-bgm.wav (30s 中东 pentatonic 循环) #}
+  <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
+    <source src="{{ url_for('static', filename='silk-road/qatar/audio/silk-road-bgm.wav') }}" type="audio/wav">
+  </audio>
+  {# SFX 通道 — 全部从卡塔尔 audio/ 共享 (避免重复资源) #}
+  <audio id="sfx-click"     src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-click.wav') }}"     preload="auto" style="display:none"></audio>
+  <audio id="sfx-button"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-button.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-pickup"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-pickup.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-exchange"  src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-exchange.wav') }}"  preload="auto" style="display:none"></audio>
+  <audio id="sfx-voyage"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-voyage.wav') }}"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-die"       src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-die.wav') }}"       preload="auto" style="display:none"></audio>
 
-  {# 通关面板 (game.js 在通关时直接渲染沙漠场景, 这里保留 fallback 静态 DOM 以防 JS 加载失败) #}
-  <div id="silk-win" class="silk-win" style="display:none">
-    <p class="silk-quote" id="silk-quote">你还记得吗，那晚的沙漠 / 抬头看，整片天都是你的</p>
-    <p class="silk-reward" id="silk-reward">+¥13.14</p>
-    <p class="silk-webhook-status" id="silk-webhook-status">推送中…</p>
-    <a id="silk-next" class="silk-next" href="/games/silk-road/level/2">继续 → 土耳其 🎈</a>
+  {# M1: Phaser 容器 —— iran/game.js 在这里挂 canvas #}
+  <div id="iran-game"></div>
+
+  {# M1: 竖屏提示 overlay —— CSS 控制，竖屏时显示 #}
+  <div id="orientation-lock" aria-hidden="true">
+    <div class="rotate-icon" aria-hidden="true">📱</div>
+    <div class="rotate-title">请横屏以获得最佳体验</div>
+    <div class="rotate-sub">Rotate your phone to landscape mode</div>
+    <div class="rotate-arrow">↻</div>
   </div>
-{% endblock %}
 
-{% block scripts %}
-  {# 关 0→关 1 gating #}
+  {# M1: 全屏按钮 —— DOM 按钮，game.js 里 bindFullscreenDom 接管 #}
+  <button type="button" id="iran-fullscreen" aria-label="全屏">
+    <span class="qtr-fs-icon">⛶</span>
+    <span class="qtr-fs-label">全屏</span>
+  </button>
+
+  {# M1: 世界地图浮动按钮（关 1 Phaser 专用） #}
+  <a class="silk-fab-map" href="/games/silk-road/world-map" aria-label="世界地图" title="世界地图">🗺️</a>
+
+  {# 关 0 → 关 1 gating: 必须先通关关 0 才能进入 #}
   <script>
-    (function() {
+    (function () {
       try {
         var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
-        if (!cleared.includes(0)) {
-          document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1b2135;color:#ffd98a;font-size:18px;text-align:center;padding:40px">🎁 请先通关关 0 → 点击<a href="/games/silk-road/level/0" style="color:#FFD98A;text-decoration:underline;margin-left:8px">关 0 · 卡塔尔</a> 进入</div>';
-          setTimeout(function() { window.location.href = '/games/silk-road/level/0'; }, 2500);
+        if (cleared.indexOf(0) === -1) {
+          document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#2A1606;color:#ffd98a;font-size:18px;text-align:center;padding:40px">🎁 请先通关关 0 → <a href="/games/silk-road/level/0" style="color:#FFD98A;text-decoration:underline;margin-left:8px">关 0 · 卡塔尔</a></div>';
+          setTimeout(function () { window.location.href = '/games/silk-road/level/0'; }, 2500);
         }
       } catch (e) {}
     })();
   </script>
+
+  {# M1: 必须早于 game.js 设的全局变量 #}
   <script>window.LEVEL_ID = 1; window.IRAN_MODE = true;</script>
-  {# 加载卡塔尔关卡数据 (iran/game.js 读 QATAR_LEVEL.gifts 兜底, 不强制依赖) #}
+
+  {# Phaser 3.80.1 —— 本地静态资源, 不走任何 CDN #}
+  <script src="{{ url_for('static', filename='vendor/phaser-3.80.1.min.js') }}"></script>
+
+  {# 关卡数据 → game.js 读取 #}
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
-  {# 关 1 独立 DOM 引擎 —— 不走 level-engine.js (保护关 2-5 的 Pixi 旧逻辑) #}
+  <script src="{{ url_for('static', filename='silk-road/iran/levels.js') }}"></script>
+
+  {# M1: Phaser 引擎 —— Boot → Play (M2 之后会加 ResultScene) #}
   <script src="{{ url_for('static', filename='silk-road/iran/game.js') }}"></script>
-  {# _level_base.html 末尾已加载 progress.js, 这里不需要重复 #}
-{% endblock %}
+
+  {# 跨关进度条 (跟关 0 一致) #}
+  <script src="{{ url_for('static', filename='silk-road/progress.js') }}"></script>
+
+</body>
+</html>

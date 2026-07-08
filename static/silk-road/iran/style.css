@@ -1,12 +1,18 @@
-/* 伊朗·阿巴斯港大巴扎 —— 关 1 样式（独立 DOM 游戏）
+/* 伊朗·阿巴斯港大巴扎 —— 关 1 样式 (M1 Phaser 3 重做版)
+   极简版：Phaser 自己管 scene 内所有 UI（HUD、joystick、modal）。
+   这里只保留 Phaser 容器之外必需的 4 样东西：
+     1. #iran-game —— Phaser parent，挂 canvas
+     2. #orientation-lock —— 竖屏提示（CSS overlay）
+     3. #iran-fullscreen —— 全屏按钮（DOM 按钮，scene 外）
+     4. .silk-fab-map —— 世界地图浮动按钮
    配色：深赭石 #6B3F1D + 波斯蓝 #1B5E8A + 金色 #FFD98A
-   风格：波斯拱门 + 沙漠日落渐变 + 卡塔尔风格的圆形商品卡片
    ====================================================================== */
 
 /* ====== 强禁止滚动 / 双击缩放 ====== */
 html, body {
   margin: 0;
   padding: 0;
+  overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -18,459 +24,185 @@ html, body {
   font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 }
 
-/* ====== 主容器（塞进 #iran-game-root） ====== */
-.iran-bazaar {
-  position: relative;
-  width: 100%;
-  max-width: 480px;
-  margin: 12px auto 32px;
-  padding: 16px 14px 80px;
-  box-sizing: border-box;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #2A1606 0%, #6B3F1D 55%, #E8B96A 100%);
-  box-shadow: 0 16px 48px rgba(0,0,0,.5), inset 0 1px 0 rgba(255, 217, 138, 0.18);
-  overflow: hidden;
+/* ====== Phaser 容器 ====== */
+#iran-game {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;            /* 动态视口高度（iOS Safari） */
+  width: 100dvw;
+  background: #6B3F1D;       /* 伊朗深赭石底色 */
+  z-index: 1;
 }
-
-/* 顶部金色装饰条 —— 波斯几何图案简化版 */
-.iran-bazaar::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 4px;
-  background: linear-gradient(90deg,
-    #FFD98A 0%, #FFD98A 20%, #1B5E8A 20%, #1B5E8A 40%,
-    #FFD98A 40%, #FFD98A 60%, #1B5E8A 60%, #1B5E8A 80%,
-    #FFD98A 80%);
-  opacity: .9;
-}
-
-/* ====== 顶栏资源条 ====== */
-.iran-resource-bar {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  border-radius: 12px;
-  background: rgba(27, 94, 138, 0.35);
-  border: 1px solid rgba(255, 217, 138, 0.35);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
-}
-.iran-resource-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-weight: 700;
-}
-.iran-resource-cell .icon { font-size: 22px; line-height: 1; }
-.iran-resource-cell .count {
-  font-size: 14px;
-  color: #FFD98A;
-  text-shadow: 0 1px 2px rgba(0,0,0,.4);
-}
-.iran-resource-cell.met .count {
-  color: #A6E3A1;
-  font-weight: 800;
-}
-.iran-resource-cell .target {
-  font-size: 11px;
-  color: #c9c2d8;
-}
-
-/* ====== 商贩区（网格 2 列） ====== */
-.iran-merchants {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.iran-merchant-card {
-  position: relative;
-  cursor: pointer;
-  padding: 14px 10px 12px;
-  text-align: center;
-  background: linear-gradient(160deg, #3a1e0e 0%, #1B5E8A 100%);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  color: #f4ecd8;
-  /* 波斯拱门形状 —— 顶部半圆 + 底部方角 */
-  border-radius: 80px 80px 14px 14px / 50px 50px 14px 14px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.4), inset 0 1px 0 rgba(255, 217, 138, 0.25);
-  transition: transform .15s ease, box-shadow .15s ease, opacity .25s ease;
-  touch-action: manipulation;
-}
-.iran-merchant-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 18px rgba(0,0,0,.5), inset 0 1px 0 rgba(255, 217, 138, 0.4);
-}
-.iran-merchant-card:active { transform: translateY(-1px) scale(0.98); }
-
-.iran-merchant-card .m-emoji {
-  font-size: 36px;
-  line-height: 1;
+#iran-game canvas {
   display: block;
-  margin-bottom: 4px;
-}
-.iran-merchant-card .m-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: #FFD98A;
-  margin: 4px 0 2px;
-}
-.iran-merchant-card .m-tip {
-  font-size: 11px;
-  color: #c9c2d8;
-  opacity: 0.85;
-  line-height: 1.3;
-  margin: 0 0 4px;
-}
-.iran-merchant-card .m-reward {
-  display: inline-block;
-  padding: 2px 8px;
-  margin-top: 4px;
-  border-radius: 999px;
-  background: rgba(255, 217, 138, 0.18);
-  color: #FFD98A;
-  font-size: 12px;
-  font-weight: 700;
+  margin: 0 auto;
+  background: #E8C282;       /* 沙金 */
 }
 
-/* 已完成 —— 灰色 + 对勾 */
-.iran-merchant-card.completed {
-  background: linear-gradient(160deg, #4a3a30 0%, #2a2420 100%);
-  opacity: 0.55;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
-}
-.iran-merchant-card.completed::after {
-  content: '✓';
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  width: 22px;
-  height: 22px;
-  line-height: 22px;
-  font-size: 16px;
-  font-weight: 800;
-  text-align: center;
-  border-radius: 50%;
-  background: #A6E3A1;
-  color: #1b2135;
-}
-.iran-merchant-card.completed:hover {
-  transform: none;
-}
-
-/* 摇头动画（拒绝时） */
-@keyframes iran-shake {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  15%      { transform: translateX(-8px) rotate(-3deg); }
-  30%      { transform: translateX(7px) rotate(3deg); }
-  45%      { transform: translateX(-6px) rotate(-2deg); }
-  60%      { transform: translateX(5px) rotate(2deg); }
-  75%      { transform: translateX(-3px) rotate(-1deg); }
-  90%      { transform: translateX(2px) rotate(1deg); }
-}
-.iran-merchant-card.shake {
-  animation: iran-shake 0.5s ease;
-}
-
-/* ====== 背包区 ====== */
-.iran-backpack {
-  margin-bottom: 16px;
-}
-.iran-backpack h3 {
-  font-size: 14px;
-  font-weight: 700;
-  color: #FFD98A;
-  margin: 0 0 8px;
-  letter-spacing: 1px;
-  text-align: center;
-}
-.iran-backpack .iran-backpack-tip {
-  font-size: 11px;
-  color: #c9c2d8;
-  text-align: center;
-  margin: 0 0 10px;
-  opacity: 0.85;
-}
-.iran-items {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.iran-item-card {
-  position: relative;
-  cursor: pointer;
-  padding: 8px 4px 6px;
-  text-align: center;
-  background: rgba(20, 16, 36, 0.6);
-  border: 1px solid rgba(255, 217, 138, 0.35);
-  border-radius: 10px;
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-  touch-action: manipulation;
-}
-.iran-item-card .i-emoji { font-size: 26px; line-height: 1; display: block; }
-.iran-item-card .i-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #FFD98A;
-  margin-top: 4px;
-  line-height: 1.2;
-}
-.iran-item-card .i-price {
-  font-size: 10px;
-  color: #c9c2d8;
-  margin-top: 2px;
-}
-.iran-item-card:hover { transform: translateY(-2px); }
-.iran-item-card.selected {
-  border-color: #FFD98A;
-  background: rgba(255, 217, 138, 0.18);
-  box-shadow: 0 0 0 2px rgba(255, 217, 138, 0.5), 0 4px 12px rgba(255, 217, 138, 0.3);
-  transform: scale(1.05);
-}
-.iran-item-card.consumed {
-  opacity: 0.25;
-  filter: grayscale(0.8);
-  pointer-events: none;
-}
-.iran-item-card.home-heart {
-  border-color: #f6b5c8;
-  background: rgba(246, 181, 200, 0.18);
-}
-.iran-item-card.home-heart::after {
-  content: '🔒';
-  position: absolute;
-  top: 2px; right: 4px;
-  font-size: 10px;
-}
-
-/* 飞向商贩动画（购买成功时） */
-.iran-flying-item {
-  position: fixed;
-  z-index: 9999;
-  font-size: 32px;
-  pointer-events: none;
-  transition: transform 0.5s ease-in, opacity 0.5s ease-in;
-}
-
-/* ====== 提示 toast ====== */
-.iran-toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  background: rgba(20, 16, 36, 0.92);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  border-radius: 999px;
-  color: #FFD98A;
-  font-size: 14px;
-  font-weight: 600;
-  z-index: 9998;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  max-width: 80vw;
-  text-align: center;
-}
-.iran-toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-4px);
-}
-.iran-toast.err { border-color: #f6b5c8; color: #f6b5c8; }
-.iran-toast.ok  { border-color: #A6E3A1; color: #A6E3A1; }
-
-/* ====== 信使铺按钮 ====== */
-.iran-courier-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px dashed rgba(255, 217, 138, 0.55);
-  background: rgba(27, 94, 138, 0.25);
-  color: #FFD98A;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  touch-action: manipulation;
-}
-.iran-courier-btn:hover { background: rgba(27, 94, 138, 0.45); }
-.iran-courier-btn.sent {
-  background: rgba(166, 227, 161, 0.18);
-  border-color: #A6E3A1;
-  color: #A6E3A1;
-  cursor: not-allowed;
-}
-
-/* ====== 通关按钮（启程出发） ====== */
-.iran-depart-btn {
-  display: none;
-  width: 100%;
-  margin-top: 18px;
-  padding: 14px;
-  border-radius: 14px;
-  border: none;
-  background: linear-gradient(135deg, #FFD98A 0%, #f6b5c8 100%);
-  color: #2a2140;
-  font-size: 16px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(255, 217, 138, 0.45);
-  animation: iran-depart-pulse 1.6s ease-in-out infinite;
-  touch-action: manipulation;
-}
-.iran-depart-btn.show { display: block; }
-@keyframes iran-depart-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 6px 20px rgba(255, 217, 138, 0.45); }
-  50%      { transform: scale(1.03); box-shadow: 0 8px 28px rgba(255, 217, 138, 0.65); }
-}
-
-/* ====== 沙漠场景（通关动画） ====== */
-.iran-desert-scene {
+/* ====== 竖屏强制提示（CSS overlay，竖屏时遮挡） ====== */
+#orientation-lock {
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 9500;
+  z-index: 99999;
+  background: linear-gradient(135deg, #2A1606 0%, #6B3F1D 50%, #1B5E8A 100%);
+  align-items: center;
+  justify-content: center;
   flex-direction: column;
-  background: linear-gradient(180deg, #2A1606 0%, #6B3F1D 30%, #E8B96A 70%, #FFD98A 100%);
-  overflow: hidden;
-}
-.iran-desert-scene.show { display: flex; }
-.iran-desert-sky {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 50%;
-}
-.iran-sun {
-  position: absolute;
-  top: 18%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #FFEAB8 0%, #FFD98A 50%, rgba(255,217,138,0) 70%);
-  box-shadow: 0 0 80px 30px rgba(255, 217, 138, 0.5);
-}
-.iran-desert-dunes {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 50%;
-}
-.iran-dune {
-  position: absolute;
-  bottom: 0;
-  background: linear-gradient(180deg, #E8B96A 0%, #C68A4A 100%);
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-}
-.iran-dune.d1 { left: -10%; width: 60%; height: 32%; opacity: 0.7; }
-.iran-dune.d2 { left: 25%;  width: 70%; height: 45%; opacity: 0.85; }
-.iran-dune.d3 { left: 55%;  width: 65%; height: 38%; opacity: 0.75; }
-.iran-dune.d4 { left: 80%;  width: 50%; height: 28%; opacity: 0.6; }
-
-/* 骆驼商队动画 —— 从右往左横穿屏幕 */
-.iran-caravan {
-  position: absolute;
-  top: 55%;
-  left: 0;
-  right: 0;
-  height: 80px;
-  z-index: 5;
-}
-.iran-camel {
-  position: absolute;
-  font-size: 56px;
-  line-height: 1;
-  bottom: 0;
-  animation: iran-camel-walk 5.5s linear forwards;
-  filter: drop-shadow(0 4px 6px rgba(0,0,0,.4));
-}
-.iran-camel.c1 { animation-delay: 0s;   bottom: 12px; font-size: 50px; }
-.iran-camel.c2 { animation-delay: .35s; bottom: 24px; font-size: 56px; }
-.iran-camel.c3 { animation-delay: .70s; bottom: 16px; font-size: 52px; }
-.iran-camel.c4 { animation-delay: 1.05s; bottom: 28px; font-size: 58px; }
-.iran-camel.c5 { animation-delay: 1.40s; bottom: 14px; font-size: 50px; }
-
-@keyframes iran-camel-walk {
-  0%   { right: -100px; transform: scaleX(1); }
-  49%  { transform: scaleX(1); }
-  50%  { transform: scaleX(-1); }
-  100% { right: calc(100% + 100px); transform: scaleX(-1); }
-}
-
-/* 通关卡片（动画结束后显示） */
-.iran-desert-endcard {
-  display: none;
-  position: relative;
-  z-index: 10;
-  margin: auto;
-  padding: 28px 22px;
-  max-width: 420px;
-  text-align: center;
-  background: rgba(20, 16, 36, 0.85);
-  border: 1px solid rgba(255, 217, 138, 0.5);
-  border-radius: 18px;
+  gap: 24px;
   color: #f4ecd8;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  text-align: center;
+  padding: 24px;
 }
-.iran-desert-endcard.show { display: block; }
-.iran-desert-endcard .end-quote {
-  font-size: 16px;
-  color: #A8D8C0;
-  font-style: italic;
-  margin: 0 0 14px;
-  line-height: 1.6;
-  white-space: pre-line;
+#orientation-lock.show { display: flex; }
+#orientation-lock .rotate-icon {
+  font-size: 96px;
+  line-height: 1;
+  animation: iran-rotate-phone 1.5s ease-in-out infinite;
+  display: inline-block;
 }
-.iran-desert-endcard .end-reward {
-  font-size: 32px;
-  font-weight: 800;
-  color: #FFD98A;
-  margin: 12px 0 8px;
+@keyframes iran-rotate-phone {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(90deg); }
 }
-.iran-desert-endcard .end-webhook {
+#orientation-lock .rotate-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffd98a;
+  letter-spacing: 1px;
+}
+#orientation-lock .rotate-sub {
   font-size: 13px;
   color: #c9c2d8;
-  min-height: 18px;
-  margin: 6px 0 18px;
+  opacity: 0.85;
 }
-.iran-desert-endcard .end-next {
-  display: inline-block;
-  padding: 12px 28px;
+#orientation-lock .rotate-arrow {
+  font-size: 48px;
+  color: #f6b5c8;
+  animation: iran-rotate-arrow 1.5s ease-in-out infinite;
+}
+@keyframes iran-rotate-arrow {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(360deg); }
+}
+
+/* ====== 全屏按钮（DOM，scene 外） ====== */
+#iran-fullscreen {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 12px);
+  right: 12px;
+  width: auto;
+  height: 44px;
+  padding: 0 16px;
   border-radius: 999px;
-  text-decoration: none;
-  background: #f6b5c8;
-  color: #2a2140;
+  border: 1px solid rgba(255, 217, 138, 0.6);
+  background: rgba(42, 22, 6, 0.92);
+  color: #FFD98A;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 250;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: transform .12s ease;
+  font-family: inherit;
 }
-.iran-desert-endcard .end-next:hover { transform: translateY(-2px); }
-
-/* ====== 信使铺 modal（复用 .slk-revive-* 样式，但放大 textarea） ====== */
-.iran-courier-modal-title { color: #FFD98A; }
-
-/* ====== 响应式 ====== */
+#iran-fullscreen:hover { transform: translateY(-2px); }
+#iran-fullscreen .qtr-fs-icon { font-size: 18px; line-height: 1; }
 @media (max-width: 480px) {
-  .iran-bazaar { margin: 8px auto 24px; padding: 12px 10px 80px; border-radius: 14px; }
-  .iran-merchants { gap: 8px; }
-  .iran-merchant-card { padding: 12px 8px 10px; }
-  .iran-merchant-card .m-emoji { font-size: 32px; }
-  .iran-merchant-card .m-name { font-size: 13px; }
-  .iran-items { gap: 6px; }
-  .iran-item-card .i-emoji { font-size: 22px; }
-  .iran-item-card .i-name { font-size: 10px; }
-  .iran-sun { width: 64px; height: 64px; }
-  .iran-camel { font-size: 44px !important; }
-  .iran-desert-endcard { padding: 22px 16px; }
-  .iran-desert-endcard .end-reward { font-size: 26px; }
+  #iran-fullscreen .qtr-fs-label { display: none; }
+  #iran-fullscreen {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
 }
+
+/* ====== 全屏模式下的微调 ====== */
+:fullscreen #iran-fullscreen,
+:-webkit-full-screen #iran-fullscreen {
+  top: env(safe-area-inset-top, 0);
+}
+
+/* ====== 世界地图浮动按钮 ====== */
+.silk-fab-map {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 64px);  /* 在 fullscreen 按钮下方 20px */
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(255, 217, 138, 0.92);
+  color: #2a2140;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 217, 138, 0.6);
+  cursor: pointer;
+  z-index: 250;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s ease, background .14s ease;
+}
+.silk-fab-map:hover { transform: translateY(-2px); background: #ffd98a; }
+@media (max-width: 480px) {
+  .silk-fab-map { width: 44px; height: 44px; font-size: 20px; }
+}
+
+/* ====== 跨关进度条 (复制自 _level_base.html, 防止外层样式被去掉) ====== */
+#silk-progress-bar-host { max-width: 720px; margin: 18px auto 0; padding: 0 16px; }
+.slk-pg-wrap {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 14px; border-radius: 14px;
+  background: rgba(42, 33, 64, 0.55); border: 1px solid rgba(74, 85, 120, 0.6);
+  box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+.slk-pg-nick {
+  flex-shrink: 0; font-size: 13px; color: #f6b5c8;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(246, 181, 200, 0.1);
+}
+.slk-pg-nick b { color: #ffd98a; font-weight: 700; margin-left: 2px; }
+.slk-pg-bar { flex: 1; min-width: 0; }
+.slk-pg-track {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; overflow-x: auto;
+  padding-bottom: 4px;
+}
+.slk-pg-track::-webkit-scrollbar { height: 3px; }
+.slk-pg-track::-webkit-scrollbar-thumb { background: #4a5578; border-radius: 2px; }
+.slk-pg-step {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 6px; border-radius: 8px; cursor: pointer; min-width: 36px;
+  transition: background .14s ease; position: relative;
+}
+.slk-pg-step:hover { background: rgba(168, 216, 192, 0.08); }
+.slk-pg-step.cleared .slk-pg-dot { filter: none; opacity: 1; }
+.slk-pg-step.current .slk-pg-dot {
+  animation: slk-pg-bounce 1.2s ease-in-out infinite;
+}
+@keyframes slk-pg-bounce {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(-3px); }
+}
+.slk-pg-step.todo .slk-pg-dot { opacity: 0.35; filter: grayscale(.7); }
+.slk-pg-dot { font-size: 22px; line-height: 1; }
+.slk-pg-check {
+  position: absolute; top: 0; right: 0;
+  font-size: 10px; line-height: 1;
+}
+.slk-pg-step.cleared .slk-pg-check { color: #a6e3a1; }
+.slk-pg-step.current .slk-pg-check { color: #ffd98a; }
+.slk-pg-label { font-size: 10px; color: #c9c2d8; }
+.slk-pg-step.current .slk-pg-label { color: #ffd98a; font-weight: 700; }
+.slk-pg-sep { color: #4a5578; font-size: 14px; }
