@@ -275,6 +275,7 @@
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       this.waterText.setDepth(100);
+      this._renderJugHud();
 
       // 2. 💰 余额 (中左) — 新增 M4
       this.coinText = this.add.text(310, 30, this._coinHudText(), {
