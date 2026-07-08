@@ -1,50 +1,46 @@
-// 伊朗·阿巴斯港大巴扎 —— 关 1 游戏引擎 (M2: 交易系统嵌入 Phaser 地图)
+// 伊朗·阿巴斯港大巴扎 —— 关 1 游戏引擎 (M3: 商店"卖"模式 + 水壶系统 + 行李箱)
 //
 // 重做原因：原 Iran 关是纯 DOM 卡片游戏，太简单。仿关 0 (Qatar) 的 Phaser 模式：
-// 玩家控制人物在沙漠地图上行走，走访 5 个波斯商贩 + 2 个绿洲，
-// 集齐 🐪×3 + 💧×3 启程去土耳其 (M3 才会真正通关)。
+// 玩家控制人物在沙漠地图上行走，
+// - 走访 6 个波斯商贩 (地毯/藏红花/茶/陶/骆驼/水壶) — **反复交易**
+// - 走访 2 个绿洲给水壶灌水
+// - 集齐 **2 个水壶 + 2 壶都满 10L** 启程去土耳其 (Bazargan 巴扎尔甘边境)
+// - 携带行李箱 (quantity-based 同类型可多件) 跨级
 //
-// M1 范围：
-//   - BootScene: 背景色 + BGM 解锁
-//   - PlayScene: 沙漠地图 + 4 角色 graphics + 虚拟 D-pad + WASD/方向键
-//                + 网格步进 (24/48px) + 水分系统 (10 起, -0.1/步, 绿洲 +2)
-//                + 商贩/绿洲/出口 emoji 渲染 + 撞墙提示 + 走路 bob + facing flip
-//                + 水分=0 死亡提示 (文字)
-//
-// M2 范围 (本次新增)：
-//   - 背包系统: 8 件商品 grid (来自 QATAR_LEVEL.gifts), localStorage.silkroad_luggage
-//   - 商贩交互: walk-near 气泡 + tap/空格 打开交易 modal (Phaser Graphics)
-//   - 交易逻辑: accept 检查 + 消耗/奖励 + 失败 shake 动画
-//   - 骆驼骑乘: toggle 按钮 + 步长 48px + 水分 -0.08/步 + 玩家下方 🐪 装饰
-//   - HUD: 🎒 背包按钮 + 骑乘/步行状态 + 已完成商贩计数 (x/5)
-//   - 出口: 满足条件 (camels≥3 && water≥3) 时脉冲 + 走到触发提示
-//   - id=5 (归家之心 ❤️) 不可交易
+// M3 范围：
+//   - 商店"卖"模式: 每家卖自家商品 (地毯/藏红花/茶/陶器/骆驼/水壶), 玩家花 1 件行李物品换
+//   - 反复交易: 没有 merchantDone 一次性, 只要有行李物品就能继续买
+//   - 水壶系统: 玩家拥有 N 个水壶, 每个满 10L; 行走 -0.1L (从当前水壶扣);
+//     绿洲自动把最空的水壶灌满 (除非都满)
+//   - 出口条件: 2 壶 + 2 壶都满水 + 走到左上方巴扎尔甘 → camera fade → 跳下一关
+//   - 行李箱 (🧳): quantity-based 物品数组, localStorage `silkroad_luggage` 新格式
+//   - HUD 4 项: 💧水壶 / 🐪骑乘 / 🧳行李 / 🔊BGM
+//   - 骆驼视觉: emoji 40px+, 人物骑在上方 (略缩小)
 //
 // 复用关 0 (qatar/game.js) 的代码：
-//   - _buildAvatarSprite (4 个角色 graphics) — 从 QATAR 原样复制, 角色选择共享 localStorage
+//   - _buildAvatarSprite (4 个角色 graphics) — 角色选择共享 localStorage
 //   - makeDpadBtn / joystickContainer — D-pad 容器
-//   - changeWater / checkOasisCollision — 水分系统
 //   - tryMove / _movementUpdate — 步进循环
 
 (function () {
   'use strict';
 
   if (!window.IRAN_MODE) {
-    console.warn('[iran-m2] window.IRAN_MODE not set, abort');
+    console.warn('[iran-m3] window.IRAN_MODE not set, abort');
     return;
   }
   var L = window.IRAN_LEVEL;
-  var Q = window.QATAR_LEVEL;  // M2: 商品数据从 QATAR_LEVEL.gifts 来 (8 件, 跟商人 accept 索引对应)
+  var Q = window.QATAR_LEVEL;  // 商品本体定义从 QATAR_LEVEL.gifts 来 (8 件)
   if (!L) {
-    console.error('[iran-m2] window.IRAN_LEVEL missing, abort');
+    console.error('[iran-m3] window.IRAN_LEVEL missing, abort');
     return;
   }
   if (!Q || !Q.gifts) {
-    console.error('[iran-m2] window.QATAR_LEVEL.gifts missing, abort');
+    console.error('[iran-m3] window.QATAR_LEVEL.gifts missing, abort');
     return;
   }
   var LEVEL_ID = 1;
-  // M2: 商品数据 (商品本体) 来自卡塔尔关 gifts, 用 item.id 索引. id=5 归家之心不可交易.
+  // M3: 商品数据 (商品本体) 来自卡塔尔关 gifts, 用 item.id 索引. id=5 归家之心不可交易.
   var ITEMS = Q.gifts;
   var HEART_ID = 5;
   var ALL_ITEM_IDS = ITEMS.map(function (g) { return g.id; });
@@ -69,6 +65,15 @@
     cn_f:  '👩',
   };
 
+  // ============== BGM 持久化状态 (M3) ==============
+  // 首次进入页面, 听用户选择是否静音 (默认 false, 但浏览器 autoplay policy 仍要求一次 pointerdown)
+  function getBgmMuted() {
+    try { return localStorage.getItem('silkroad_bgm_muted') === '1'; } catch (e) { return false; }
+  }
+  function setBgmMuted(v) {
+    try { localStorage.setItem('silkroad_bgm_muted', v ? '1' : '0'); } catch (e) {}
+  }
+
   // ============== BootScene ==============
   var BootScene = new Phaser.Class({
     Extends: Phaser.Scene,
@@ -81,22 +86,31 @@
         fontSize: '26px', color: '#FFD98A', fontStyle: 'bold', align: 'center',
       }).setOrigin(0.5);
 
-      // BGM 解锁 (复用 #silk-road-bgm 元素)
-      document.addEventListener('pointerdown', function unlockBgm() {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) {
-          a.muted = false;
-          a.volume = 0.35;
-          var p = a.play();
+      // BGM 初始化 (复用 #silk-road-bgm 元素)
+      // 记住用户上次的静音选择, 但首次仍需一次 pointerdown 才能真正播放
+      var bgm = document.getElementById('silk-road-bgm');
+      var initBgm = function () {
+        if (!bgm) return;
+        var muted = getBgmMuted();
+        bgm.muted = muted;
+        if (!muted) {
+          bgm.volume = 0.35;
+          var p = bgm.play();
           if (p && typeof p.catch === 'function') p.catch(function () {});
         }
-      }, { once: true });
+      };
+      var unlock = function unlockBgm() {
+        initBgm();
+        document.removeEventListener('pointerdown', unlock);
+      };
+      document.addEventListener('pointerdown', unlock, { once: true });
+      // 立即尝试一次 (若浏览器 autoplay 政策允许, 立即静音/播放)
+      initBgm();
       window.addEventListener('beforeunload', function () {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) a.pause();
+        if (bgm) bgm.pause();
       });
 
-      // 短暂延迟 → PlayScene (M1 跳过 IntroScene, 直接进游戏)
+      // 短暂延迟 → PlayScene
       this.time.delayedCall(30, function () {
         self.scene.start('PlayScene');
       });
@@ -110,13 +124,13 @@
     create: function () {
       var self = this;
 
-      // —— 盐漠灰棕背景（Dasht-e Kavir 盐壳色）——
+      // —— 盐漠灰棕背景 ——
       this.cameras.main.setBackgroundColor('#C8B89A');
 
-      // —— 伊朗特色地形：夜空 + 扎格罗斯山脉 + 盐漠 + 雅丹 + 波斯建筑 + 藏红花 + 坎儿井 ——
+      // —— 伊朗特色地形 ——
       this.drawIranTerrain();
 
-      // —— 6 个真实地名 chip (伊朗版) ——
+      // —— 6 个真实地名 chip ——
       this.placeSprites = [];
       L.places.forEach(function (p) {
         var w = Math.max(140, p.label.length * 9 + 24);
@@ -149,11 +163,9 @@
         self.oasisSprites.push(oasis);
       });
 
-      // —— 5 个波斯商贩 ——
-      // M2: 加交互 (气泡 + 点击) + 完成态 (灰色)
+      // —— 6 个波斯商贩 ——
       this.merchantSprites = [];
-      this.merchantBubbles = {};  // id → bubble sprite (null 时未显示)
-      this.merchantDone = {};     // id → true (已完成, 不再显示气泡)
+      this.merchantBubbles = {};
       L.merchants.forEach(function (m) {
         var halo = self.add.graphics();
         halo.fillStyle(0x1B5E8A, 0.4);  // 波斯蓝
@@ -168,8 +180,6 @@
         sp.merchantData = m;
         sp.bobPhase = Math.random() * Math.PI * 2;
         sp.setDepth(20);
-        // M2: 商贩可点击 (设置 interactive zone) — 160×160 在 1280×720 画布够大,
-        // 缩到手机 ~375 宽时仍剩 ~46×46px, 容易戳到
         var hit = self.add.zone(m.x, m.y + 10, 160, 160)
           .setInteractive({ useHandCursor: true });
         hit.on('pointerdown', function () { self.tryOpenMerchant(m.id); });
@@ -178,7 +188,7 @@
         self.merchantSprites.push(sp);
       });
 
-      // —— 出口 (启程 → 土耳其) ——
+      // —— 出口 (巴扎尔甘 → 土耳其, 左上角) ——
       var exitBg = this.add.graphics();
       exitBg.fillStyle(0xFFD98A, 0.5);
       exitBg.fillCircle(0, 0, 24);
@@ -193,69 +203,75 @@
       this.exitGlow = this.add.graphics();
       this.exitGlow.setDepth(19);
 
-      // —— 玩家：4 角色 graphics (复用关 0 逻辑) ——
+      // —— 玩家：4 角色 graphics ——
       var avatarId = localStorage.getItem('silkroad_avatar') || 'malay';
       if (!window.IRAN_AVATARS[avatarId]) avatarId = 'malay';
       this._avatar = avatarId;
       var elf = this._buildAvatarSprite(avatarId);
       var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
-      // M2: 骑乘时玩家下方加 🐪 emoji 装饰
-      this.camelBackEmoji = this.add.text(0, 30, '🐪', { fontSize: '20px' }).setOrigin(0.5);
+      // M3: 骆驼 emoji 加大到 44px + 玩家缩小骑在上面
+      this.camelBackEmoji = this.add.text(0, 22, '🐪', { fontSize: '44px' }).setOrigin(0.5);
       this.camelBackEmoji.setVisible(false);
-      this.playerContainer = this.add.container(L.start.x, L.start.y, [shadow, elf, this.camelBackEmoji]);
+      // 玩家 (骑乘时缩小) — 容器里: shadow, camel, elf
+      this.playerContainer = this.add.container(L.start.x, L.start.y, [shadow, this.camelBackEmoji, elf]);
       this.playerContainer.setDepth(30);
       this.playerSprite = { shadow: shadow, elf: elf, avatarId: avatarId };
 
-      // —— 状态 ——
+      // —— 状态 (M3) ——
       this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
-      this.water = L.WATER_MAX;
-      this.camels = 0;                // M2: 交易成功给 camel/water
-      this.completedMerchantIds = []; // M2: 已完成商贩 id 列表
-      this.consumedIds = [];          // M2: 已消耗的 item id (从背包去掉)
-      this.camelMode = false;         // M2: 是否骑骆驼
-      this.currentMerchantId = null;  // M2: 当前打开的商贩
-      this.selectedItemId = null;     // M2: 交易 modal 选中的 item
-      this.exitActive = false;        // M2: 出口是否激活 (脉冲)
-      this.merchantShownId = null;    // M2: 当前显示气泡的商贩 id
-      this.state = 'PLAYING';         // PLAYING | TRADING | LUGGAGE | DEAD
+      // 水壶: 玩家拥有的水壶列表 [{capacity, water}], 初始空
+      this.jugs = [];
+      // 行李: 物品数组 [{id, qty}]
+      this.luggage = this._loadLuggage();
+      this.camelMode = false;
+      this.currentMerchantId = null;
+      this.selectedLuggageId = null;  // 交易 modal 选中的行李物品
+      this.exitActive = false;
+      this.merchantShownId = null;
+      this.state = 'PLAYING';
+      this._exitTriggered = false;
+      this._exitingIran = false;  // 防止重复触发离场动画
 
-      // —— 背包初始化 (M2) ——
-      // 优先读 localStorage.silkroad_luggage (从关 0 存过来的勾选列表)
-      // 没有则兜底给全部 8 件, 让玩家能正常玩游戏
-      this.luggageIds = this._loadLuggage();
-
-      // —— HUD（顶部条）——
+      // —— HUD（顶部条，4 项） ——
       var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x2A1606, 0.92);
-      this.waterText = this.add.text(180, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+
+      // 1. 💧 水壶 (左)
+      this.jugText = this.add.text(120, 30, this._jugHudText(), {
+        fontSize: '15px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
-      this.camelText = this.add.text(420, 30, '🐪 骆驼 0 / ' + L.TARGET_CAMELS, {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      // 骑乘切换按钮 (M2: 默认隐藏, camels > 0 时显示)
-      this.camelBtn = this.add.text(560, 30, '🚶 步行', {
+
+      // 2. 🐪 骑乘切换 (中左)
+      this.camelBtn = this.add.text(420, 30, '🚶 步行', {
         fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-        backgroundColor: '#1B5E8A', padding: { x: 8, y: 2 },
+        backgroundColor: '#1B5E8A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
-      this.camelBtn.setVisible(false);
       this.camelBtn.setInteractive({ useHandCursor: true });
       this.camelBtn.on('pointerdown', function () { self.toggleCamelMode(); });
-      this.merchantText = this.add.text(820, 30, '🏪 商贩 0 / 5', {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      // 背包按钮 (M2)
-      this.bagBtn = this.add.text(1080, 30, '🎒 背包', {
+      this._updateCamelBtn();
+
+      // 3. 🧳 行李箱 (中右)
+      this.luggageBtn = this.add.text(680, 30, '🧳 行李箱 (' + this._luggageTotalCount() + ')', {
         fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
-      this.bagBtn.setInteractive({ useHandCursor: true });
-      this.bagBtn.on('pointerdown', function () { self.openLuggageModal(); });
+      this.luggageBtn.setInteractive({ useHandCursor: true });
+      this.luggageBtn.on('pointerdown', function () { self.openLuggageModal(); });
+
+      // 4. 🔊 BGM 按钮 (右)
+      var bgmMuted = getBgmMuted();
+      this.bgmBtn = this.add.text(900, 30, bgmMuted ? '🔇' : '🔊', {
+        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
+        backgroundColor: '#4A2E1A', padding: { x: 8, y: 2 },
+      }).setOrigin(0.5);
+      this.bgmBtn.setInteractive({ useHandCursor: true });
+      this.bgmBtn.on('pointerdown', function () { self.toggleBgm(); });
+
       // 任务提示
-      this.add.text(640, 80, '🎯 走访 5 个波斯商贩 + 集齐 3 只骆驼 + 3 壶水 → 启程去土耳其', {
+      this.add.text(640, 80, '🎯 走访商贩换商品 → 集齐 2 壶满水 → 巴扎尔甘启程去土耳其', {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
       }).setOrigin(0.5);
 
-      // —— 虚拟方向键（跟关 0 一致，左下 Container）——
+      // —— 虚拟方向键 ——
       this.keys = { up: false, down: false, left: false, right: false };
       this.joystickContainer = this.add.container(110, 620);
       this.joystickContainer.setAlpha(0.72);
@@ -298,10 +314,10 @@
       makeDpadBtn('◀', -75, 0, 'left');
       makeDpadBtn('▶', 75, 0, 'right');
 
-      // 持续 walk tick (按住连续走)
+      // 持续 walk tick
       this.events.on('update', this._movementUpdate, this);
 
-      // —— 键盘监听 (WASD + 方向键) ——
+      // —— 键盘监听 ——
       var onKeyDown = function (k) { return function () { self.keys[k] = true; } };
       var onKeyUp = function (k) { return function () { self.keys[k] = false; } };
       this.input.keyboard.on('keydown-UP',    onKeyDown('up'));
@@ -325,39 +341,24 @@
       // ESC → 关闭 modal
       this.input.keyboard.on('keydown-ESC', function () { self.tryCloseTopModal(); });
 
-      // —— Modal 容器 (交易 modal / 背包 modal 共用) ——
+      // —— Modal 容器 (交易 modal / 行李箱 modal 共用) ——
       this.modalContainer = this.add.container(640, 360);
       this.modalContainer.setDepth(2000);
       this.modalContainer.setVisible(false);
 
-      // —— 全屏按钮 / 横屏锁 (DOM 辅助) ——
+      // —— 开局教程提示 (M3: 引导去水壶商) ——
+      this.time.delayedCall(800, function () {
+        self.showToast('💡 先去地图中部的水壶商人那儿买 2 个水壶 🫗', 2800);
+      });
+
+      // —— DOM 辅助 ——
       this.bindFullscreenDom();
       this.bindOrientationLock();
     },
 
-    // ==================== 沙丘 (M1 旧版, 已不再调用, 保留为 fallback) ====================
-    drawDunes: function (color, baseY, amplitude) {
-      var g = this.add.graphics();
-      g.fillStyle(color, 0.6);
-      g.beginPath();
-      g.moveTo(0, baseY);
-      for (var x = 0; x <= L.CANVAS_W; x += 30) {
-        var peak = Math.sin(x * 0.013) * amplitude + Math.cos(x * 0.027) * (amplitude / 2);
-        g.lineTo(x, baseY - peak);
-      }
-      g.lineTo(L.CANVAS_W, L.CANVAS_H);
-      g.lineTo(0, L.CANVAS_H);
-      g.closePath();
-      g.fillPath();
-    },
-
-    // ==================== 伊朗地形 (M2 重做) ====================
-    // 扎格罗斯山脉 + 卡维尔盐漠 + 卢特雅丹 + 波斯建筑 + 藏红花田 + 坎儿井
-    // depth 层级: -10 天空, -9 星星, -8 远山, -7 盐漠, -6 雅丹, -5 建筑, -4 花卉/坎儿井
+    // ==================== 伊朗地形 (保留 M2) ====================
     drawIranTerrain: function () {
-      var self = this;
-
-      // === 1. 天空渐变 — 波斯夜空深蓝 ===
+      // 天空
       var sky = this.add.graphics();
       sky.fillGradientStyle(0x1A2744, 0x1A2744, 0x2A3A5E, 0x2A3A5E, 1);
       sky.fillRect(0, 0, L.CANVAS_W, 280);
@@ -374,10 +375,9 @@
         stars.fillCircle(sx, sy, sr);
       }
 
-      // === 2. 远景 — 扎格罗斯山脉剪影 ===
+      // 远山
       var mtn = this.add.graphics();
       mtn.setDepth(-8);
-      // 远景山脉 — 淡紫灰
       var farPeaks = [
         [0,260],[80,210],[160,230],[260,190],[360,215],[480,180],
         [580,205],[680,175],[790,200],[880,185],[980,210],[1080,195],
@@ -386,15 +386,12 @@
       mtn.fillStyle(0x4A3D5C, 0.7);
       mtn.beginPath();
       mtn.moveTo(farPeaks[0][0], farPeaks[0][1]);
-      for (var i = 1; i < farPeaks.length; i++) {
-        mtn.lineTo(farPeaks[i][0], farPeaks[i][1]);
-      }
+      for (var i = 1; i < farPeaks.length; i++) mtn.lineTo(farPeaks[i][0], farPeaks[i][1]);
       mtn.lineTo(1280, 320);
       mtn.lineTo(0, 320);
       mtn.closePath();
       mtn.fillPath();
 
-      // 近景山脉 — 深紫灰
       var nearPeaks = [
         [0,290],[120,250],[220,270],[350,240],[480,265],[600,235],
         [720,260],[850,245],[960,270],[1080,250],[1200,275],[1280,290]
@@ -402,22 +399,18 @@
       mtn.fillStyle(0x6B5B7B, 0.8);
       mtn.beginPath();
       mtn.moveTo(nearPeaks[0][0], nearPeaks[0][1]);
-      for (var i = 1; i < nearPeaks.length; i++) {
-        mtn.lineTo(nearPeaks[i][0], nearPeaks[i][1]);
-      }
+      for (var i = 1; i < nearPeaks.length; i++) mtn.lineTo(nearPeaks[i][0], nearPeaks[i][1]);
       mtn.lineTo(1280, 350);
       mtn.lineTo(0, 350);
       mtn.closePath();
       mtn.fillPath();
 
-      // === 3. 中景地面 — 卡维尔盐漠 ===
+      // 地面
       var ground = this.add.graphics();
       ground.setDepth(-7);
-      // 盐漠灰棕地面
       ground.fillStyle(0xC8B89A, 1);
       ground.fillRect(0, 300, L.CANVAS_W, L.CANVAS_H - 300);
 
-      // 盐壳裂纹纹理
       ground.lineStyle(1, 0xE0D4BC, 0.25);
       var saltCracks = [
         [100,380,130,395],[200,420,185,440],[350,500,370,520],
@@ -434,7 +427,7 @@
         ground.strokePath();
       }
 
-      // === 4. 雅丹地貌 — 深色风蚀土丘 (卢特沙漠特色) ===
+      // 雅丹
       var yardang = this.add.graphics();
       yardang.setDepth(-6);
       var yardangs = [
@@ -445,52 +438,39 @@
       ];
       for (var i = 0; i < yardangs.length; i++) {
         var yd = yardangs[i];
-        // 阴影
         yardang.fillStyle(0x7B6B4A, 0.4);
         yardang.fillEllipse(yd.x + 5, yd.y + 3, yd.w, yd.h);
-        // 主体
         yardang.fillStyle(0x8B7B5A, 0.6);
         yardang.fillEllipse(yd.x, yd.y, yd.w, yd.h);
-        // 高光
         yardang.fillStyle(0xA89878, 0.3);
         yardang.fillEllipse(yd.x - 5, yd.y - 5, yd.w * 0.6, yd.h * 0.5);
       }
 
-      // === 5. 波斯建筑剪影 ===
+      // 建筑
       var bldg = this.add.graphics();
       bldg.setDepth(-5);
-
-      // 伊斯法罕蓝色清真寺 (中右侧)
-      // 穹顶
       bldg.fillStyle(0x1B5E8A, 0.6);
       bldg.fillEllipse(1050, 305, 55, 42);
-      // 建筑体
       bldg.fillStyle(0x8B7B6A, 0.6);
       bldg.fillRect(1023, 305, 54, 35);
-      // 左宣礼塔
       bldg.fillRect(1012, 280, 7, 60);
       bldg.fillEllipse(1015.5, 278, 11, 9);
-      // 右宣礼塔
       bldg.fillRect(1081, 282, 7, 58);
       bldg.fillEllipse(1084.5, 280, 11, 9);
-
-      // 波斯波利斯石柱 (中左侧)
       bldg.fillStyle(0x9B9080, 0.5);
       for (var i = 0; i < 4; i++) {
         var px = 100 + i * 22;
         bldg.fillRect(px, 305, 9, 45);
         bldg.fillRect(px - 5, 303, 19, 5);
       }
-      bldg.fillRect(95, 300, 88, 5); // 横梁
-
-      // 远处小村庄剪影
+      bldg.fillRect(95, 300, 88, 5);
       bldg.fillStyle(0x6B5B4A, 0.35);
       bldg.fillRect(700, 310, 25, 20);
       bldg.fillTriangle(700, 310, 712.5, 298, 725, 310);
       bldg.fillRect(740, 312, 18, 18);
       bldg.fillTriangle(740, 312, 749, 302, 758, 312);
 
-      // === 6. 藏红花田点缀 (紫色小花) ===
+      // 藏红花田
       var flowers = this.add.graphics();
       flowers.setDepth(-4);
       var flowerSpots = [
@@ -501,21 +481,18 @@
       for (var i = 0; i < flowerSpots.length; i++) {
         var fx = flowerSpots[i][0];
         var fy = flowerSpots[i][1];
-        // 紫色花瓣
         flowers.fillStyle(0x9B3D8A, 0.5);
         flowers.fillCircle(fx, fy, 3);
         flowers.fillCircle(fx - 2, fy - 2, 2);
         flowers.fillCircle(fx + 2, fy - 2, 2);
-        // 黄色花蕊
         flowers.fillStyle(0xFFD98A, 0.6);
         flowers.fillCircle(fx, fy - 1, 1);
       }
 
-      // === 7. 坎儿井水道装饰 (蓝色细线) ===
+      // 坎儿井
       var qanat = this.add.graphics();
       qanat.setDepth(-4);
       qanat.lineStyle(2, 0x6EC1E4, 0.2);
-      // 两条坎儿井水道
       qanat.beginPath();
       qanat.moveTo(200, 420);
       qanat.lineTo(350, 400);
@@ -529,54 +506,197 @@
       qanat.strokePath();
     },
 
-    // ==================== 背包加载 (localStorage) ====================
+    // ==================== 行李加载 (localStorage, 向后兼容) ====================
+    // 旧格式: [0, 1, 3, 5] → 新格式: [{id:0, qty:1}, {id:1, qty:1}, ...]
+    // 缺数据兜底: 全部 8 件 (qty=1)
+    // 写入时存新格式; 一旦发现新格式就立刻用, 不再回退
     _loadLuggage: function () {
-      var ids = [];
+      var arr = [];
       try {
         var raw = localStorage.getItem('silkroad_luggage');
         if (raw) {
           var parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            ids = parsed.filter(function (n) { return typeof n === 'number'; });
+            // 新格式: [{id, qty}]
+            if (parsed.length && typeof parsed[0] === 'object' && parsed[0] !== null) {
+              for (var i = 0; i < parsed.length; i++) {
+                var e = parsed[i];
+                if (e && typeof e.id === 'number' && typeof e.qty === 'number'
+                    && ALL_ITEM_IDS.indexOf(e.id) !== -1 && e.qty > 0) {
+                  arr.push({ id: e.id, qty: Math.floor(e.qty) });
+                }
+              }
+            } else {
+              // 旧格式: [0, 1, 3, ...] → 升级
+              for (var j = 0; j < parsed.length; j++) {
+                var n = parsed[j];
+                if (typeof n === 'number' && ALL_ITEM_IDS.indexOf(n) !== -1) {
+                  arr.push({ id: n, qty: 1 });
+                }
+              }
+            }
           }
         }
       } catch (e) {}
-      // 兜底: 没数据时给全部 8 件
-      if (ids.length === 0) ids = ALL_ITEM_IDS.slice();
-      // 去重
-      var seen = {};
-      var uniq = [];
-      for (var i = 0; i < ids.length; i++) {
-        if (!seen[ids[i]] && ALL_ITEM_IDS.indexOf(ids[i]) !== -1) {
-          seen[ids[i]] = true;
-          uniq.push(ids[i]);
+      // 兜底: 没数据时给全部 8 件 qty=1
+      if (arr.length === 0) {
+        for (var k = 0; k < ALL_ITEM_IDS.length; k++) {
+          arr.push({ id: ALL_ITEM_IDS[k], qty: 1 });
         }
       }
-      return uniq;
+      // 合并重复 id
+      return this._mergeLuggageItems(arr);
+    },
+
+    _saveLuggage: function () {
+      try {
+        localStorage.setItem('silkroad_luggage', JSON.stringify(this.luggage));
+      } catch (e) {}
+    },
+
+    _mergeLuggageItems: function (arr) {
+      var map = {};
+      var out = [];
+      for (var i = 0; i < arr.length; i++) {
+        var e = arr[i];
+        if (!e || typeof e.id !== 'number' || typeof e.qty !== 'number' || e.qty <= 0) continue;
+        if (ALL_ITEM_IDS.indexOf(e.id) === -1) continue;
+        if (map[e.id]) {
+          map[e.id].qty += e.qty;
+        } else {
+          map[e.id] = { id: e.id, qty: e.qty };
+          out.push(map[e.id]);
+        }
+      }
+      return out;
+    },
+
+    _luggageCount: function (id) {
+      for (var i = 0; i < this.luggage.length; i++) {
+        if (this.luggage[i].id === id) return this.luggage[i].qty;
+      }
+      return 0;
+    },
+    _luggageTotalCount: function () {
+      var n = 0;
+      for (var i = 0; i < this.luggage.length; i++) n += this.luggage[i].qty;
+      return n;
+    },
+    _addToLuggage: function (id, qty) {
+      qty = qty || 1;
+      var found = false;
+      for (var i = 0; i < this.luggage.length; i++) {
+        if (this.luggage[i].id === id) {
+          this.luggage[i].qty += qty;
+          found = true;
+          break;
+        }
+      }
+      if (!found) this.luggage.push({ id: id, qty: qty });
+      this.luggage = this._mergeLuggageItems(this.luggage);
+      this._saveLuggage();
+      this._refreshHudCounts();
+    },
+    _removeFromLuggage: function (id, qty) {
+      qty = qty || 1;
+      for (var i = 0; i < this.luggage.length; i++) {
+        if (this.luggage[i].id === id) {
+          this.luggage[i].qty -= qty;
+          if (this.luggage[i].qty <= 0) this.luggage.splice(i, 1);
+          break;
+        }
+      }
+      this._saveLuggage();
+      this._refreshHudCounts();
+    },
+
+    // ==================== 水壶 (M3) ====================
+    _jugHudText: function () {
+      if (this.jugs.length === 0) {
+        return '🫗 0/' + L.TARGET_JUGS + '  (无水壶)';
+      }
+      var n = this.jugs.length;
+      var cur = this._currentJugIndex();
+      if (cur < 0) {
+        return '🫗 ' + n + '/' + L.TARGET_JUGS + '  (未持有)';
+      }
+      var cj = this.jugs[cur];
+      return '🫗 ' + n + '/' + L.TARGET_JUGS + '  💧' + cj.water.toFixed(1) + '/' + L.JUG_CAPACITY;
+    },
+    _currentJugIndex: function () {
+      // 找到第一个水 > 0 的水壶
+      for (var i = 0; i < this.jugs.length; i++) {
+        if (this.jugs[i].water > 0) return i;
+      }
+      return this.jugs.length > 0 ? 0 : -1;
+    },
+    _addJug: function (initialWater) {
+      var w = (initialWater === undefined || initialWater === null) ? 0 : initialWater;
+      this.jugs.push({ capacity: L.JUG_CAPACITY, water: w });
+      this._refreshHudCounts();
+    },
+    _allJugsFull: function () {
+      if (this.jugs.length < L.TARGET_JUGS) return false;
+      for (var i = 0; i < this.jugs.length; i++) {
+        if (this.jugs[i].water < L.JUG_CAPACITY) return false;
+      }
+      return true;
+    },
+    _driestJugIndex: function () {
+      // 找水量最低且未满的水壶
+      var idx = -1, min = Infinity;
+      for (var i = 0; i < this.jugs.length; i++) {
+        if (this.jugs[i].water < L.JUG_CAPACITY && this.jugs[i].water < min) {
+          min = this.jugs[i].water;
+          idx = i;
+        }
+      }
+      return idx;
+    },
+    _fillDriestJug: function () {
+      var idx = this._driestJugIndex();
+      if (idx < 0) return null;  // 都满了
+      this.jugs[idx].water = L.JUG_CAPACITY;
+      return idx;
+    },
+    _drinkFromCurrentJug: function (delta) {
+      if (this.jugs.length === 0) return -1;
+      var idx = this._currentJugIndex();
+      if (idx < 0) {
+        // 所有水壶都没水, 但从第一个开始扣 (会变负数表示真正没水)
+        idx = 0;
+      }
+      this.jugs[idx].water = Math.max(0, +(this.jugs[idx].water - delta).toFixed(2));
+      return idx;
+    },
+    _totalWater: function () {
+      var n = 0;
+      for (var i = 0; i < this.jugs.length; i++) n += this.jugs[i].water;
+      return n;
+    },
+
+    _refreshHudCounts: function () {
+      if (this.jugText) this.jugText.setText(this._jugHudText());
+      if (this.luggageBtn) this.luggageBtn.setText('🧳 行李箱 (' + this._luggageTotalCount() + ')');
+      this._updateCamelBtn();
     },
 
     // ==================== 主循环 ====================
     update: function (time, delta) {
       if (this.state === 'DEAD') return;
 
-      // 商贩 bob 动画
+      // 商贩 bob (M3: 没有 merchantDone, 全部持续可交互)
       for (var i = 0; i < this.merchantSprites.length; i++) {
         var sp = this.merchantSprites[i];
         sp.bobPhase += 0.04;
-        sp.list[1].y = Math.sin(sp.bobPhase) * 2;   // emoji
-        // M2: 已完成商贩加灰色覆盖
-        if (this.merchantDone[sp.merchantData.id]) {
-          sp.setAlpha(0.45);
-        } else {
-          sp.setAlpha(1);
-        }
+        sp.list[1].y = Math.sin(sp.bobPhase) * 2;
       }
-      // 出口 bob + 脉冲 (M2)
+
+      // 出口 bob + 激活脉冲
       if (this.exitSprite) {
         this.exitSprite.bobPhase += 0.05;
         this.exitSprite.list[1].y = Math.sin(this.exitSprite.bobPhase) * 2;
-        // 检查启程条件
-        var canDepart = this.camels >= L.TARGET_CAMELS && this.water >= L.TARGET_WATERS;
+        var canDepart = this._allJugsFull();
         if (canDepart !== this.exitActive) {
           this.exitActive = canDepart;
           if (canDepart) this.startExitPulse();
@@ -584,24 +704,25 @@
         }
       }
 
-      // 走路 bob —— 200ms 内持续 bounce, 静止后归零
+      // 走路 bob — 基于骑乘基准 y 叠加, 不覆盖
+      var rideBaseY = (this.camelMode && this._luggageCount(-1004) > 0) ? -16 : 0;
       if (Date.now() - this.player.lastMoveAt < 200) {
         this.player.walkPhase += 0.2;
         if (this.playerSprite) {
-          this.playerSprite.elf.y = Math.sin(this.player.walkPhase) * 1.5;
+          this.playerSprite.elf.y = rideBaseY + Math.sin(this.player.walkPhase) * 1.5;
         }
       } else if (this.playerSprite) {
-        this.playerSprite.elf.y = 0;
+        this.playerSprite.elf.y = rideBaseY;
       }
 
-      // M2: 距离检测 —— 气泡 / 出口触发
+      // 距离检测
       if (this.state === 'PLAYING') {
         this._checkMerchantProximity();
         this._checkExitProximity();
       }
     },
 
-    // ==================== 移动 ====================
+    // ==================== 移动 (M3: 水从水壶扣) ====================
     _movementUpdate: function () {
       if (this.state !== 'PLAYING') return;
       if (this.keys.up)    this.tryMove('up');
@@ -614,11 +735,10 @@
       var now = Date.now();
       if (now - this.player.lastMoveAt < L.MOVE_COOLDOWN_MS) return;
 
-      // 步长 + 水分消耗: 骑骆驼 48px/-0.08, 步行 24px/-0.1
       var step, waterDelta;
-      if (this.camelMode && this.camels > 0) {
+      if (this.camelMode) {
         step = L.STEP_PX_CAMEL;
-        waterDelta = 0.08;
+        waterDelta = L.WATER_PER_STEP;  // 同样耗水 (M3 统一)
       } else {
         step = L.STEP_PX_WALK;
         waterDelta = L.WATER_PER_STEP;
@@ -642,33 +762,20 @@
       this.player.lastMoveAt = now;
       this.playerContainer.x = nx;
       this.playerContainer.y = ny;
-      // facing flip (scaleX = ±1)
       if (this.playerContainer) {
         this.playerContainer.scaleX = this.player.facing;
       }
 
-      this.changeWater(-waterDelta);
-      this.checkOasisCollision();
-    },
-
-    // ==================== 水分 ====================
-    changeWater: function (delta) {
-      this.water = Math.max(0, Math.min(L.WATER_MAX, +(this.water + delta).toFixed(2)));
-      this.waterText.setText('💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX);
-      if (this.water <= 0 && this.state === 'PLAYING') {
-        this.dieFromThirst();
-      } else if (this.water <= 3) {
-        this.waterText.setColor('#FF6B6B');
-      } else {
-        this.waterText.setColor('#FFD98A');
+      // 扣水 (从当前水壶)
+      var drank = this._drinkFromCurrentJug(waterDelta);
+      this._refreshHudCounts();
+      // 死亡条件: 有水壶但全部空了 (0 水壶时行走不消耗也不死 — 玩家先要买水壶)
+      if (this.jugs.length > 0 && this._totalWater() <= 0) {
+        if (this.state === 'PLAYING') this.dieFromThirst();
       }
-    },
-    flashWaterUI: function () {
-      var self = this;
-      this.waterText.setColor('#FFE9B0');
-      this.time.delayedCall(200, function () {
-        if (self.water > 3) self.waterText.setColor('#FFD98A');
-      });
+
+      // 绿洲碰撞
+      this.checkOasisCollision();
     },
 
     showBoundaryToast: function () {
@@ -689,7 +796,7 @@
       });
     },
 
-    // ==================== 绿洲碰撞 ====================
+    // ==================== 绿洲碰撞 (M3: 自动灌满最空水壶) ====================
     checkOasisCollision: function () {
       for (var i = 0; i < L.oases.length; i++) {
         var o = L.oases[i];
@@ -698,59 +805,56 @@
         if (Math.sqrt(dx * dx + dy * dy) < 80) {
           if (!o._lastTouch || Date.now() - o._lastTouch > 2000) {
             o._lastTouch = Date.now();
-            this.changeWater(L.WATER_OASIS_REWARD);
-            this.flashWaterUI();
-            // 浮动 +2💧 提示 — 玩家能直接看到获得了水
-            this.showFloatingText(o.x, o.y - 30, '💧 +' + L.WATER_OASIS_REWARD + ' 水分!');
-            window.playIranSfx('pickup', 0.4);
+            var filled = this._fillDriestJug();
+            if (filled !== null) {
+              this._refreshHudCounts();
+              this.showFloatingText(o.x, o.y - 30, '💧 水壶 ' + (filled + 1) + ' 已满!');
+              window.playIranSfx('pickup', 0.4);
+            } else {
+              this.showFloatingText(o.x, o.y - 30, '💧 水壶已满');
+              window.playIranSfx('click', 0.3);
+            }
           }
         }
       }
     },
 
-    // ==================== M2: 商贩距离检测 ====================
+    // ==================== M3: 商贩距离检测 (无 merchantDone) ====================
     _checkMerchantProximity: function () {
-      var self = this;
       var nearest = null;
       var nearestDist = Infinity;
       for (var i = 0; i < L.merchants.length; i++) {
         var m = L.merchants[i];
-        if (this.merchantDone[m.id]) continue;  // 已完成不显示气泡
         var dx = this.player.x - m.x;
         var dy = this.player.y - m.y;
         var d = Math.sqrt(dx * dx + dy * dy);
         if (d < nearestDist) { nearestDist = d; nearest = m; }
       }
       if (nearest && nearestDist < 50) {
-        // 显示气泡
         if (this.merchantShownId !== nearest.id) {
           this.hideMerchantBubble();
           this.merchantShownId = nearest.id;
           this.showMerchantBubble(nearest);
         }
       } else {
-        // 距离 > 60 隐藏
         if (this.merchantShownId !== null && nearestDist > 60) {
           this.hideMerchantBubble();
         }
       }
     },
     showMerchantBubble: function (m) {
-      // 气泡: 「点击交易 💬」/ 「按空格交易」提示
       var self = this;
       var bg = this.add.graphics();
       bg.fillStyle(0x2A1606, 0.92);
       bg.fillRoundedRect(-55, -16, 110, 32, 8);
       bg.lineStyle(2, 0xFFD98A, 0.8);
       bg.strokeRoundedRect(-55, -16, 110, 32, 8);
-      // 小三角指向商贩
       bg.fillTriangle(-5, 16, 5, 16, 0, 22);
       var txt = this.add.text(0, 0, '点击交易 💬', {
         fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       var bubble = this.add.container(m.x, m.y - 38, [bg, txt]);
       bubble.setDepth(50);
-      // 气泡本身也接受点击 (玩家手指点不准商贩 sprite 时, 戳气泡也行)
       var bubbleZone = this.add.zone(m.x, m.y - 38, 130, 50)
         .setInteractive({ useHandCursor: true });
       bubbleZone.setDepth(51);
@@ -761,7 +865,6 @@
     hideMerchantBubble: function () {
       for (var k in this.merchantBubbles) {
         if (this.merchantBubbles[k]) {
-          // 销毁气泡的同时也销毁其点击 zone (zone 是单独加的, 不会随 container 一起销毁)
           if (this.merchantBubbles[k].bubbleZone) {
             this.merchantBubbles[k].bubbleZone.destroy();
           }
@@ -772,19 +875,14 @@
       this.merchantShownId = null;
     },
 
-    // ==================== M2: 打开商贩 modal ====================
+    // ==================== M3: 打开商贩 modal ====================
     tryOpenMerchant: function (id) {
       if (this.state !== 'PLAYING') return;
       var m = this._findMerchant(id);
       if (!m) return;
-      // 必须靠近 (< 60px)
       var dx = this.player.x - m.x;
       var dy = this.player.y - m.y;
       if (Math.sqrt(dx * dx + dy * dy) >= 60) return;
-      if (this.merchantDone[m.id]) {
-        this.showToast('已经交易过了 ✓', 1000);
-        return;
-      }
       this.openTradeModal(m);
     },
     tryOpenNearestMerchant: function () {
@@ -799,20 +897,26 @@
       }
       return null;
     },
+    _findItem: function (id) {
+      for (var i = 0; i < ITEMS.length; i++) {
+        if (ITEMS[i].id === id) return ITEMS[i];
+      }
+      return null;
+    },
 
-    // ==================== M2: 交易 modal ====================
-    // 首次打开：重置 selectedItemId
+    // ==================== M3: 交易 modal — 商店"卖"模式 ====================
+    // 玩家从行李里选一件商品 (排除归家之心), 交换商贩的 1 份卖品
+    // 反复可交易, 不设 merchantDone
     openTradeModal: function (m) {
       this.state = 'TRADING';
       this.currentMerchantId = m.id;
-      this.selectedItemId = null;
+      this.selectedLuggageId = null;
       this.hideMerchantBubble();
       this.modalContainer.removeAll(true);
       window.playIranSfx('button', 0.4);
       this._renderTradeModal(m);
     },
 
-    // 重渲染：保留 selectedItemId（点背包物品后调用）
     _renderTradeModal: function (m) {
       var self = this;
       this.modalContainer.removeAll(true);
@@ -821,8 +925,8 @@
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
       this.modalContainer.add(backdrop);
 
-      // card (高度 = 标题 + 收什么 + 背包 grid 4×2 + 提示 + 按钮)
-      var card = this.add.rectangle(0, 0, 620, 540, 0x2A1606, 1)
+      // card
+      var card = this.add.rectangle(0, 0, 640, 540, 0x2A1606, 1)
         .setStrokeStyle(2, 0xFFD98A, 0.6);
       this.modalContainer.add(card);
 
@@ -832,80 +936,75 @@
       }).setOrigin(0.5));
       this.modalContainer.add(this.add.text(0, -200, m.tip, {
         fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
-        wordWrap: { width: 560 },
+        wordWrap: { width: 580 },
       }).setOrigin(0.5));
 
-      // 收什么 / 给什么
-      var acceptEmoji = m.accept.map(function (aid) {
-        for (var i = 0; i < ITEMS.length; i++) {
-          if (ITEMS[i].id === aid) return ITEMS[i].emoji;
-        }
-        return '?';
-      }).join(' ');
-      var rewardEmoji = m.reward.type === 'camel' ? '🐪×' + m.reward.n : '💧×' + m.reward.n;
-      this.modalContainer.add(this.add.text(-150, -160, '收：' + acceptEmoji, {
-        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-      }).setOrigin(0, 0.5));
-      this.modalContainer.add(this.add.text(60, -160, '给：' + rewardEmoji, {
+      // 我卖 vs 你给
+      this.modalContainer.add(this.add.text(-160, -160, '我卖：', {
         fontSize: '14px', color: '#F6B5C8', fontStyle: 'bold',
       }).setOrigin(0, 0.5));
+      this.modalContainer.add(this.add.text(0, -160, m.sells.emoji + ' ' + m.sells.name, {
+        fontSize: '18px', color: '#F6B5C8', fontStyle: 'bold',
+      }).setOrigin(0, 0.5));
+      this.modalContainer.add(this.add.text(-160, -130, '代价：', {
+        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
+      }).setOrigin(0, 0.5));
+      this.modalContainer.add(this.add.text(0, -130, '你行李里 1 件商品', {
+        fontSize: '14px', color: '#A8D8C0',
+      }).setOrigin(0, 0.5));
 
-      // 背包 grid 4×2 (8 件, 包括归家之心)
-      var gridY = -100;
-      var cellW = 130, cellH = 110;
+      // 行李 grid: 显示当前所有有数量的行李物品
+      // 排除归家之心 (id=5) — 不可交易
+      var tradeable = this.luggage.filter(function (e) {
+        return e.id !== HEART_ID && e.qty > 0;
+      });
+      var gridY = -70;
+      var cellW = 130, cellH = 100;
+      var cols = 4;
       var startX = -cellW * 2 + 20;
-      for (var i = 0; i < ITEMS.length; i++) {
-        var it = ITEMS[i];
-        var col = i % 4, row = Math.floor(i / 4);
-        var cx = startX + col * cellW;
-        var cy = gridY + row * cellH;
 
-        var isConsumed = this.consumedIds.indexOf(it.id) !== -1;
-        var isHeart = it.id === HEART_ID;
-        var isSelected = this.selectedItemId === it.id;
-        var isAccepted = m.accept.indexOf(it.id) !== -1;
+      if (tradeable.length === 0) {
+        this.modalContainer.add(this.add.text(0, -10, '（行李箱里没有可交易的商品）', {
+          fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
+        }).setOrigin(0.5));
+      } else {
+        for (var i = 0; i < tradeable.length; i++) {
+          var e = tradeable[i];
+          var it = this._findItem(e.id);
+          if (!it) continue;
+          var col = i % cols, row = Math.floor(i / cols);
+          var cx = startX + col * cellW;
+          var cy = gridY + row * cellH;
 
-        // cell 背景
-        var cellAlpha = (isConsumed || isHeart) ? 0.35 : 1;
-        var cellColor = isSelected
-          ? (isAccepted ? 0xA8D8C0 : 0xC04848)
-          : 0x4A2E1A;
-        var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, cellColor, cellAlpha)
-          .setStrokeStyle(2, isSelected ? 0xFFD98A : 0x6B4423, isSelected ? 1 : 0.4);
-        this.modalContainer.add(cellBg);
+          var isSelected = this.selectedLuggageId === e.id;
+          var cellColor = isSelected ? 0xA8D8C0 : 0x4A2E1A;
+          var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, cellColor, isSelected ? 1 : 0.85)
+            .setStrokeStyle(2, isSelected ? 0xFFD98A : 0x6B4423, isSelected ? 1 : 0.4);
+          this.modalContainer.add(cellBg);
 
-        // emoji
-        var em = this.add.text(cx, cy - 18, it.emoji, { fontSize: '32px' }).setOrigin(0.5);
-        em.setAlpha((isConsumed || isHeart) ? 0.4 : 1);
-        this.modalContainer.add(em);
-        // 名字
-        var nm = this.add.text(cx, cy + 22, it.name, {
-          fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
-          wordWrap: false,
-        }).setOrigin(0.5);
-        nm.setFixedSize(cellW - 28, 14);
-        this.modalContainer.add(nm);
-        // 状态标记
-        if (isConsumed) {
-          this.modalContainer.add(this.add.text(cx, cy + 6, '已用', {
-            fontSize: '11px', color: '#888888', fontStyle: 'bold',
+          // emoji
+          this.modalContainer.add(this.add.text(cx, cy - 22, it.emoji, { fontSize: '32px' }).setOrigin(0.5));
+          // 名字
+          var nm = this.add.text(cx, cy + 4, it.name, {
+            fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
+            wordWrap: false,
+          }).setOrigin(0.5);
+          nm.setFixedSize(cellW - 28, 14);
+          this.modalContainer.add(nm);
+          // 数量
+          this.modalContainer.add(this.add.text(cx, cy + 22, '×' + e.qty, {
+            fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
           }).setOrigin(0.5));
-        } else if (isHeart) {
-          this.modalContainer.add(this.add.text(cx, cy + 6, '❤️ 不交易', {
-            fontSize: '10px', color: '#F6B5C8', fontStyle: 'bold',
-          }).setOrigin(0.5));
-        }
 
-        // 点击区 (已消耗/归家之心不可点)
-        if (!isConsumed && !isHeart) {
+          // 点击
           var zone = this.add.zone(cx, cy, cellW - 16, cellH - 16)
             .setInteractive({ useHandCursor: true });
-          var itemId = it.id;
+          var itemId = e.id;
           zone.on('pointerdown', (function (iid) {
             return function () {
-              self.selectedItemId = iid;
+              self.selectedLuggageId = iid;
               window.playIranSfx('click', 0.4);
-              self._renderTradeModal(m);  // 重渲染（保留 selectedItemId）
+              self._renderTradeModal(m);
             };
           })(itemId));
           this.modalContainer.add(zone);
@@ -914,52 +1013,49 @@
 
       // 提示行
       var tipTxt = '';
-      if (this.selectedItemId === null) {
-        tipTxt = '👆 选一件要交易的商品';
-      } else if (this.selectedItemId === HEART_ID) {
-        tipTxt = '❤️ 归家之心太珍贵了';
-      } else if (m.accept.indexOf(this.selectedItemId) !== -1) {
-        var selItem = this._findItem(this.selectedItemId);
-        tipTxt = '✓ ' + selItem.name + ' 他会收，给你 ' + rewardEmoji;
+      if (this.selectedLuggageId === null) {
+        tipTxt = '👆 选一件要用来交换的商品';
       } else {
-        var selItem2 = this._findItem(this.selectedItemId);
-        tipTxt = '✗ ' + selItem2.name + ' 他不收这个';
+        var selItem = this._findItem(this.selectedLuggageId);
+        if (selItem) {
+          tipTxt = '✓ 用 ' + selItem.emoji + ' ' + selItem.name
+            + ' 换 1 份 ' + m.sells.emoji + ' ' + m.sells.name;
+        }
       }
-      this.modalContainer.add(this.add.text(0, 140, tipTxt, {
+      this.modalContainer.add(this.add.text(0, 200, tipTxt, {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
-        wordWrap: { width: 540 },
+        wordWrap: { width: 560 },
       }).setOrigin(0.5));
 
       // 交易按钮
-      var canTrade = this.selectedItemId !== null
-        && this.consumedIds.indexOf(this.selectedItemId) === -1
-        && this.selectedItemId !== HEART_ID
-        && m.accept.indexOf(this.selectedItemId) !== -1;
+      var canTrade = this.selectedLuggageId !== null
+        && this._luggageCount(this.selectedLuggageId) > 0
+        && this.selectedLuggageId !== HEART_ID;
       var tradeBtnColor = canTrade ? 0xFFD98A : 0x4A4A4A;
       var tradeBtnTextColor = canTrade ? '#2A190E' : '#888888';
-      var tradeBg = this.add.rectangle(-90, 220, 180, 56, tradeBtnColor, canTrade ? 1 : 0.6)
+      var tradeBg = this.add.rectangle(-90, 240, 180, 50, tradeBtnColor, canTrade ? 1 : 0.6)
         .setStrokeStyle(2, canTrade ? 0xFFE9B0 : 0x888888, canTrade ? 0.8 : 0.3);
       this.modalContainer.add(tradeBg);
-      this.modalContainer.add(this.add.text(-90, 220, '交易', {
+      this.modalContainer.add(this.add.text(-90, 240, '交易', {
         fontSize: '17px', color: tradeBtnTextColor, fontStyle: 'bold',
       }).setOrigin(0.5));
       if (canTrade) {
-        var tradeZone = this.add.zone(-90, 220, 180, 56).setInteractive({ useHandCursor: true });
-        var itemIdToTrade = this.selectedItemId;
+        var tradeZone = this.add.zone(-90, 240, 180, 50).setInteractive({ useHandCursor: true });
+        var itemIdToTrade = this.selectedLuggageId;
         tradeZone.on('pointerdown', function () {
-          self.doTrade(m, itemIdToTrade);
+          self.doBuy(m, itemIdToTrade);
         });
         this.modalContainer.add(tradeZone);
       }
 
       // 关闭按钮
-      var closeBg = this.add.rectangle(90, 220, 140, 56, 0x4A2E1A, 1)
+      var closeBg = this.add.rectangle(90, 240, 140, 50, 0x4A2E1A, 1)
         .setStrokeStyle(1, 0xFFD98A, 0.5);
       this.modalContainer.add(closeBg);
-      this.modalContainer.add(this.add.text(90, 220, '关闭', {
+      this.modalContainer.add(this.add.text(90, 240, '关闭', {
         fontSize: '15px', color: '#F4ECD8', fontStyle: 'bold',
       }).setOrigin(0.5));
-      var closeZone = this.add.zone(90, 220, 140, 56).setInteractive({ useHandCursor: true });
+      var closeZone = this.add.zone(90, 240, 140, 50).setInteractive({ useHandCursor: true });
       closeZone.on('pointerdown', function () { self.closeTradeModal(); });
       this.modalContainer.add(closeZone);
 
@@ -972,160 +1068,101 @@
       this.modalContainer.setVisible(false);
       this.modalContainer.removeAll(true);
       this.currentMerchantId = null;
-      this.selectedItemId = null;
+      this.selectedLuggageId = null;
       this.state = 'PLAYING';
       this.joystickContainer.setVisible(true);
     },
 
-    doTrade: function (m, itemId) {
-      // 1) 消耗物品
-      this.consumedIds.push(itemId);
-      // 2) 给奖励
-      if (m.reward.type === 'camel') {
-        this.camels += m.reward.n;
-        this.camelText.setText('🐪 骆驼 ' + this.camels + ' / ' + L.TARGET_CAMELS);
-        this.flashCamelUI();
-      } else if (m.reward.type === 'water') {
-        this.changeWater(m.reward.n);
-        this.flashWaterUI();
+    // M3: 商店买入 — 玩家给 1 件行李物品, 获得 1 份商贩卖品
+    //   - 商贩卖品是地标特产: 找到对应 item id, 给行李 +1
+    //   - 如果卖品是商贩特有名(如地毯/藏红花), 用 IRAN_MERCHANT_GOODS 映射
+    //   - 简化: 商贩卖品名(地毯/藏红花/茶/陶器/骆驼/水壶)直接作为新 item 进 luggage (用 name/emoji 自定义)
+    // 这里采用"自定义物品 id" 方案 — 用负数 id 表示 M3 自家商品, 不会跟 QATAR_LEVEL.gifts 冲突
+    doBuy: function (m, itemIdToTrade) {
+      // 1) 扣 1 件玩家给的商品
+      this._removeFromLuggage(itemIdToTrade, 1);
+      // 2) 给 1 份商贩卖品
+      // 用 -1000 - m.id 作为内部 id, 区分 M3 特产
+      var customId = -1000 - m.id;
+      this._addToLuggage(customId, 1);
+      // 2b) 水壶商 (id=5) — 同步加一个空水壶到水系统
+      if (m.id === 5) {
+        this._addJug(0);  // 空水壶, 需要去绿洲灌水
+        this.showToast('交易成功！获得 🫗 空水壶 (去绿洲灌水) ×1', 1500);
+      } else {
+        this.showToast('交易成功！获得 ' + m.sells.emoji + ' ' + m.sells.name + ' ×1', 1200);
       }
-      // 3) 商贩标记完成
-      this.merchantDone[m.id] = true;
-      this.completedMerchantIds.push(m.id);
-      this.merchantText.setText('🏪 商贩 ' + this.completedMerchantIds.length + ' / 5');
-      // 4) 商贩 sprite 变灰
-      for (var i = 0; i < this.merchantSprites.length; i++) {
-        if (this.merchantSprites[i].merchantData.id === m.id) {
-          this.merchantSprites[i].setAlpha(0.45);
-          // 禁用 hit zone
-          if (this.merchantSprites[i].hitZone) {
-            this.merchantSprites[i].hitZone.disableInteractive();
-          }
-        }
-      }
-      // 5) 更新骑乘按钮可见性
-      this._updateCamelBtn();
-      // 6) 音 + 关闭 modal
+      // 音 + 关闭 modal
       window.playIranSfx('exchange', 0.55);
       window.playIranSfx('pickup', 0.4);
-      this.showToast('交易成功！获得 ' + (m.reward.type === 'camel' ? '🐪' : '💧') + '×' + m.reward.n, 1200);
       this.closeTradeModal();
     },
 
-    flashCamelUI: function () {
-      var self = this;
-      this.camelText.setColor('#FFE9B0');
-      this.time.delayedCall(200, function () {
-        if (self.camels < L.TARGET_CAMELS) self.camelText.setColor('#FFD98A');
-        else self.camelText.setColor('#A8D8C0');
-      });
-    },
-
-    _findItem: function (id) {
-      for (var i = 0; i < ITEMS.length; i++) {
-        if (ITEMS[i].id === id) return ITEMS[i];
-      }
-      return null;
-    },
-
-    // ==================== M2: 背包 modal (只读) ====================
+    // ==================== M3: 行李箱 modal (quantity-based) ====================
     openLuggageModal: function () {
       var self = this;
       this.state = 'LUGGAGE';
       this.modalContainer.removeAll(true);
 
-      // 背景遮罩
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
       this.modalContainer.add(backdrop);
 
-      // card
-      var card = this.add.rectangle(0, 0, 620, 480, 0x2A1606, 1)
+      var card = this.add.rectangle(0, 0, 720, 540, 0x2A1606, 1)
         .setStrokeStyle(2, 0xFFD98A, 0.6);
       this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -210, '🎒 我的背包', {
+      this.modalContainer.add(this.add.text(0, -230, '🧳 我的行李箱', {
         fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
       // 摘要
-      var left = 0;
-      for (var i = 0; i < ITEMS.length; i++) {
-        if (this.luggageIds.indexOf(ITEMS[i].id) !== -1
-            && this.consumedIds.indexOf(ITEMS[i].id) === -1) left++;
-      }
-      this.modalContainer.add(this.add.text(0, -180, '剩余 ' + left + ' / ' + this.luggageIds.length + ' 件商品', {
+      var total = this._luggageTotalCount();
+      this.modalContainer.add(this.add.text(0, -200, '共 ' + total + ' 件商品 (' + this.luggage.length + ' 种)', {
         fontSize: '12px', color: '#A8D8C0', fontStyle: 'italic',
       }).setOrigin(0.5));
 
-      // 8 件商品 grid (按 id 排序)
-      var sorted = ITEMS.slice().sort(function (a, b) { return a.id - b.id; });
+      // 物品 grid — 按 行李顺序 (id 升序 + 自定义 id 在后)
+      // 自定义物品 (负 id) 也展示
+      var allItems = this._buildLuggageDisplayList();
       var cellW = 130, cellH = 100;
-      var startX = -cellW * 2 + 20;
-      var gridY = -120;
-      for (var i = 0; i < sorted.length; i++) {
-        var it = sorted[i];
-        var col = i % 4, row = Math.floor(i / 4);
+      var cols = 5;
+      var startX = -cellW * 2.5 + 20;
+      var gridY = -150;
+      for (var i = 0; i < allItems.length; i++) {
+        var e = allItems[i];
+        var info = this._getLuggageItemInfo(e.id);
+        var col = i % cols, row = Math.floor(i / cols);
         var cx = startX + col * cellW;
         var cy = gridY + row * cellH;
 
-        var inLuggage = this.luggageIds.indexOf(it.id) !== -1;
-        var isConsumed = this.consumedIds.indexOf(it.id) !== -1;
-        var dim = !inLuggage || isConsumed;
-        var isHeart = it.id === HEART_ID;
-
-        var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, 0x4A2E1A, dim ? 0.35 : 1)
+        var isHeart = e.id === HEART_ID;
+        var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, 0x4A2E1A, 1)
           .setStrokeStyle(2, isHeart ? 0xF6B5C8 : 0x6B4423, isHeart ? 0.7 : 0.4);
         this.modalContainer.add(cellBg);
-        var em = this.add.text(cx, cy - 16, it.emoji, { fontSize: '32px' }).setOrigin(0.5);
-        em.setAlpha(dim ? 0.4 : 1);
-        this.modalContainer.add(em);
-        var nm = this.add.text(cx, cy + 18, it.name, {
+        this.modalContainer.add(this.add.text(cx, cy - 22, info.emoji, { fontSize: '32px' }).setOrigin(0.5));
+        var nm = this.add.text(cx, cy + 4, info.name, {
           fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
           wordWrap: false,
         }).setOrigin(0.5);
         nm.setFixedSize(cellW - 28, 14);
         this.modalContainer.add(nm);
-
-        // 状态文字
-        var status = '';
-        var statusColor = '#888888';
-        if (!inLuggage) {
-          status = '未拥有';
-          statusColor = '#888888';
-        } else if (isConsumed) {
-          status = '已交易';
-          statusColor = '#888888';
-          // 划线
-          var strike = this.add.graphics();
-          strike.lineStyle(2, 0x888888, 0.7);
-          strike.beginPath();
-          strike.moveTo(cx - 30, cy - 5);
-          strike.lineTo(cx + 30, cy + 5);
-          strike.strokePath();
-          this.modalContainer.add(strike);
-        } else if (isHeart) {
-          status = '❤️ 不可交易';
-          statusColor = '#F6B5C8';
-        } else {
-          status = '✓ 可交易';
-          statusColor = '#A8D8C0';
-        }
-        this.modalContainer.add(this.add.text(cx, cy + 34, status, {
-          fontSize: '10px', color: statusColor, fontStyle: 'bold',
+        // 数量
+        var qtyColor = isHeart ? '#F6B5C8' : '#FFD98A';
+        this.modalContainer.add(this.add.text(cx, cy + 24, '×' + e.qty, {
+          fontSize: '14px', color: qtyColor, fontStyle: 'bold',
         }).setOrigin(0.5));
       }
 
       // 关闭按钮
-      var closeBg = this.add.rectangle(0, 200, 200, 50, 0xFFD98A, 1)
+      var closeBg = this.add.rectangle(0, 220, 200, 50, 0xFFD98A, 1)
         .setStrokeStyle(2, 0xFFE9B0);
       this.modalContainer.add(closeBg);
-      this.modalContainer.add(this.add.text(0, 200, '关闭', {
+      this.modalContainer.add(this.add.text(0, 220, '关闭', {
         fontSize: '16px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5));
-      var closeZone = this.add.zone(0, 200, 200, 50).setInteractive({ useHandCursor: true });
+      var closeZone = this.add.zone(0, 220, 200, 50).setInteractive({ useHandCursor: true });
       closeZone.on('pointerdown', function () { self.closeLuggageModal(); });
       this.modalContainer.add(closeZone);
 
-      // 隐藏 dpad
       this.joystickContainer.setVisible(false);
       this.modalContainer.setVisible(true);
     },
@@ -1135,43 +1172,74 @@
       this.state = 'PLAYING';
       this.joystickContainer.setVisible(true);
     },
+
+    // 合并 QATAR_LEVEL.gifts + IRAN 自定义商品 (地毯/藏红花/...) 用于显示
+    _buildLuggageDisplayList: function () {
+      return this.luggage.slice().sort(function (a, b) { return a.id - b.id; });
+    },
+    _getLuggageItemInfo: function (id) {
+      if (id >= 0) {
+        var it = this._findItem(id);
+        if (it) return { name: it.name, emoji: it.emoji };
+        return { name: '?', emoji: '❓' };
+      }
+      // 自定义 id: -1000 - merchantId → 商贩卖品
+      var mId = -1000 - id;
+      var m = this._findMerchant(mId);
+      if (m) return { name: m.sells.name, emoji: m.sells.emoji };
+      return { name: '特产', emoji: '🎁' };
+    },
+
     tryCloseTopModal: function () {
       if (this.state === 'TRADING') this.closeTradeModal();
       else if (this.state === 'LUGGAGE') this.closeLuggageModal();
     },
 
-    // ==================== M2: 骆驼骑乘 toggle ====================
+    // ==================== M3: 骆驼骑乘 toggle ====================
     toggleCamelMode: function () {
-      if (this.camels <= 0) return;
+      // M3: 骆驼从商贩 (id=4) 那里买来, 加到 luggage; toggle 不需 camels 计数
+      // 简化: 任意时候都可切 (玩家自己决定要不要骑), 没骆驼时骑行看起来没骆驼
+      // 保留原版: 有骆驼时才有效果
+      if (this._luggageCount(-1004) <= 0) {
+        this.showToast('先去骆驼商人那儿买骆驼 🐫', 1400);
+        return;
+      }
       this.camelMode = !this.camelMode;
       this._updateCamelBtn();
       window.playIranSfx('click', 0.4);
       window.playIranSfx('pickup', 0.3);
     },
     _updateCamelBtn: function () {
-      if (this.camels > 0) {
+      var hasCamel = this._luggageCount(-1004) > 0;
+      if (hasCamel) {
         this.camelBtn.setVisible(true);
         this.camelBtn.setText(this.camelMode ? '🐪 骑乘中' : '🚶 步行');
         this.camelBtn.setStyle({
           backgroundColor: this.camelMode ? '#5B8C3A' : '#1B5E8A',
-          padding: { x: 8, y: 2 },
+          padding: { x: 10, y: 3 },
         });
       } else {
         this.camelBtn.setVisible(false);
         this.camelMode = false;
       }
-      // 玩家下方 🐪 装饰
       if (this.camelBackEmoji) {
-        this.camelBackEmoji.setVisible(this.camelMode && this.camels > 0);
+        this.camelBackEmoji.setVisible(this.camelMode && hasCamel);
+      }
+      if (this.playerSprite && this.playerSprite.elf) {
+        // 骑乘时人物略缩小
+        var s = (this.camelMode && hasCamel) ? 0.7 : 1.0;
+        this.playerSprite.elf.setScale(s);
+        // 骑乘时 elf 上移 (骑在骆驼上)
+        this.playerSprite.elf.y = (this.camelMode && hasCamel) ? -16 : 0;
       }
     },
 
-    // ==================== M2: 出口距离 + 脉冲 + 启程 ====================
+    // ==================== M3: 出口距离 + 启程 + 过渡动画 ====================
     _checkExitProximity: function () {
       var dx = this.player.x - L.exit.x;
       var dy = this.player.y - L.exit.y;
       var d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 50 && !this._exitTriggered) {
+      if (d < 50 && !this._exitTriggered && !this._exitingIran) {
         this._exitTriggered = true;
         this.tryExit();
       } else if (d > 70) {
@@ -1179,60 +1247,62 @@
       }
     },
     tryExit: function () {
-      var needCamels = Math.max(0, L.TARGET_CAMELS - this.camels);
-      var needWater = Math.max(0, L.TARGET_WATERS - Math.floor(this.water));
-      if (needCamels === 0 && needWater === 0) {
-        this.showDepartModal();
-      } else {
-        var msg = '还需要 ';
-        if (needCamels > 0) msg += needCamels + '🐪 ';
-        if (needWater > 0) msg += needWater + '💧 ';
-        msg = msg.trim() + ' 才能启程';
-        this.showToast(msg, 2200);
+      if (this.jugs.length < L.TARGET_JUGS) {
+        var need = L.TARGET_JUGS - this.jugs.length;
+        this.showToast('还需要 ' + need + ' 个水壶 → 去水壶商人那儿买 🫗', 2200);
         window.playIranSfx('click', 0.3);
+        return;
       }
+      if (!this._allJugsFull()) {
+        this.showToast('需要 2 壶满水才能过境 → 走绿洲灌水 💧', 2200);
+        window.playIranSfx('click', 0.3);
+        return;
+      }
+      this._exitingIran = true;
+      this.departIran();
     },
-    showDepartModal: function () {
+
+    // M3: 启程 — camera fade + 跳下一关 (暂时回 /silk-road)
+    departIran: function () {
       var self = this;
-      this.state = 'TRADING';  // 暂停移动
-      this.modalContainer.removeAll(true);
-
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.55);
-      this.modalContainer.add(backdrop);
-
-      var card = this.add.rectangle(0, 0, 520, 360, 0x1B3A5E, 1)
-        .setStrokeStyle(2, 0x5fb3a0, 0.7);
-      this.modalContainer.add(card);
-
-      this.modalContainer.add(this.add.text(0, -120, L.exit.emoji, { fontSize: '56px' }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -55, '启程条件已满足！', {
-        fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -15, 'M3 将启程去土耳其 🇹🇷\n' +
-        '🐪 骆驼 ' + this.camels + '/' + L.TARGET_CAMELS + '  ·  ' +
-        '💧 水分 ' + this.water.toFixed(1) + '/' + L.TARGET_WATERS, {
-        fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 460 },
-      }).setOrigin(0.5));
-
-      // 确认按钮
-      var okBg = this.add.rectangle(0, 90, 220, 56, 0x5fb3a0, 1);
-      this.modalContainer.add(okBg);
-      this.modalContainer.add(this.add.text(0, 90, '继续探索', {
-        fontSize: '15px', color: '#0E2A47', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      var okZone = this.add.zone(0, 90, 220, 56).setInteractive({ useHandCursor: true });
-      okZone.on('pointerdown', function () {
-        window.playIranSfx('button', 0.4);
-        self.modalContainer.setVisible(false);
-        self.modalContainer.removeAll(true);
-        self.state = 'PLAYING';
-        self.joystickContainer.setVisible(true);
-      });
-      this.modalContainer.add(okZone);
-
+      this.state = 'TRADING';
       this.joystickContainer.setVisible(false);
-      this.modalContainer.setVisible(true);
       window.playIranSfx('pickup', 0.5);
+      window.playIranSfx('exchange', 0.4);
+
+      // 1) 关闭 dpad + 弹简短提示
+      this.showDepartToast();
+
+      // 2) camera fade out 1.5s
+      this.cameras.main.fadeOut(1500, 0, 0, 0);
+
+      // 3) 淡黑期间, 屏幕中央淡入 "前往土耳其..." 文字
+      var msg = this.add.text(640, 360, '🚩 巴扎尔甘 → 土耳其 🇹🇷\n启程…', {
+        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold', align: 'center',
+        stroke: '#1A0E04', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(5000);
+      // 先透明, 淡入
+      msg.setAlpha(0);
+      this.tweens.add({
+        targets: msg,
+        alpha: 1,
+        duration: 800,
+      });
+
+      // 4) 1.5s 后跳转
+      this.time.delayedCall(1700, function () {
+        // 优先跳到 /silk-road/turkey 之类, 暂时回关卡选择
+        try {
+          window.location.href = '/silk-road';
+        } catch (e) {
+          // fallback: 刷新
+          window.location.reload();
+        }
+      });
+    },
+
+    showDepartToast: function () {
+      this.showToast('启程条件已满足！前往巴扎尔甘…', 1500);
     },
 
     startExitPulse: function () {
@@ -1258,6 +1328,24 @@
       }
     },
 
+    // ==================== M3: BGM 切换按钮 ====================
+    toggleBgm: function () {
+      var bgm = document.getElementById('silk-road-bgm');
+      if (!bgm) return;
+      var next = !bgm.muted;
+      bgm.muted = next;
+      setBgmMuted(next);
+      if (this.bgmBtn) this.bgmBtn.setText(next ? '🔇' : '🔊');
+      window.playIranSfx('click', 0.4);
+      if (!next) {
+        // 解除静音时尝试播放 (autoplay policy)
+        try {
+          var p = bgm.play();
+          if (p && typeof p.catch === 'function') p.catch(function () {});
+        } catch (e) {}
+      }
+    },
+
     // ==================== 通用 toast ====================
     showToast: function (msg, durationMs) {
       durationMs = durationMs || 1500;
@@ -1279,7 +1367,6 @@
       });
     },
 
-    // ==================== 浮动文字 (绿洲采水时上升淡出) ====================
     showFloatingText: function (x, y, text) {
       var t = this.add.text(x, y, text, {
         fontSize: '18px', color: '#6EC1E4', fontStyle: 'bold',
@@ -1298,9 +1385,7 @@
       this.stopExitPulse();
       window.playIranSfx('die', 0.6);
 
-      // 半透明黑幕
       var overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.55);
-      // DEAD 文字
       this.add.text(640, 280, '💀', { fontSize: '80px' }).setOrigin(0.5);
       this.add.text(640, 360, '你渴死在波斯沙漠了', {
         fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
@@ -1309,7 +1394,6 @@
         fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
       }).setOrigin(0.5);
 
-      // 重新出发按钮 (M1: 简单刷新页面)
       var btnBg = this.add.rectangle(640, 480, 220, 56, 0xFFD98A, 1)
         .setStrokeStyle(2, 0xFFE9B0);
       this.add.text(640, 480, '重新出发', {
@@ -1348,7 +1432,7 @@
               var exit = document.exitFullscreen || document.webkitExitFullscreen;
               if (exit) {
                 var p2 = exit.call(document);
-                if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+                if (p2 && typeof p.catch === 'function') p2.catch(function () {});
               }
             }
           } catch (e) {}
@@ -1383,13 +1467,10 @@
     },
 
     // ==================== 4 角色 graphics 绘制 (从关 0 复制) ====================
-    // 用 Phaser.Graphics 程序画 4 个有身体的造型, 所有 body 部分 0~44 范围 (elf.y=0)
-    // 颜色代码: 阿拉伯男=白袍+白头巾, 阿拉伯女=黑色 abaya+hijab, 中国男=藏青汉服, 中国女=桃红汉服
     _buildAvatarSprite: function (avatarId) {
       var g = this.add.graphics();
       g.setName('avatar:' + avatarId);
       if (avatarId === 'malay') {
-        // —— 阿拉伯男：thobe 白袍 + ghutra 白头巾 + 黑色 agal 头箍 ——
         g.fillStyle(0x3A2614, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
         g.fillStyle(0xF4ECD8, 1);
         g.beginPath(); g.moveTo(-12, 18); g.lineTo(12, 18);
@@ -1411,7 +1492,6 @@
         g.fillStyle(0x1A1208, 1);
         g.fillRect(-4, -10, 2, 2); g.fillRect(2, -10, 2, 2);
       } else if (avatarId === 'fala') {
-        // —— 阿拉伯女：黑色 abaya 长袍 + hijab 头巾 ——
         g.fillStyle(0x2A1F18, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
         g.fillStyle(0x1A1208, 1);
         g.beginPath(); g.moveTo(-12, 22); g.lineTo(12, 22);
@@ -1427,7 +1507,6 @@
         g.fillStyle(0x1A1208, 1); g.fillRect(-4, -11, 2, 2); g.fillRect(2, -11, 2, 2);
         g.fillStyle(0xC04848, 1); g.fillRect(-1, -7, 2, 1);
       } else if (avatarId === 'cn_m') {
-        // —— 中国男：黑短发 + 藏青汉服对襟 ——
         g.fillStyle(0x2A1F18, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
         g.fillStyle(0x2C3E50, 1);
         g.beginPath(); g.moveTo(-13, 18); g.lineTo(13, 18);
@@ -1444,7 +1523,7 @@
         g.fillStyle(0xF0D2A8, 1);
         g.fillRoundedRect(-7, -14, 14, 12, 2);
         g.fillStyle(0x1A1208, 1); g.fillRect(-4, -10, 2, 2); g.fillRect(2, -10, 2, 2);
-      } else { // cn_f —— 中国女：长发垂到肩膀 + 桃红汉服对襟
+      } else { // cn_f
         g.fillStyle(0x5C3A22, 1); g.fillRoundedRect(-7, 22, 6, 4, 1); g.fillRoundedRect(1, 22, 6, 4, 1);
         g.fillStyle(0xD88099, 1);
         g.beginPath(); g.moveTo(-13, 18); g.lineTo(13, 18);
