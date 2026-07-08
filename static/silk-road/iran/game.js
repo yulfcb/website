@@ -270,9 +270,11 @@
       // —— HUD（顶部条，5 项） ——
       var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x2A1606, 0.92);
 
-      // 1. 🫗 水壶可视化 (左) — 容器: 数量 + 每壶进度条
-      this.jugHudContainer = this.add.container(80, 36);
-      this.jugHudContainer.setDepth(100);
+      // 1. 💧 水分聚合显示 (左) — 单一文本, 跟卡塔尔风格一致
+      this.waterText = this.add.text(180, 30, '', {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.waterText.setDepth(100);
 
       // 2. 💰 余额 (中左) — 新增 M4
       this.coinText = this.add.text(310, 30, this._coinHudText(), {
@@ -585,7 +587,9 @@
         }
       }
       // 合并重复 id
-      return this._mergeLuggageItems(arr);
+      var merged = this._mergeLuggageItems(arr);
+      console.log('[iran] luggage loaded:', JSON.stringify(merged));
+      return merged;
     },
 
     _saveLuggage: function () {
@@ -713,57 +717,22 @@
       return '💰 ' + this.coins + ' ﷼';
     },
 
-    // M4: 重绘水壶 HUD — 容器内含 "🫗 N/2" + 每壶进度条 + 数字
+    // 水分 HUD — 聚合显示 (卡塔尔风格): "💧 水分 X.X / Y.Y"
     _renderJugHud: function () {
-      if (!this.jugHudContainer) return;
-      this.jugHudContainer.removeAll(true);
+      if (!this.waterText) return;
+      var totalWater = this._totalWater();
+      var totalCapacity = this.jugs.length * L.JUG_CAPACITY;
+      var txt = '💧 水分 ' + totalWater.toFixed(1) + ' / ' + totalCapacity.toFixed(1);
+      this.waterText.setText(txt);
 
-      // 标题: 数量徽章
-      var title = this.add.text(0, -16, '🫗 ' + this.jugs.length + '/' + L.TARGET_JUGS, {
-        fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
-        stroke: '#2A1606', strokeThickness: 2,
-      }).setOrigin(0, 0.5);
-      this.jugHudContainer.add(title);
-
-      if (this.jugs.length === 0) {
-        var hint = this.add.text(0, 6, '（去水壶商买 🫗）', {
-          fontSize: '10px', color: '#C9B89A', fontStyle: 'italic',
-        }).setOrigin(0, 0.5);
-        this.jugHudContainer.add(hint);
-        return;
-      }
-
-      // 每个水壶一行: 进度条 + 数字
-      var maxVisible = Math.min(this.jugs.length, L.TARGET_JUGS);
-      var barW = 130;
-      var barH = 11;
-      var rowGap = 16;
-      var startY = -2;
-      for (var i = 0; i < maxVisible; i++) {
-        var j = this.jugs[i];
-        var pct = Math.max(0, Math.min(1, j.water / L.JUG_CAPACITY));
-        var isEmpty = j.water <= 0;
-        var isFull = j.water >= L.JUG_CAPACITY;
-        var rowY = startY + i * rowGap;
-
-        // 背景条 (深色)
-        var bg = this.add.rectangle(0, rowY, barW, barH, 0x1A1208, 0.95)
-          .setStrokeStyle(1, isEmpty ? 0xC04848 : 0x6B4423, isEmpty ? 0.9 : 0.5)
-          .setOrigin(0, 0.5);
-        this.jugHudContainer.add(bg);
-        // 水量条 (绿色 / 满时金色)
-        if (pct > 0) {
-          var fillColor = isFull ? 0xD4AF37 : 0x6EC1E4;  // 满 = 金, 半/低 = 蓝
-          var fill = this.add.rectangle(0, rowY, barW * pct, barH, fillColor, 0.95)
-            .setOrigin(0, 0.5);
-          this.jugHudContainer.add(fill);
-        }
-        // 数字标签
-        var numColor = isEmpty ? '#FF8A8A' : (isFull ? '#D4AF37' : '#F4ECD8');
-        var numTxt = this.add.text(barW + 6, rowY, j.water.toFixed(1) + 'L', {
-          fontSize: '10px', color: numColor, fontStyle: 'bold',
-        }).setOrigin(0, 0.5);
-        this.jugHudContainer.add(numTxt);
+      // 颜色: 0 = 灰 (无水壶), <= 30% 红, <= 50% 橙, 否则金
+      if (totalCapacity <= 0) {
+        this.waterText.setColor('#C9B89A');
+      } else {
+        var ratio = totalWater / totalCapacity;
+        if (ratio <= 0.3) this.waterText.setColor('#FF6B6B');
+        else if (ratio <= 0.5) this.waterText.setColor('#FFB347');
+        else this.waterText.setColor('#FFD98A');
       }
     },
 
@@ -920,9 +889,9 @@
               this._refreshHudCounts();
               // M4: 灌满反馈 — 浮动文本 + HUD 弹跳
               this.showFloatingText(o.x, o.y - 30, '💧 灌满！+' + added.toFixed(0) + 'L');
-              if (this.jugHudContainer) {
+              if (this.waterText) {
                 this.tweens.add({
-                  targets: this.jugHudContainer,
+                  targets: this.waterText,
                   scaleX: 1.18, scaleY: 1.18,
                   duration: 120, yoyo: true, repeat: 1,
                 });
