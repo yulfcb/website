@@ -839,6 +839,11 @@
       if (this.playerContainer) {
         this.playerContainer.scaleX = this.player.facing;
       }
+      // Bug 1 修复：解除 counter-flip, 让 camelBackEmoji.scaleX 永远为正 — 配合 playerContainer 镜像,
+      // 骆驼头最终始终朝行进方向 (玩家移动方向)
+      if (this.camelBackEmoji) {
+        this.camelBackEmoji.scaleX = 1;
+      }
 
       // 扣水 (从当前水壶)
       var drank = this._drinkFromCurrentJug(waterDelta);
@@ -1508,7 +1513,7 @@
         return;
       }
       if (!this._allJugsFull()) {
-        this.showToast('需要 2 壶满水才能过境去土耳其', 2200);
+        this.showToast('到土耳其路途遥远，水量少于20，骆驼少于3头，是过不去的', 2200);
         window.playIranSfx('click', 0.3);
         return;
       }

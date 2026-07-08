@@ -99,8 +99,8 @@ window.IRAN_LEVEL = {
   STEP_PX_CAMEL: 48,           // 骑骆驼步长 (2x)
   MOVE_COOLDOWN_MS: 220,
   WATER_PER_STEP: 0.1,         // 每步消耗 0.1L 水 (从当前水壶扣)
-  JUG_CAPACITY: 10,            // 每个水壶满 10L
-  TARGET_JUGS: 2,              // 出口条件：2 个水壶 (都满 10L)
+  JUG_CAPACITY: 20,            // 每个水壶满 20L (Bug 2: 默认水分值改为 20)
+  TARGET_JUGS: 4,              // 出口条件：4 个水壶 (都满 20L) (Bug 3: 4 个水壶应能过关)
 
   // 奖励档位 (M3 用)
   rewardTiers: {
