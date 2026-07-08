@@ -1,11 +1,11 @@
-/* 伊朗·阿巴斯港大巴扎 —— 关 1 样式 (M1 Phaser 3 重做版)
+/* 伊朗·阿巴斯港大巴扎 —— 关 1 样式 (M1 Phaser 3 重做版, M2 UI 重做)
    极简版：Phaser 自己管 scene 内所有 UI（HUD、joystick、modal）。
    这里只保留 Phaser 容器之外必需的 4 样东西：
      1. #iran-game —— Phaser parent，挂 canvas
      2. #orientation-lock —— 竖屏提示（CSS overlay）
      3. #iran-fullscreen —— 全屏按钮（DOM 按钮，scene 外）
      4. .silk-fab-map —— 世界地图浮动按钮
-   配色：深赭石 #6B3F1D + 波斯蓝 #1B5E8A + 金色 #FFD98A
+   配色：波斯夜空 #1A2744 / #2A3A5E + 波斯蓝 #1B5E8A + 金色 #FFD98A + 盐漠灰棕 #C8B89A
    ====================================================================== */
 
 /* ====== 强禁止滚动 / 双击缩放 ====== */
@@ -19,7 +19,7 @@ html, body {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-  background: #1b2135;
+  background: #1A2744;
   color: #f4ecd8;
   font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 }
@@ -32,13 +32,13 @@ html, body {
   height: 100vh;
   height: 100dvh;            /* 动态视口高度（iOS Safari） */
   width: 100dvw;
-  background: #6B3F1D;       /* 伊朗深赭石底色 */
+  background: #1A2744;       /* 波斯夜空深蓝底色 (Boot 阶段可见) */
   z-index: 1;
 }
 #iran-game canvas {
   display: block;
   margin: 0 auto;
-  background: #E8C282;       /* 沙金 */
+  background: #C8B89A;       /* 卡维尔盐漠灰棕 */
 }
 
 /* ====== 竖屏强制提示（CSS overlay，竖屏时遮挡） ====== */
@@ -47,7 +47,7 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: linear-gradient(135deg, #2A1606 0%, #6B3F1D 50%, #1B5E8A 100%);
+  background: linear-gradient(135deg, #1A2744 0%, #2A3A5E 50%, #1A2744 100%);
   align-items: center;
   justify-content: center;
   flex-direction: column;

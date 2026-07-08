@@ -75,8 +75,8 @@
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
     create: function () {
       var self = this;
-      // 波斯深赭石背景 — 跟 M0 的 '#1b2135' 区分（伊朗专属色）
-      this.cameras.main.setBackgroundColor('#6B3F1D');
+      // 波斯夜空深蓝背景 — Boot 阶段过渡
+      this.cameras.main.setBackgroundColor('#1A2744');
       this.add.text(640, 360, '伊朗·阿巴斯港大巴扎\n加载中…', {
         fontSize: '26px', color: '#FFD98A', fontStyle: 'bold', align: 'center',
       }).setOrigin(0.5);
@@ -110,13 +110,11 @@
     create: function () {
       var self = this;
 
-      // —— 沙金背景 ——
-      this.cameras.main.setBackgroundColor('#E8C282');
+      // —— 盐漠灰棕背景（Dasht-e Kavir 盐壳色）——
+      this.cameras.main.setBackgroundColor('#C8B89A');
 
-      // —— 沙丘（远景 3 层，跟关 0 同款）——
-      this.drawDunes(0xD4A86A, 360, 40);
-      this.drawDunes(0xC49A5E, 460, 60);
-      this.drawDunes(0xB58A55, 560, 90);
+      // —— 伊朗特色地形：夜空 + 扎格罗斯山脉 + 盐漠 + 雅丹 + 波斯建筑 + 藏红花 + 坎儿井 ——
+      this.drawIranTerrain();
 
       // —— 6 个真实地名 chip (伊朗版) ——
       this.placeSprites = [];
@@ -336,7 +334,7 @@
       this.bindOrientationLock();
     },
 
-    // ==================== 沙丘 ====================
+    // ==================== 沙丘 (M1 旧版, 已不再调用, 保留为 fallback) ====================
     drawDunes: function (color, baseY, amplitude) {
       var g = this.add.graphics();
       g.fillStyle(color, 0.6);
@@ -350,6 +348,184 @@
       g.lineTo(0, L.CANVAS_H);
       g.closePath();
       g.fillPath();
+    },
+
+    // ==================== 伊朗地形 (M2 重做) ====================
+    // 扎格罗斯山脉 + 卡维尔盐漠 + 卢特雅丹 + 波斯建筑 + 藏红花田 + 坎儿井
+    // depth 层级: -10 天空, -9 星星, -8 远山, -7 盐漠, -6 雅丹, -5 建筑, -4 花卉/坎儿井
+    drawIranTerrain: function () {
+      var self = this;
+
+      // === 1. 天空渐变 — 波斯夜空深蓝 ===
+      var sky = this.add.graphics();
+      sky.fillGradientStyle(0x1A2744, 0x1A2744, 0x2A3A5E, 0x2A3A5E, 1);
+      sky.fillRect(0, 0, L.CANVAS_W, 280);
+      sky.setDepth(-10);
+
+      // 星星
+      var stars = this.add.graphics();
+      stars.setDepth(-9);
+      for (var i = 0; i < 60; i++) {
+        var sx = Math.random() * L.CANVAS_W;
+        var sy = Math.random() * 200;
+        var sr = 0.5 + Math.random() * 1.5;
+        stars.fillStyle(0xFFFFFF, 0.3 + Math.random() * 0.5);
+        stars.fillCircle(sx, sy, sr);
+      }
+
+      // === 2. 远景 — 扎格罗斯山脉剪影 ===
+      var mtn = this.add.graphics();
+      mtn.setDepth(-8);
+      // 远景山脉 — 淡紫灰
+      var farPeaks = [
+        [0,260],[80,210],[160,230],[260,190],[360,215],[480,180],
+        [580,205],[680,175],[790,200],[880,185],[980,210],[1080,195],
+        [1180,220],[1280,240]
+      ];
+      mtn.fillStyle(0x4A3D5C, 0.7);
+      mtn.beginPath();
+      mtn.moveTo(farPeaks[0][0], farPeaks[0][1]);
+      for (var i = 1; i < farPeaks.length; i++) {
+        mtn.lineTo(farPeaks[i][0], farPeaks[i][1]);
+      }
+      mtn.lineTo(1280, 320);
+      mtn.lineTo(0, 320);
+      mtn.closePath();
+      mtn.fillPath();
+
+      // 近景山脉 — 深紫灰
+      var nearPeaks = [
+        [0,290],[120,250],[220,270],[350,240],[480,265],[600,235],
+        [720,260],[850,245],[960,270],[1080,250],[1200,275],[1280,290]
+      ];
+      mtn.fillStyle(0x6B5B7B, 0.8);
+      mtn.beginPath();
+      mtn.moveTo(nearPeaks[0][0], nearPeaks[0][1]);
+      for (var i = 1; i < nearPeaks.length; i++) {
+        mtn.lineTo(nearPeaks[i][0], nearPeaks[i][1]);
+      }
+      mtn.lineTo(1280, 350);
+      mtn.lineTo(0, 350);
+      mtn.closePath();
+      mtn.fillPath();
+
+      // === 3. 中景地面 — 卡维尔盐漠 ===
+      var ground = this.add.graphics();
+      ground.setDepth(-7);
+      // 盐漠灰棕地面
+      ground.fillStyle(0xC8B89A, 1);
+      ground.fillRect(0, 300, L.CANVAS_W, L.CANVAS_H - 300);
+
+      // 盐壳裂纹纹理
+      ground.lineStyle(1, 0xE0D4BC, 0.25);
+      var saltCracks = [
+        [100,380,130,395],[200,420,185,440],[350,500,370,520],
+        [500,350,520,365],[650,450,635,470],[800,380,815,395],
+        [950,520,970,535],[1100,400,1085,418],[1200,480,1215,495],
+        [50,550,70,565],[300,600,315,615],[700,580,720,595],
+        [1000,620,1020,635],[450,650,465,660],
+      ];
+      for (var i = 0; i < saltCracks.length; i++) {
+        var c = saltCracks[i];
+        ground.beginPath();
+        ground.moveTo(c[0], c[1]);
+        ground.lineTo(c[2], c[3]);
+        ground.strokePath();
+      }
+
+      // === 4. 雅丹地貌 — 深色风蚀土丘 (卢特沙漠特色) ===
+      var yardang = this.add.graphics();
+      yardang.setDepth(-6);
+      var yardangs = [
+        {x:180, y:330, w:70, h:35},
+        {x:500, y:320, w:90, h:40},
+        {x:850, y:335, w:60, h:30},
+        {x:1150, y:325, w:75, h:32},
+      ];
+      for (var i = 0; i < yardangs.length; i++) {
+        var yd = yardangs[i];
+        // 阴影
+        yardang.fillStyle(0x7B6B4A, 0.4);
+        yardang.fillEllipse(yd.x + 5, yd.y + 3, yd.w, yd.h);
+        // 主体
+        yardang.fillStyle(0x8B7B5A, 0.6);
+        yardang.fillEllipse(yd.x, yd.y, yd.w, yd.h);
+        // 高光
+        yardang.fillStyle(0xA89878, 0.3);
+        yardang.fillEllipse(yd.x - 5, yd.y - 5, yd.w * 0.6, yd.h * 0.5);
+      }
+
+      // === 5. 波斯建筑剪影 ===
+      var bldg = this.add.graphics();
+      bldg.setDepth(-5);
+
+      // 伊斯法罕蓝色清真寺 (中右侧)
+      // 穹顶
+      bldg.fillStyle(0x1B5E8A, 0.6);
+      bldg.fillEllipse(1050, 305, 55, 42);
+      // 建筑体
+      bldg.fillStyle(0x8B7B6A, 0.6);
+      bldg.fillRect(1023, 305, 54, 35);
+      // 左宣礼塔
+      bldg.fillRect(1012, 280, 7, 60);
+      bldg.fillEllipse(1015.5, 278, 11, 9);
+      // 右宣礼塔
+      bldg.fillRect(1081, 282, 7, 58);
+      bldg.fillEllipse(1084.5, 280, 11, 9);
+
+      // 波斯波利斯石柱 (中左侧)
+      bldg.fillStyle(0x9B9080, 0.5);
+      for (var i = 0; i < 4; i++) {
+        var px = 100 + i * 22;
+        bldg.fillRect(px, 305, 9, 45);
+        bldg.fillRect(px - 5, 303, 19, 5);
+      }
+      bldg.fillRect(95, 300, 88, 5); // 横梁
+
+      // 远处小村庄剪影
+      bldg.fillStyle(0x6B5B4A, 0.35);
+      bldg.fillRect(700, 310, 25, 20);
+      bldg.fillTriangle(700, 310, 712.5, 298, 725, 310);
+      bldg.fillRect(740, 312, 18, 18);
+      bldg.fillTriangle(740, 312, 749, 302, 758, 312);
+
+      // === 6. 藏红花田点缀 (紫色小花) ===
+      var flowers = this.add.graphics();
+      flowers.setDepth(-4);
+      var flowerSpots = [
+        [380,440],[410,455],[395,470],[365,460],
+        [820,430],[845,445],[830,460],[810,450],
+        [580,510],[600,525],[620,515],[590,535],
+      ];
+      for (var i = 0; i < flowerSpots.length; i++) {
+        var fx = flowerSpots[i][0];
+        var fy = flowerSpots[i][1];
+        // 紫色花瓣
+        flowers.fillStyle(0x9B3D8A, 0.5);
+        flowers.fillCircle(fx, fy, 3);
+        flowers.fillCircle(fx - 2, fy - 2, 2);
+        flowers.fillCircle(fx + 2, fy - 2, 2);
+        // 黄色花蕊
+        flowers.fillStyle(0xFFD98A, 0.6);
+        flowers.fillCircle(fx, fy - 1, 1);
+      }
+
+      // === 7. 坎儿井水道装饰 (蓝色细线) ===
+      var qanat = this.add.graphics();
+      qanat.setDepth(-4);
+      qanat.lineStyle(2, 0x6EC1E4, 0.2);
+      // 两条坎儿井水道
+      qanat.beginPath();
+      qanat.moveTo(200, 420);
+      qanat.lineTo(350, 400);
+      qanat.lineTo(500, 410);
+      qanat.lineTo(600, 250);
+      qanat.strokePath();
+      qanat.beginPath();
+      qanat.moveTo(100, 500);
+      qanat.lineTo(200, 480);
+      qanat.lineTo(200, 420);
+      qanat.strokePath();
     },
 
     // ==================== 背包加载 (localStorage) ====================
@@ -1269,7 +1445,7 @@
     parent: 'iran-game',
     width: 1280,
     height: 720,
-    backgroundColor: '#E8C282',
+    backgroundColor: '#C8B89A',
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
