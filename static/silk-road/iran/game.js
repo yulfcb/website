@@ -139,9 +139,9 @@
       L.oases.forEach(function (o) {
         var halo = self.add.graphics();
         halo.fillStyle(0x6EC1E4, 0.35);
-        halo.fillCircle(0, 0, 26);
-        var palm = self.add.text(0, 0, '💧', { fontSize: '32px' }).setOrigin(0.5);
-        var label = self.add.text(0, 22, o.label, {
+        halo.fillCircle(0, 0, 50);
+        var palm = self.add.text(0, 0, '💧', { fontSize: '48px' }).setOrigin(0.5);
+        var label = self.add.text(0, 36, o.label, {
           fontSize: '11px', color: '#FFFFFF', fontStyle: 'bold',
         }).setOrigin(0.5);
         var oasis = self.add.container(o.x, o.y, [halo, palm, label]);
@@ -168,8 +168,9 @@
         sp.merchantData = m;
         sp.bobPhase = Math.random() * Math.PI * 2;
         sp.setDepth(20);
-        // M2: 商贩可点击 (设置 interactive zone)
-        var hit = self.add.zone(m.x, m.y + 10, 64, 64)
+        // M2: 商贩可点击 (设置 interactive zone) — 160×160 在 1280×720 画布够大,
+        // 缩到手机 ~375 宽时仍剩 ~46×46px, 容易戳到
+        var hit = self.add.zone(m.x, m.y + 10, 160, 160)
           .setInteractive({ useHandCursor: true });
         hit.on('pointerdown', function () { self.tryOpenMerchant(m.id); });
         hit.setDepth(21);
@@ -694,11 +695,13 @@
         var o = L.oases[i];
         var dx = this.player.x - o.x;
         var dy = this.player.y - o.y;
-        if (Math.sqrt(dx * dx + dy * dy) < 40) {
+        if (Math.sqrt(dx * dx + dy * dy) < 80) {
           if (!o._lastTouch || Date.now() - o._lastTouch > 2000) {
             o._lastTouch = Date.now();
             this.changeWater(L.WATER_OASIS_REWARD);
             this.flashWaterUI();
+            // 浮动 +2💧 提示 — 玩家能直接看到获得了水
+            this.showFloatingText(o.x, o.y - 30, '💧 +' + L.WATER_OASIS_REWARD + ' 水分!');
             window.playIranSfx('pickup', 0.4);
           }
         }
@@ -734,6 +737,7 @@
     },
     showMerchantBubble: function (m) {
       // 气泡: 「点击交易 💬」/ 「按空格交易」提示
+      var self = this;
       var bg = this.add.graphics();
       bg.fillStyle(0x2A1606, 0.92);
       bg.fillRoundedRect(-55, -16, 110, 32, 8);
@@ -746,11 +750,21 @@
       }).setOrigin(0.5);
       var bubble = this.add.container(m.x, m.y - 38, [bg, txt]);
       bubble.setDepth(50);
+      // 气泡本身也接受点击 (玩家手指点不准商贩 sprite 时, 戳气泡也行)
+      var bubbleZone = this.add.zone(m.x, m.y - 38, 130, 50)
+        .setInteractive({ useHandCursor: true });
+      bubbleZone.setDepth(51);
+      bubbleZone.on('pointerdown', function () { self.tryOpenMerchant(m.id); });
+      bubble.bubbleZone = bubbleZone;
       this.merchantBubbles[m.id] = bubble;
     },
     hideMerchantBubble: function () {
       for (var k in this.merchantBubbles) {
         if (this.merchantBubbles[k]) {
+          // 销毁气泡的同时也销毁其点击 zone (zone 是单独加的, 不会随 container 一起销毁)
+          if (this.merchantBubbles[k].bubbleZone) {
+            this.merchantBubbles[k].bubbleZone.destroy();
+          }
           this.merchantBubbles[k].destroy();
           this.merchantBubbles[k] = null;
         }
@@ -1255,6 +1269,18 @@
         alpha: 0,
         duration: 600,
         delay: durationMs - 600,
+      });
+    },
+
+    // ==================== 浮动文字 (绿洲采水时上升淡出) ====================
+    showFloatingText: function (x, y, text) {
+      var t = this.add.text(x, y, text, {
+        fontSize: '18px', color: '#6EC1E4', fontStyle: 'bold',
+        stroke: '#2A1606', strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(1000);
+      this.tweens.add({
+        targets: t, y: y - 40, alpha: 0, duration: 1200,
+        onComplete: function () { t.destroy(); }
       });
     },
 
