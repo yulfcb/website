@@ -11,6 +11,9 @@
 // 出口（M4）：左上角巴扎尔甘 (Bazargan) —— 2 个水壶都满 10L 才能过境。
 
 window.IRAN_LEVEL = {
+  // 调试开关：true=默认装满行李（调试用），false=从 localStorage 读（正式版）
+  DEBUG_FILL_LUGGAGE: true,
+
   // 关 1 玩家起点 —— 阿巴斯港 (Bandar Abbas) 中下偏左
   start: { x: 200, y: 580 },
 

@@ -292,8 +292,8 @@
       this.camelBtn.on('pointerdown', function () { self.toggleCamelMode(); });
       this._updateCamelBtn();
 
-      // 4. 🧳 行李箱 (中右)
-      this.luggageBtn = this.add.text(770, 30, '🧳 行李箱 (' + this._luggageTotalCount() + ')', {
+      // 4. 🧳 行李 (中右)
+      this.luggageBtn = this.add.text(770, 30, '🧳 行李 ' + this._luggageTotalCount(), {
         fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
@@ -554,6 +554,15 @@
     // 缺数据兜底: 全部 8 件 (qty=1)
     // 写入时存新格式; 一旦发现新格式就立刻用, 不再回退
     _loadLuggage: function () {
+      // 调试模式：默认装满全部8件商品
+      if (L.DEBUG_FILL_LUGGAGE) {
+        var arr = [];
+        for (var k = 0; k < ALL_ITEM_IDS.length; k++) {
+          arr.push({ id: ALL_ITEM_IDS[k], qty: 1 });
+        }
+        console.log('[iran] DEBUG: luggage filled with all', ALL_ITEM_IDS.length, 'items');
+        return arr;
+      }
       var arr = [];
       try {
         var raw = localStorage.getItem('silkroad_luggage');
@@ -581,12 +590,6 @@
           }
         }
       } catch (e) {}
-      // 兜底: 没数据时给全部 8 件 qty=1
-      if (arr.length === 0) {
-        for (var k = 0; k < ALL_ITEM_IDS.length; k++) {
-          arr.push({ id: ALL_ITEM_IDS[k], qty: 1 });
-        }
-      }
       // 合并重复 id
       var merged = this._mergeLuggageItems(arr);
       console.log('[iran] luggage loaded:', JSON.stringify(merged));
@@ -605,7 +608,8 @@
       for (var i = 0; i < arr.length; i++) {
         var e = arr[i];
         if (!e || typeof e.id !== 'number' || typeof e.qty !== 'number' || e.qty <= 0) continue;
-        if (ALL_ITEM_IDS.indexOf(e.id) === -1) continue;
+        // 负数 id 是商贩商品（如骆驼 -1004），正数 id 必须有效
+        if (e.id >= 0 && ALL_ITEM_IDS.indexOf(e.id) === -1) continue;
         if (map[e.id]) {
           map[e.id].qty += e.qty;
         } else {
@@ -740,7 +744,7 @@
     _refreshHudCounts: function () {
       this._renderJugHud();
       if (this.coinText) this.coinText.setText(this._coinHudText());
-      if (this.luggageBtn) this.luggageBtn.setText('🧳 行李箱 (' + this._luggageTotalCount() + ')');
+      if (this.luggageBtn) this.luggageBtn.setText('🧳 行李 ' + this._luggageTotalCount());
       this._updateCamelBtn();
     },
 
@@ -1323,6 +1327,17 @@
       // 2b) 水壶商 (id=5) — 同步加一个空水壶到水系统
       if (m.id === 5) {
         this._addJug(0);  // 空水壶, 需要去绿洲灌水
+        // 浮动 +💧 动画反馈
+        var floatText = this.add.text(this.playerContainer.x, this.playerContainer.y - 40, '+💧', {
+          fontSize: '24px', color: '#4FC3F7', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        this.tweens.add({
+          targets: floatText,
+          y: floatText.y - 50,
+          alpha: 0,
+          duration: 1000,
+          onComplete: function () { floatText.destroy(); }
+        });
       }
       // 3) HUD 刷新
       this._refreshHudCounts();
