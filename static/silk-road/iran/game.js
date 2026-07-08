@@ -1818,7 +1818,7 @@
 
   // ==================== Start Phaser game ====================
   var game = new Phaser.Game({
-    type: Phaser.AUTO,
+    type: Phaser.CANVAS,
     parent: 'iran-game',
     width: 1280,
     height: 720,
