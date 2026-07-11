@@ -104,6 +104,148 @@
     canvas: { main: 0xD4B58A, stripe: 0x8B6F47 },
   };
 
+  // ============== 通用热气球绘制 ==============
+  // 水滴形球囊 + 8 条纵向 gores + 3 条横向装饰带 + 吊篮/绳索 + 燃烧器/火焰
+  // ctx: Phaser Graphics; cx, cy: 球囊中心; scale: 0.0~1.0 (充气进度);
+  // opts: { basket, flame, flameFrame, mini }
+  function drawBalloon(ctx, cx, cy, scale, fabric, opts) {
+    opts = opts || {};
+    var fc = FABRIC_COLORS[fabric] || FABRIC_COLORS.nylon;
+    var mainColor = fc.main;
+    var stripeColor = fc.stripe;
+
+    var maxW = 140;
+    var w = maxW * scale;
+    var h = w * 1.6;
+    var openingW = w * 0.25;
+
+    var topY = cy - h * 0.6;
+    var botY = cy + h * 0.4;
+
+    // === 球囊轮廓 (水滴形: 上半大圆弧, 下半急剧收拢) ===
+    // Phaser Graphics 没有 bezierCurveTo, 用多段 lineTo 逼近三次贝塞尔曲线 (N 段采样)
+    ctx.fillStyle(mainColor, 1);
+    ctx.beginPath();
+    ctx.moveTo(cx, topY);
+
+    // 右侧贝塞尔: P0=(cx,topY), P1=(cx+w*0.8,topY), P2=(cx+w,topY+h*0.35), P3=(cx+w*0.7,botY-h*0.15)
+    var N = 24;
+    var rP1x = cx + w * 0.8, rP1y = topY;
+    var rP2x = cx + w,       rP2y = topY + h * 0.35;
+    var rP3x = cx + w * 0.7, rP3y = botY - h * 0.15;
+    for (var rs = 1; rs <= N; rs++) {
+      var rt = rs / N;
+      var ru = 1 - rt;
+      var rcx = ru * ru * ru * cx +
+        3 * ru * ru * rt * rP1x +
+        3 * ru * rt * rt * rP2x +
+        rt * rt * rt * rP3x;
+      var rcy = ru * ru * ru * topY +
+        3 * ru * ru * rt * rP1y +
+        3 * ru * rt * rt * rP2y +
+        rt * rt * rt * rP3y;
+      ctx.lineTo(rcx, rcy);
+    }
+    ctx.lineTo(cx + openingW, botY);
+    ctx.lineTo(cx - openingW, botY);
+    ctx.lineTo(cx - w * 0.7, botY - h * 0.15);
+
+    // 左侧贝塞尔: P0=(cx-w*0.7,botY-h*0.15), P1=(cx-w,topY+h*0.35), P2=(cx-w*0.8,topY), P3=(cx,topY)
+    var lP0x = cx - w * 0.7, lP0y = botY - h * 0.15;
+    var lP1x = cx - w,       lP1y = topY + h * 0.35;
+    var lP2x = cx - w * 0.8, lP2y = topY;
+    var lP3x = cx,           lP3y = topY;
+    for (var ls = 1; ls <= N; ls++) {
+      var lt = ls / N;
+      var lu = 1 - lt;
+      var lcx = lu * lu * lu * lP0x +
+        3 * lu * lu * lt * lP1x +
+        3 * lu * lt * lt * lP2x +
+        lt * lt * lt * lP3x;
+      var lcy = lu * lu * lu * lP0y +
+        3 * lu * lu * lt * lP1y +
+        3 * lu * lt * lt * lP2y +
+        lt * lt * lt * lP3y;
+      ctx.lineTo(lcx, lcy);
+    }
+    ctx.closePath();
+    ctx.fillPath();
+
+    // === 纵向 gores (8 条垂直面板线) — 同样用 lineTo 逼近贝塞尔 ===
+    ctx.lineStyle(2, stripeColor, 0.7);
+    for (var i = 0; i < 8; i++) {
+      var ratio = (i / 7 - 0.5) * 2;
+      var topX = cx + ratio * 2;
+      var midX = cx + ratio * w;
+      var botX = cx + ratio * openingW;
+      var gP0x = topX, gP0y = topY + 2;
+      var gP1x = midX, gP1y = topY + h * 0.35;
+      var gP2x = midX * 0.95 + cx * 0.05, gP2y = botY - h * 0.15;
+      var gP3x = botX, gP3y = botY;
+
+      ctx.beginPath();
+      ctx.moveTo(gP0x, gP0y);
+      for (var gs = 1; gs <= N; gs++) {
+        var gt = gs / N;
+        var gu = 1 - gt;
+        var gx = gu * gu * gu * gP0x +
+          3 * gu * gu * gt * gP1x +
+          3 * gu * gt * gt * gP2x +
+          gt * gt * gt * gP3x;
+        var gy = gu * gu * gu * gP0y +
+          3 * gu * gu * gt * gP1y +
+          3 * gu * gt * gt * gP2y +
+          gt * gt * gt * gP3y;
+        ctx.lineTo(gx, gy);
+      }
+      ctx.strokePath();
+    }
+
+    // === 横向装饰带 (3 条) ===
+    ctx.lineStyle(3, stripeColor, 0.5);
+    for (var b = 0; b < 3; b++) {
+      var bandY = topY + h * (0.25 + b * 0.15);
+      var bandT = (bandY - topY) / h;
+      var bandW = w * (bandT < 0.4 ? 1 : 1 - (bandT - 0.4) * 1.2);
+      ctx.lineBetween(cx - bandW, bandY, cx + bandW, bandY);
+    }
+
+    if (opts.basket !== false && !opts.mini) {
+      // === 绳索 (4 条) ===
+      var basketY = botY + 80;
+      var basketW = 40;
+      ctx.lineStyle(2, 0x6B4423, 1);
+      ctx.lineBetween(cx - openingW, botY, cx - basketW, basketY);
+      ctx.lineBetween(cx + openingW, botY, cx + basketW, basketY);
+      ctx.lineBetween(cx - openingW * 0.5, botY, cx - basketW * 0.5, basketY);
+      ctx.lineBetween(cx + openingW * 0.5, botY, cx + basketW * 0.5, basketY);
+
+      // === 吊篮 (编织矩形 + 水平纹理 + 深色顶边) ===
+      ctx.fillStyle(0x8B4513, 1);
+      ctx.fillRoundedRect(cx - basketW, basketY, basketW * 2, 36, 4);
+      ctx.lineStyle(1, 0x6B4423, 0.6);
+      for (var weave = 0; weave < 5; weave++) {
+        ctx.lineBetween(cx - basketW, basketY + 6 + weave * 7, cx + basketW, basketY + 6 + weave * 7);
+      }
+      ctx.fillStyle(0x6B4423, 1);
+      ctx.fillRoundedRect(cx - basketW - 3, basketY - 4, basketW * 2 + 6, 8, 2);
+    }
+
+    if (opts.flame && !opts.mini) {
+      // === 燃烧器 (灰色金属底座 + 3 层火焰) ===
+      var burnerY = botY + 20;
+      ctx.fillStyle(0x808080, 1);
+      ctx.fillRect(cx - 8, burnerY - 4, 16, 8);
+      var ff = opts.flameFrame || 0;
+      ctx.fillStyle(0xF39C12, 1);
+      ctx.fillTriangle(cx - 12, burnerY - 4, cx + 12, burnerY - 4, cx, burnerY - 30 - ff * 4);
+      ctx.fillStyle(0xF1C40F, 1);
+      ctx.fillTriangle(cx - 7, burnerY - 4, cx + 7, burnerY - 4, cx, burnerY - 20 - ff * 3);
+      ctx.fillStyle(ff === 0 ? 0xFFFFFF : 0xFFF4D8, 1);
+      ctx.fillTriangle(cx - 3, burnerY - 4, cx + 3, burnerY - 4, cx, burnerY - 10);
+    }
+  }
+
   // 缝合点 (6 个, 沿球囊左半弧从上到下)
   var STITCH_POINTS = [
     { x: -90, y: -200 },  // 顶部
@@ -140,6 +282,9 @@
   var BootScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
+    preload: function () {
+      this.load.image('balloon_icon', '/static/silk-road/turkey/balloon_icon_sm.jpg');
+    },
     create: function () {
       var self = this;
       this.cameras.main.setBackgroundColor('#FFD9A8');
@@ -208,27 +353,10 @@
         circle.lineStyle(2, 0xFFFFFF, 0.7);
         circle.strokeCircle(0, 0, 22);
 
-        // 组装场: 用热气球图形代替 emoji
+        // 组装场: 用热气球图片代替 emoji
         var centerGraphic;
         if (loc.key === 'assembly') {
-          var balloonGfx = this.add.graphics();
-          // 球囊
-          balloonGfx.fillStyle(0xE74C3C, 1);
-          balloonGfx.fillCircle(0, -8, 14);
-          // 条纹
-          balloonGfx.fillStyle(0xF39C12, 1);
-          balloonGfx.fillRect(-14, -16, 28, 3);
-          balloonGfx.fillRect(-14, -8, 28, 3);
-          balloonGfx.fillRect(-14, 0, 28, 3);
-          // 吊篮
-          balloonGfx.fillStyle(0x8B4513, 1);
-          balloonGfx.fillRoundedRect(-7, 12, 14, 8, 2);
-          // 绳索
-          balloonGfx.lineStyle(1, 0x6B4423, 0.9);
-          balloonGfx.lineBetween(-7, 12, -5, 4);
-          balloonGfx.lineBetween(7, 12, 5, 4);
-          balloonGfx.lineBetween(0, 13, 0, 4);
-          centerGraphic = balloonGfx;
+          centerGraphic = this.add.image(0, 0, 'balloon_icon').setScale(0.12);
         } else {
           centerGraphic = this.add.text(0, 0, loc.emoji, { fontSize: '28px' }).setOrigin(0.5);
         }
@@ -2016,15 +2144,7 @@
       this.basketCount = 0;
       var centerX = 640, centerY = 380;
       var bg = this.add.graphics();
-      var fc = FABRIC_COLORS[this.fabric] || FABRIC_COLORS.nylon;
-      bg.fillStyle(fc.main, 1);
-      bg.fillCircle(centerX, centerY - 50, 100);
-      bg.fillStyle(fc.stripe, 1);
-      for (var s = 0; s < 6; s++) {
-        bg.fillRect(centerX - 100, centerY - 150 + s * 33, 200, 4);
-      }
-      bg.lineStyle(2, 0x8B4513, 1);
-      bg.strokeCircle(centerX, centerY - 50, 100);
+      drawBalloon(bg, centerX, centerY - 50, 0.8, this.fabric, { basket: false });
       this.contentLayer.add(bg);
 
       var basketY = centerY + 130;
@@ -2095,15 +2215,7 @@
       var self = this;
       var centerX = 640, centerY = 380;
       var bg = this.add.graphics();
-      var fc = FABRIC_COLORS[this.fabric] || FABRIC_COLORS.nylon;
-      bg.fillStyle(fc.main, 1);
-      bg.fillCircle(centerX, centerY - 50, 60);
-      bg.fillStyle(fc.stripe, 1);
-      for (var s = 0; s < 4; s++) {
-        bg.fillRect(centerX - 60, centerY - 110 + s * 30, 120, 4);
-      }
-      bg.fillStyle(0x8B4513, 1);
-      bg.fillRoundedRect(centerX - 40, centerY + 50, 80, 30, 4);
+      drawBalloon(bg, centerX, centerY - 50, 0.4, this.fabric, { basket: true });
       this._balloonGraphics = bg;
       this.contentLayer.add(bg);
 
@@ -2202,17 +2314,7 @@
       var g = this._balloonGraphics;
       if (!g) return;
       g.clear();
-      var r = 60 * (scale / 0.5);
-      var fc = FABRIC_COLORS[this.fabric] || FABRIC_COLORS.nylon;
-      g.fillStyle(fc.main, 1);
-      g.fillCircle(cx, cy - 50, r);
-      g.fillStyle(fc.stripe, 1);
-      var stripes = Math.floor(4 + (scale - 0.5) * 8);
-      for (var s = 0; s < stripes; s++) {
-        g.fillRect(cx - r, cy - 50 - r + (s * (r * 2 / stripes)), r * 2, 4);
-      }
-      g.fillStyle(0x8B4513, 1);
-      g.fillRoundedRect(cx - 40, cy + 50, 80, 30, 4);
+      drawBalloon(g, cx, cy - 50, scale, this.fabric, { basket: true });
     },
 
     // ---------- 步骤 4: 点火 ----------
@@ -2220,15 +2322,7 @@
       var self = this;
       var centerX = 640, centerY = 380;
       var bg = this.add.graphics();
-      var fc = FABRIC_COLORS[this.fabric] || FABRIC_COLORS.nylon;
-      bg.fillStyle(fc.main, 1);
-      bg.fillCircle(centerX, centerY - 60, 120);
-      bg.fillStyle(fc.stripe, 1);
-      for (var s = 0; s < 8; s++) {
-        bg.fillRect(centerX - 120, centerY - 180 + s * 30, 240, 4);
-      }
-      bg.fillStyle(0x8B4513, 1);
-      bg.fillRoundedRect(centerX - 40, centerY + 40, 80, 30, 4);
+      drawBalloon(bg, centerX, centerY - 60, 0.9, this.fabric, { basket: true });
       this.contentLayer.add(bg);
 
       var burnerX = centerX, burnerY = centerY + 20;
@@ -2309,25 +2403,7 @@
       var self = this;
       var centerX = 640, centerY = 360;
       var g = this.add.graphics();
-      var fc = FABRIC_COLORS[this.fabric] || FABRIC_COLORS.nylon;
-      g.fillStyle(fc.main, 1);
-      g.fillCircle(centerX, centerY - 80, 140);
-      g.fillStyle(fc.stripe, 1);
-      for (var s = 0; s < 10; s++) {
-        g.fillRect(centerX - 140, centerY - 220 + s * 28, 280, 4);
-      }
-      g.fillStyle(0xF39C12, 1);
-      g.fillTriangle(centerX - 20, centerY + 50, centerX + 20, centerY + 50, centerX, centerY + 10);
-      g.fillStyle(0xF1C40F, 1);
-      g.fillTriangle(centerX - 12, centerY + 50, centerX + 12, centerY + 50, centerX, centerY + 20);
-      g.fillStyle(0x8B4513, 1);
-      g.fillRoundedRect(centerX - 50, centerY + 50, 100, 50, 6);
-      g.fillStyle(0x6B4423, 1);
-      g.fillRect(centerX - 50, centerY + 50, 100, 4);
-      g.lineStyle(3, 0x6B4423, 1);
-      g.lineBetween(centerX - 40, centerY + 50, centerX - 30, centerY);
-      g.lineBetween(centerX + 40, centerY + 50, centerX + 30, centerY);
-      g.lineBetween(centerX, centerY + 50, centerX, centerY);
+      drawBalloon(g, centerX, centerY - 80, 1.0, this.fabric, { basket: true, flame: true });
       var balloonContainer = this.add.container(0, 0, [g]);
       this.tweens.add({
         targets: balloonContainer,
@@ -2418,32 +2494,13 @@
 
       // 热气球 sprite
       var fabricChoice = this.registry.get('turkey_fabric') || 'nylon';
-      var fabricColor = fabricChoice === 'cotton' ? 0xE8DCC4 : (fabricChoice === 'canvas' ? 0xD4B58A : 0xF5E6C8);
-      var stripeColor = fabricChoice === 'cotton' ? 0xC4B594 : (fabricChoice === 'canvas' ? 0x8B6F47 : 0xD4A86A);
       var balloonG = this.add.graphics();
-      var drawBalloon = function (x, y) {
+      var drawFlightBalloon = function (x, y) {
         balloonG.clear();
-        balloonG.fillStyle(fabricColor, 1);
-        balloonG.fillCircle(x, y - 80, 100);
-        balloonG.fillStyle(stripeColor, 1);
-        for (var s = 0; s < 8; s++) {
-          balloonG.fillRect(x - 100, y - 180 + s * 25, 200, 3);
-        }
-        balloonG.fillStyle(0xF39C12, 1);
-        balloonG.fillTriangle(x - 14, y + 30, x + 14, y + 30, x, y);
-        balloonG.fillStyle(0xF1C40F, 1);
-        balloonG.fillTriangle(x - 8, y + 30, x + 8, y + 30, x, y + 10);
-        balloonG.fillStyle(0x8B4513, 1);
-        balloonG.fillRoundedRect(x - 35, y + 30, 70, 40, 4);
-        balloonG.fillStyle(0x6B4423, 1);
-        balloonG.fillRect(x - 35, y + 30, 70, 3);
-        balloonG.lineStyle(2, 0x6B4423, 1);
-        balloonG.lineBetween(x - 28, y + 30, x - 22, y - 10);
-        balloonG.lineBetween(x + 28, y + 30, x + 22, y - 10);
-        balloonG.lineBetween(x, y + 30, x, y - 10);
+        drawBalloon(balloonG, x, y, 0.8, fabricChoice, { basket: true, flame: true });
       };
       // 起始位置: 左下角
-      drawBalloon(100, 650);
+      drawFlightBalloon(100, 650);
 
       // 标题 + 进度提示
       this._flightTitle = this.add.text(640, 80, '✈️ 飞越安纳托利亚高原 → 哈萨克草原...', {
@@ -2496,7 +2553,7 @@
           curY = farY + (endY - farY) * e3;
           bgProg = 0.8 + t3 * 0.2;
         }
-        drawBalloon(curX, curY);
+        drawFlightBalloon(curX, curY);
         drawGround(bgProg);
 
         if (elapsed >= totalDur) {
