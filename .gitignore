@@ -57,3 +57,7 @@ htmlcov/
 
 # 部署相关
 personal_website.db
+
+# Node
+node_modules/
+package-lock.json

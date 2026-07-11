@@ -68,9 +68,9 @@ window.IRAN_LEVEL = {
       price: 40,
     },
     {
-      id: 5, x: 850, y: 540, emoji: '🫗', name: '水壶商人',
+      id: 5, x: 850, y: 540, emoji: '🍶', name: '水壶商人',
       tip: '过境要带满水的水壶',
-      sells: { name: '水壶', emoji: '🫗' },
+      sells: { name: '水壶', emoji: '🏺' },
       price: 30,
     },
   ],
@@ -81,8 +81,8 @@ window.IRAN_LEVEL = {
     { x: 200, y: 420, label: '坎儿井' },
   ],
 
-  // 出口 —— 左上角巴扎尔甘 (Bazargan 伊朗-土耳其主要边境口岸)
-  exit: { x: 100, y: 110, emoji: '🚩', label: '巴扎尔甘 → 土耳其' },
+  // 出口 —— 左上角伊朗边境 (Bazargan 伊朗-土耳其主要边境口岸)
+  exit: { x: 100, y: 110, emoji: '🚪', label: '伊朗 → 土耳其' },
 
   // 6 个真实地标 (M1: 作为地图 chip 装饰, 不参与玩法)
   places: [
@@ -99,8 +99,8 @@ window.IRAN_LEVEL = {
   STEP_PX_CAMEL: 48,           // 骑骆驼步长 (2x)
   MOVE_COOLDOWN_MS: 220,
   WATER_PER_STEP: 0.1,         // 每步消耗 0.1L 水 (从当前水壶扣)
-  JUG_CAPACITY: 20,            // 每个水壶满 20L (Bug 2: 默认水分值改为 20)
-  TARGET_JUGS: 4,              // 出口条件：4 个水壶 (都满 20L) (Bug 3: 4 个水壶应能过关)
+  JUG_CAPACITY: 10,            // 每个水壶满 10L
+  TARGET_JUGS: 4,              // 出口条件：4 个水壶 (都满 10L) — 初始 1 个 + 买 3 个
 
   // 奖励档位 (M3 用)
   rewardTiers: {

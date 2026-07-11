@@ -1,0 +1,124 @@
+/* 土耳其·卡帕多奇亚·热气球组装 —— 样式（M26 重做）
+   跟 qatar/iran 一致: Phaser 自己管 scene 内 UI, 这里只保留
+   容器 / 竖屏提示 / 全屏按钮 3 件套. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  background: #2A1606;
+  color: #F4ECD8;
+  font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+}
+
+/* ===== Phaser 容器 ===== */
+#game-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  width: 100dvw;
+  background: #2A1606;
+  z-index: 1;
+}
+#game-container canvas {
+  display: block;
+  margin: 0 auto;
+  background: #E8C282;
+}
+
+/* ===== 竖屏提示 overlay ===== */
+#orientation-lock {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: linear-gradient(135deg, #2A1606 0%, #4A2E1A 100%);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 24px;
+  color: #F4ECD8;
+  text-align: center;
+  padding: 24px;
+}
+#orientation-lock.show { display: flex; }
+#orientation-lock .rotate-icon {
+  font-size: 96px;
+  line-height: 1;
+  animation: rotate-phone 1.5s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes rotate-phone {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(90deg); }
+}
+#orientation-lock .rotate-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #FFD98A;
+  letter-spacing: 1px;
+}
+#orientation-lock .rotate-sub {
+  font-size: 13px;
+  color: #C9B89A;
+  opacity: 0.85;
+}
+#orientation-lock .rotate-arrow {
+  font-size: 48px;
+  color: #FFB5A0;
+  animation: rotate-arrow 1.5s ease-in-out infinite;
+}
+@keyframes rotate-arrow {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(360deg); }
+}
+
+/* ===== 全屏按钮（DOM 兜底）===== */
+#turkey-fullscreen {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 12px);
+  right: 12px;
+  width: auto;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 217, 138, 0.6);
+  background: rgba(74, 46, 26, 0.92);
+  color: #FFD98A;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 250;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s ease;
+  font-family: inherit;
+}
+#turkey-fullscreen:hover { transform: translateY(-2px); }
+#turkey-fullscreen .qtr-fs-icon { font-size: 18px; line-height: 1; }
+@media (max-width: 480px) {
+  #turkey-fullscreen .qtr-fs-label { display: none; }
+  #turkey-fullscreen {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+:fullscreen #turkey-fullscreen,
+:-webkit-full-screen #turkey-fullscreen {
+  top: env(safe-area-inset-top, 0);
+}

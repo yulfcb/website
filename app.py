@@ -18,7 +18,7 @@ import re
 
 import requests
 from flask import (Flask, render_template, request, jsonify, redirect,
-                   url_for, session, send_from_directory, Response, send_file, flash)
+                   url_for, session, send_from_directory, Response, send_file, flash, abort)
 from flask_cors import CORS
 from user_agents import parse as parse_ua
 
@@ -1353,6 +1353,13 @@ def silk_road_mode():
 def silk_road_level(n):
     """关卡页 0~5（M1 为占位骨架）。"""
     track_visit()
+    # 土耳其关使用 Phaser 游戏
+    if n == 2:
+        import os
+        game_html_path = os.path.join('static', 'silk-road', 'turkey', 'index.html')
+        with open(game_html_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    
     if n < 0 or n > 5:
         return redirect(url_for('silk_road_mode'))
     cfg = load_game_config()
@@ -2378,6 +2385,15 @@ def _vpn_create_user(username, password, is_admin=False, remark=None,
     finally:
         conn.close()
 
+
+# ===== VPN 功能暂时下架（2026-07-10）=====
+# 恢复方法：将 VPN_DOWN 改为 False
+VPN_DOWN = True
+
+@app.before_request
+def _vpn_maintenance_gate():
+    if VPN_DOWN and request.path.startswith('/vpn/'):
+        abort(404)
 
 @app.route('/vpn/')
 @admin_required

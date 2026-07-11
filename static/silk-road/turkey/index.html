@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#2A1606">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="msapplication-tap-highlight" content="no">
+  <title>丝绸之路 · 土耳其 🇹🇷 · 卡帕多奇亚</title>
+  <link rel="stylesheet" href="/static/silk-road/turkey/style.css">
+</head>
+<body>
+
+  <!-- BGM 复用卡塔尔的丝绸之路循环音轨 -->
+  <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
+    <source src="/static/silk-road/qatar/audio/silk-road-bgm.wav" type="audio/wav">
+  </audio>
+  <!-- SFX 通道 — 全部从卡塔尔 audio/ 共享 (避免重复资源) -->
+  <audio id="sfx-click"     src="/static/silk-road/qatar/audio/sfx-click.wav"     preload="auto" style="display:none"></audio>
+  <audio id="sfx-button"    src="/static/silk-road/qatar/audio/sfx-button.wav"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-pickup"    src="/static/silk-road/qatar/audio/sfx-pickup.wav"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-exchange"  src="/static/silk-road/qatar/audio/sfx-exchange.wav"  preload="auto" style="display:none"></audio>
+  <audio id="sfx-voyage"    src="/static/silk-road/qatar/audio/sfx-voyage.wav"    preload="auto" style="display:none"></audio>
+
+  <!-- Phaser 容器 -->
+  <div id="game-container"></div>
+
+  <!-- 竖屏提示 overlay -->
+  <div id="orientation-lock" aria-hidden="true">
+    <div class="rotate-icon" aria-hidden="true">📱</div>
+    <div class="rotate-title">请横屏以获得最佳体验</div>
+    <div class="rotate-sub">Rotate your phone to landscape mode</div>
+    <div class="rotate-arrow">↻</div>
+  </div>
+
+  <!-- 全屏按钮 (DOM 兜底) -->
+  <button type="button" id="turkey-fullscreen" aria-label="全屏">
+    <span class="qtr-fs-icon">⛶</span>
+    <span class="qtr-fs-label">全屏</span>
+  </button>
+
+  <!-- Phaser 3.80.1 — 本地静态资源, 不用 CDN -->
+  <script src="/static/vendor/phaser-3.80.1.min.js"></script>
+
+  <!-- 关卡 2 · 土耳其 -->
+  <script>window.LEVEL_ID = 2;</script>
+
+  <!-- 主逻辑 -->
+  <script src="/static/silk-road/turkey/game.js"></script>
+
+  <script>
+    (function () {
+      // 竖屏提示逻辑 (跟 qatar 一致)
+      function checkOrientation() {
+        var lock = document.getElementById('orientation-lock');
+        if (!lock) return;
+        var isPortrait = window.matchMedia('(orientation: portrait)').matches
+          && window.innerHeight > window.innerWidth;
+        if (isPortrait) lock.classList.add('show');
+        else lock.classList.remove('show');
+      }
+      window.addEventListener('resize', checkOrientation);
+      window.addEventListener('orientationchange', checkOrientation);
+      checkOrientation();
+    })();
+  </script>
+</body>
+</html>

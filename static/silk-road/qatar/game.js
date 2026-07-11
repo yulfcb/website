@@ -338,9 +338,9 @@
 
       // —— HUD（顶部条 + NPC 文字）——
       var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x4A2E1A, 0.92);
-      this.waterText = this.add.text(180, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
+      this.waterText = this.add.text(140, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
+      }).setOrigin(0, 0.5);
       this.pickupText = this.add.text(640, 30, '🎁 拾起 ' + this.pickupCount + ' / 8', {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
@@ -592,6 +592,7 @@
     // ==================== 水分 ====================
     changeWater: function (delta) {
       this.water = Math.max(0, Math.min(L.WATER_MAX, +(this.water + delta).toFixed(2)));
+      // M24: 恢复 💧 emoji (M24.1: 水囊图标从卡塔尔移到伊朗, 卡塔尔不再用)
       this.waterText.setText('💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX);
       if (this.water <= 0 && this.state === 'PLAYING') {
         this.dieFromThirst();

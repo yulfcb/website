@@ -5,7 +5,7 @@
 // - 走访 🏦 交易中心把行李物品换成伊朗里亚尔 (﷼)
 // - 用里亚尔在 6 家波斯商贩 (地毯/藏红花/茶/陶/骆驼/水壶) 买商品
 // - 走访 2 个绿洲给水壶灌水
-// - 集齐 **2 个水壶 + 2 壶都满 10L** 启程去土耳其 (Bazargan 巴扎尔甘边境)
+// - 集齐 **3 头骆驼 + 总水分 > 20** 启程去土耳其 (Bazargan 巴扎尔甘边境)
 // - 携带行李箱 (quantity-based 同类型可多件) 跨级
 //
 // M4 范围：
@@ -83,6 +83,10 @@
   var BootScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
+    preload: function () {
+      // 水壶商人 (id=5) 使用水壶 sprite 而不是 emoji
+      this.load.image('waterskin', '/static/silk-road/qatar/assets/waterskin-icon.png');
+    },
     create: function () {
       var self = this;
       // 波斯夜空深蓝背景 — Boot 阶段过渡
@@ -175,7 +179,9 @@
         var halo = self.add.graphics();
         halo.fillStyle(0x1B5E8A, 0.4);  // 波斯蓝
         halo.fillCircle(0, 0, 22);
-        var emoji = self.add.text(0, 0, m.emoji, { fontSize: '32px' }).setOrigin(0.5);
+        var emoji = (m.id === 5)
+          ? self.add.image(0, 0, 'waterskin').setScale(0.25)
+          : self.add.text(0, 0, m.emoji, { fontSize: '32px' }).setOrigin(0.5);
         var label = self.add.text(0, 24, m.name, {
           fontSize: '11px', color: '#FFD98A', fontStyle: 'bold',
           stroke: '#2A1606', strokeThickness: 3, wordWrap: false,
@@ -221,7 +227,7 @@
       this.exchangeSprite.hitZone = exHit;
       this.exchangeBubble = null;
 
-      // —— 出口 (巴扎尔甘 → 土耳其, 左上角) ——
+      // —— 出口 (伊朗 → 土耳其, 左上角) ——
       var exitBg = this.add.graphics();
       exitBg.fillStyle(0xFFD98A, 0.5);
       exitBg.fillCircle(0, 0, 24);
@@ -252,8 +258,8 @@
 
       // —— 状态 (M4) ——
       this.player = { x: L.start.x, y: L.start.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
-      // 水壶: 玩家拥有的水壶列表 [{capacity, water}], 初始空
-      this.jugs = [];
+      // 水壶: 玩家拥有的水壶列表 [{capacity, water}], 初始 1 个满水壶
+      this.jugs = [{ capacity: L.JUG_CAPACITY, water: L.JUG_CAPACITY }];
       // 行李: 物品数组 [{id, qty}]
       this.luggage = this._loadLuggage();
       // M4: 货币余额 (伊朗里亚尔 ﷼)
@@ -310,7 +316,7 @@
       this.bgmBtn.on('pointerdown', function () { self.toggleBgm(); });
 
       // 任务提示
-      this.add.text(640, 80, '🎯 去交易中心换里亚尔 → 购买 2 个水壶 → 灌满水 → 巴扎尔甘过境', {
+      this.add.text(640, 80, '🎯 去交易中心换里亚尔 → 购买骆驼、灌水壶 → 凑齐3骆驼+水分>20 → 🚪 伊朗 → 土耳其 🇹🇷', {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
       }).setOrigin(0.5);
 
@@ -397,6 +403,9 @@
       // —— DOM 辅助 ——
       this.bindFullscreenDom();
       this.bindOrientationLock();
+
+      // —— M23.13: 骆驼商队 voyage 容器 (伊朗 → 土耳其, 出发时显示) ——
+      this.buildCamelVoyageContainer();
     },
 
     // ==================== 伊朗地形 (保留 M2) ====================
@@ -680,6 +689,10 @@
       }
       return true;
     },
+    _allCamelsReady: function () {
+      // Bug 5: 骆驼在 luggage 里，id=-1004（商贩 id=4），至少 3 头
+      return this._luggageCount(-1004) >= 3;
+    },
     _driestJugIndex: function () {
       // 找水量最低且未满的水壶
       var idx = -1, min = Infinity;
@@ -769,7 +782,7 @@
       if (this.exitSprite) {
         this.exitSprite.bobPhase += 0.05;
         this.exitSprite.list[1].y = Math.sin(this.exitSprite.bobPhase) * 2;
-        var canDepart = this._allJugsFull();
+        var canDepart = this._totalWater() > 20 && this._allCamelsReady();
         if (canDepart !== this.exitActive) {
           this.exitActive = canDepart;
           if (canDepart) this.startExitPulse();
@@ -839,10 +852,10 @@
       if (this.playerContainer) {
         this.playerContainer.scaleX = this.player.facing;
       }
-      // Bug 1 修复：解除 counter-flip, 让 camelBackEmoji.scaleX 永远为正 — 配合 playerContainer 镜像,
+      // Bug 3 修复：camelBackEmoji.scaleX = -1 (反向镜像), 配合 playerContainer.scaleX 双重翻转,
       // 骆驼头最终始终朝行进方向 (玩家移动方向)
       if (this.camelBackEmoji) {
-        this.camelBackEmoji.scaleX = 1;
+        this.camelBackEmoji.scaleX = -1;
       }
 
       // 扣水 (从当前水壶)
@@ -1396,7 +1409,13 @@
         var cellBg = this.add.rectangle(cx, cy, cellW - 16, cellH - 16, 0x4A2E1A, 1)
           .setStrokeStyle(2, isHeart ? 0xF6B5C8 : 0x6B4423, isHeart ? 0.7 : 0.4);
         this.modalContainer.add(cellBg);
-        this.modalContainer.add(this.add.text(cx, cy - 22, info.emoji, { fontSize: '32px' }).setOrigin(0.5));
+        // Bug 4: 水壶商 (id=5) 用 waterskin sprite 替代 emoji 🫗
+        if (info.isSprite && info.emoji === '🏺') {
+          var waterskinIcon = self.add.image(cx, cy - 22, 'waterskin').setScale(0.3);
+          self.modalContainer.add(waterskinIcon);
+        } else {
+          self.modalContainer.add(self.add.text(cx, cy - 22, info.emoji, { fontSize: '32px' }).setOrigin(0.5));
+        }
         var nm = this.add.text(cx, cy + 4, info.name, {
           fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
           wordWrap: false,
@@ -1438,14 +1457,18 @@
     _getLuggageItemInfo: function (id) {
       if (id >= 0) {
         var it = this._findItem(id);
-        if (it) return { name: it.name, emoji: it.emoji };
-        return { name: '?', emoji: '❓' };
+        if (it) return { name: it.name, emoji: it.emoji, isSprite: false };
+        return { name: '?', emoji: '❓', isSprite: false };
       }
       // 自定义 id: -1000 - merchantId → 商贩卖品
       var mId = -1000 - id;
       var m = this._findMerchant(mId);
-      if (m) return { name: m.sells.name, emoji: m.sells.emoji };
-      return { name: '特产', emoji: '🎁' };
+      if (m) {
+        // Bug 4: 水壶商人 (id=5) 用 sprite (waterskin-icon.png) 而非 emoji 🫗
+        var isSprite = (mId === 5);
+        return { name: m.sells.name, emoji: m.sells.emoji, isSprite: isSprite };
+      }
+      return { name: '特产', emoji: '🎁', isSprite: false };
     },
 
     tryCloseTopModal: function () {
@@ -1506,14 +1529,9 @@
       }
     },
     tryExit: function () {
-      if (this.jugs.length < L.TARGET_JUGS) {
-        var need = L.TARGET_JUGS - this.jugs.length;
-        this.showToast('还需要 ' + need + ' 个水壶 → 去水壶商人那儿买 🫗', 2200);
-        window.playIranSfx('click', 0.3);
-        return;
-      }
-      if (!this._allJugsFull()) {
-        this.showToast('到土耳其路途遥远，水量少于20，骆驼少于3头，是过不去的', 2200);
+      // 检查出发条件：骆驼 >= 3 且 总水分 > 20
+      if (this._luggageCount(-1004) < 3 || this._totalWater() <= 20) {
+        this.showToast('到土耳其路途遥远，水量少于20，骆驼少于3头，是过不去的', 2800);
         window.playIranSfx('click', 0.3);
         return;
       }
@@ -1521,7 +1539,7 @@
       this.departIran();
     },
 
-    // M3: 启程 — camera fade + 跳下一关 (暂时回 /silk-road)
+    // M23.13: 启程 — camera fade + 播放骆驼商队 voyage 动画 (完成后自动跳转 level/2)
     departIran: function () {
       var self = this;
       this.state = 'TRADING';
@@ -1529,39 +1547,232 @@
       window.playIranSfx('pickup', 0.5);
       window.playIranSfx('exchange', 0.4);
 
-      // 1) 关闭 dpad + 弹简短提示
+      // 1) 弹简短提示
       this.showDepartToast();
 
       // 2) camera fade out 1.5s
       this.cameras.main.fadeOut(1500, 0, 0, 0);
 
-      // 3) 淡黑期间, 屏幕中央淡入 "前往土耳其..." 文字
-      var msg = this.add.text(640, 360, '🚩 巴扎尔甘 → 土耳其 🇹🇷\n启程…', {
-        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold', align: 'center',
-        stroke: '#1A0E04', strokeThickness: 4,
-      }).setOrigin(0.5).setDepth(5000);
-      // 先透明, 淡入
-      msg.setAlpha(0);
-      this.tweens.add({
-        targets: msg,
-        alpha: 1,
-        duration: 800,
-      });
-
-      // 4) 1.5s 后跳转
-      this.time.delayedCall(1700, function () {
-        // 优先跳到 /silk-road/turkey 之类, 暂时回关卡选择
-        try {
-          window.location.href = '/silk-road';
-        } catch (e) {
-          // fallback: 刷新
-          window.location.reload();
-        }
+      // 3) fade 完成后 (1.6s), 清除黑色 overlay + 启动 voyage 动画
+      this.time.delayedCall(1600, function () {
+        self.cameras.main.resetFX();
+        self.playCamelVoyage();
       });
     },
 
+    // ==================== M23.13: 骆驼商队 voyage 容器 (伊朗 → 土耳其) ====================
+    // 出发后画面: 沙漠背景 + 玩家 + N 头骆驼 🐫 从左向右走.
+    // 参考 qatar/game.js playVoyageAnimation (line 2257+) 的时间驱动 update 模式.
+    buildCamelVoyageContainer: function () {
+      var self = this;
+      this.camelVoyageContainer = this.add.container(0, 0);
+      this.camelVoyageContainer.setDepth(3000);  // 盖住所有 PlayScene UI
+      this.camelVoyageContainer.setVisible(false);
+
+      // 1) 沙漠渐变背景 (天空 → 沙地)
+      var sky = this.add.graphics();
+      sky.fillGradientStyle(0xF0D49A, 0xF0D49A, 0xD4A574, 0xC19A6B, 1);
+      sky.fillRect(0, 0, 1280, 720);
+      this.camelVoyageContainer.add(sky);
+
+      // 2) 太阳 (右上角)
+      var sunHalo = this.add.graphics();
+      sunHalo.fillStyle(0xFFE9B0, 0.45);
+      sunHalo.fillCircle(1080, 130, 92);
+      var sun = this.add.graphics();
+      sun.fillStyle(0xFFF3D0, 1);
+      sun.fillCircle(1080, 130, 56);
+      this.camelVoyageContainer.add([sunHalo, sun]);
+
+      // 3) 远沙丘
+      var duneFar = this.add.graphics();
+      duneFar.fillStyle(0xC9A36F, 0.55);
+      duneFar.beginPath();
+      duneFar.moveTo(0, 360);
+      for (var i = 0; i <= 12; i++) {
+        var px = i * (1280 / 12);
+        var py = 360 - Math.sin(i * 0.7) * 22 - 10;
+        duneFar.lineTo(px, py);
+      }
+      duneFar.lineTo(1280, 470);
+      duneFar.lineTo(0, 470);
+      duneFar.closePath();
+      duneFar.fillPath();
+      this.camelVoyageContainer.add(duneFar);
+
+      // 4) 近沙丘
+      var duneNear = this.add.graphics();
+      duneNear.fillStyle(0xA8794A, 0.78);
+      duneNear.beginPath();
+      duneNear.moveTo(0, 500);
+      for (var j = 0; j <= 14; j++) {
+        var qx = j * (1280 / 14);
+        var qy = 500 - Math.sin(j * 0.9 + 0.5) * 28 - 12;
+        duneNear.lineTo(qx, qy);
+      }
+      duneNear.lineTo(1280, 720);
+      duneNear.lineTo(0, 720);
+      duneNear.closePath();
+      duneNear.fillPath();
+      this.camelVoyageContainer.add(duneNear);
+
+      // 5) 路径 (dashed 沙色线, 商队沿它走)
+      var pathG = this.add.graphics();
+      pathG.lineStyle(3, 0x8B5A2B, 0.55);
+      pathG.beginPath();
+      pathG.moveTo(-50, 560);
+      for (var k = 1; k <= 40; k++) {
+        var tt = k / 40;
+        var lx = -50 + tt * 1380;
+        var ly = 560 + Math.sin(tt * 2.4) * 14;
+        pathG.lineTo(lx, ly);
+      }
+      pathG.strokePath();
+      // 虚线 (浅色 dash 覆盖)
+      for (var dd = 0; dd < 40; dd += 2) {
+        var t1 = dd / 40;
+        var t2 = (dd + 1) / 40;
+        var x1 = -50 + t1 * 1380, y1 = 560 + Math.sin(t1 * 2.4) * 14;
+        var x2 = -50 + t2 * 1380, y2 = 560 + Math.sin(t2 * 2.4) * 14;
+        var dashG = this.add.graphics();
+        dashG.lineStyle(3, 0xF4ECD8, 0.85);
+        dashG.beginPath();
+        dashG.moveTo(x1, y1);
+        dashG.lineTo(x2, y2);
+        dashG.strokePath();
+        this.camelVoyageContainer.add(dashG);
+      }
+      this.camelVoyageContainer.add(pathG);
+
+      // 6) 商队 = 玩家 avatar + N 骆驼 🐫
+      // 至少 3 头骆驼 (满足出发条件的最小值), 上限 5 (UI 不爆)
+      var camelCount = Math.max(3, Math.min(5, this._luggageCount(-1004)));
+      this.camelVoyageCaravan = [];
+
+      // 玩家 (走最前, 缩 0.6)
+      var avatarG = this._buildAvatarSprite(this._avatar);
+      avatarG.setScale(0.6);
+      var playerSlot = this.add.container(0, 0, [avatarG]);
+      playerSlot.setDepth(35);
+      this.camelVoyageCaravan.push(playerSlot);
+      this.camelVoyageContainer.add(playerSlot);
+
+      // N 头骆驼
+      for (var ci = 0; ci < camelCount; ci++) {
+        var cm = this.add.text(0, 0, '🐫', { fontSize: '44px' }).setOrigin(0.5);
+        // 简化阴影 (椭圆)
+        var cmShadow = this.add.ellipse(0, 22, 36, 6, 0x000000, 0.18);
+        var slot = this.add.container(0, 0, [cmShadow, cm]);
+        slot.setDepth(34 - ci);  // 越后面的骆驼 depth 越低
+        this.camelVoyageCaravan.push(slot);
+        this.camelVoyageContainer.add(slot);
+      }
+
+      // 7) 顶部 + 底部文字
+      this.camelVoyageTopText = this.add.text(640, 56, '🐫 离开伊朗 · 前往土耳其 🇹🇷', {
+        fontSize: '26px', color: '#5A2E0E', fontStyle: 'bold',
+        stroke: '#F4ECD8', strokeThickness: 5,
+      }).setOrigin(0.5);
+      this.camelVoyageSubText = this.add.text(640, 640, '下一站 → 伊斯坦布尔 🏛️', {
+        fontSize: '20px', color: '#5A2E0E', fontStyle: 'italic',
+        stroke: '#F4ECD8', strokeThickness: 4,
+      }).setOrigin(0.5);
+      this.camelVoyageContainer.add([this.camelVoyageTopText, this.camelVoyageSubText]);
+    },
+
+    // M23.13: 骆驼商队 voyage 动画 — 时间驱动 update 循环
+    playCamelVoyage: function () {
+      var self = this;
+      if (this._camelVoyageRunning) return;
+      this._camelVoyageRunning = true;
+      console.log('[M23.13 voyage] playCamelVoyage START');
+
+      // 1) 隐藏所有 UI 元素 (除 voyage 容器本身)
+      this.children.list.forEach(function (c) {
+        if (c !== self.camelVoyageContainer) c.setVisible(false);
+      });
+      // 兜底: 几个关键元素显式隐藏
+      if (this.exitSprite) this.exitSprite.setVisible(false);
+      if (this.playerContainer) this.playerContainer.setVisible(false);
+      if (this.joystickContainer) this.joystickContainer.setVisible(false);
+
+      // 2) 取消 camera fade overlay
+      this.cameras.main.resetFX();
+
+      // 3) 显示 voyage 容器
+      this.camelVoyageContainer.setVisible(true);
+
+      // 4) 状态机字段
+      this.camelVoyageT = 0;
+      this.camelVoyageDuration = 3500;  // ms (3.5s 走完全程)
+      this.camelVoyageDone = false;
+      // 用 wall clock 起点, 跟 qatar M24 修复一致 (headless / 低 FPS 下 delta 不可靠)
+      this._camelVoyageStartTime = (typeof performance !== 'undefined' && performance.now)
+        ? performance.now()
+        : Date.now();
+
+      // 路径参数 (跟 buildCamelVoyageContainer 保持一致)
+      var startX = -120;
+      var endX = 1400;
+      var baseY = 560;
+      var amp = 14;
+      var sinK = 2.4;
+
+      // 5) 时间驱动 update 循环 (M24 模式: 用真实 wall clock dt, 不依赖 Phaser delta)
+      var _yForT = function (t) {
+        return baseY + Math.sin(t * sinK) * amp;
+      };
+
+      self._camelVoyageUpdate = function (time, delta) {
+        if (self.camelVoyageDone) return;
+        var now = (typeof performance !== 'undefined' && performance.now)
+          ? performance.now()
+          : Date.now();
+        var elapsed = now - self._camelVoyageStartTime;
+        // 防御: tab 切回 / FPS 抖动 → elapsed 可能跳大, 限制单帧最大 dt 150ms
+        if (elapsed > self.camelVoyageDuration + 500) elapsed = self.camelVoyageDuration;
+        self.camelVoyageT = Math.min(1.0, elapsed / self.camelVoyageDuration);
+
+        // 商队头位置 (玩家在最前)
+        var caravanX = startX + self.camelVoyageT * (endX - startX);
+        var caravanY = _yForT(self.camelVoyageT);
+
+        // 商队成员: 玩家 (i=0) 在最前, 骆驼依次跟后
+        // stagger 60px 横向间距, 上下小幅错落 (像商队行走)
+        var stagger = 60;
+        for (var i = 0; i < self.camelVoyageCaravan.length; i++) {
+          var slot = self.camelVoyageCaravan[i];
+          slot.x = caravanX - i * stagger;
+          // 后面的骆驼跟前面的骆驼之间有一点相位差, 模拟"踩前面脚印"
+          var phaseOff = -i * 0.05;
+          slot.y = _yForT(self.camelVoyageT + phaseOff) + (i % 2 === 0 ? -1 : 2);
+          // 行走时上下 bobbing (腿动)
+          var bob = Math.sin((now / 90) + i * 0.7) * 1.5;
+          slot.y += bob;
+        }
+
+        // 终点检测
+        if (self.camelVoyageT >= 1.0) {
+          self.camelVoyageDone = true;
+          // 留 300ms 让最后一帧商队离场再跳转
+          self.time.delayedCall(300, function () {
+            console.log('[M23.13 voyage] -> /games/silk-road/level/2');
+            window.playIranSfx('exchange', 0.5);
+            try {
+              window.location.href = '/games/silk-road/level/2';
+            } catch (e) {
+              window.location.reload();
+            }
+          });
+          return;
+        }
+      };
+
+      self.events.on('update', self._camelVoyageUpdate, self);
+    },
+
     showDepartToast: function () {
-      this.showToast('启程条件已满足！前往巴扎尔甘…', 1500);
+      this.showToast('启程条件已满足！前往 🚪 伊朗 → 土耳其 🇹🇷…', 1500);
     },
 
     startExitPulse: function () {
@@ -1663,33 +1874,196 @@
       });
     },
 
-    // ==================== 渴死 ====================
+    // ==================== 渴死 / 复活 ====================
     dieFromThirst: function () {
+      // Bug 2: 跟卡塔尔一样, 渴死时弹复活 modal — 输入秘密 → 复活 10% water
       this.state = 'DEAD';
       this.joystickContainer.setVisible(false);
       this.stopExitPulse();
       window.playIranSfx('die', 0.6);
+      this.showReviveModal();
+    },
 
-      var overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.55);
-      this.add.text(640, 280, '💀', { fontSize: '80px' }).setOrigin(0.5);
-      this.add.text(640, 360, '你渴死在波斯沙漠了', {
-        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      this.add.text(640, 400, '复活 / 重新出发 / 寄信回家（即将推出）', {
-        fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
-      }).setOrigin(0.5);
+    showReviveModal: function () {
+      // Bug 2: HTML <div> modal — 跟卡塔尔一致
+      var modal = this.getOrCreateReviveModal();
+      var sendBtn = modal.querySelector('.btn-send');
+      if (sendBtn) sendBtn.textContent = '复活';
+      modal._scene = this;
+      modal.show();
 
-      var btnBg = this.add.rectangle(640, 480, 220, 56, 0xFFD98A, 1)
-        .setStrokeStyle(2, 0xFFE9B0);
-      this.add.text(640, 480, '重新出发', {
-        fontSize: '18px', color: '#2A1606', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var btnZone = this.add.zone(640, 480, 220, 56).setInteractive({ useHandCursor: true });
+      this.joystickContainer.setVisible(false);
+      this.modalContainer.setVisible(true);
+
       var self = this;
-      btnZone.on('pointerdown', function () {
-        window.playIranSfx('button', 0.4);
-        window.location.reload();
+      this.time.delayedCall(50, function () {
+        var ta = modal.querySelector('textarea');
+        if (ta) ta.focus();
       });
+    },
+
+    getOrCreateReviveModal: function () {
+      var root = document.getElementById('phaser-revive-modal');
+      if (root) return root;
+      // 全屏 fixed 容器
+      root = document.createElement('div');
+      root.id = 'phaser-revive-modal';
+      root.style.cssText = [
+        'position:fixed', 'inset:0',
+        'display:none',
+        'z-index:99999',
+        'align-items:center', 'justify-content:center',
+        'font-family:inherit',
+      ].join(';');
+      // 半透明 backdrop
+      var backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      backdrop.style.cssText = [
+        'position:absolute', 'inset:0',
+        'background:rgba(20,12,6,0.45)',
+      ].join(';');
+      root.appendChild(backdrop);
+      // modal card — 伊朗用波斯蓝
+      var card = document.createElement('div');
+      card.className = 'modal-card';
+      card.style.cssText = [
+        'position:relative',
+        'max-width:500px', 'width:min(500px,calc(100vw - 32px))',
+        'padding:24px',
+        'border-radius:12px',
+        'background:#1B3A5A',
+        'border:2px solid rgba(255,217,138,0.5)',
+        'box-shadow:0 10px 40px rgba(0,0,0,0.6)',
+        'color:#FFD98A',
+      ].join(';');
+      // 标题
+      var h3 = document.createElement('h3');
+      h3.textContent = '告诉我一个小秘密，让你立马复活';
+      h3.style.cssText = [
+        'margin:0 0 14px 0',
+        'font-size:18px', 'font-weight:bold',
+        'color:#FFD98A', 'text-align:center',
+      ].join(';');
+      card.appendChild(h3);
+      // textarea — 真正嵌在 modal card 内
+      var ta = document.createElement('textarea');
+      ta.className = 'modal-textarea';
+      ta.maxLength = 500;
+      ta.placeholder = '说一个秘密…';
+      ta.style.cssText = [
+        'display:block',
+        'width:100%', 'box-sizing:border-box',
+        'min-height:80px', 'max-height:140px',
+        'padding:8px 10px',
+        'border-radius:6px',
+        'border:1px solid #4a5578',
+        'background:#0E2238',
+        'color:#F4ECD8',
+        'font-size:14px',
+        'font-family:inherit',
+        'resize:none',
+        'outline:none',
+      ].join(';');
+      card.appendChild(ta);
+      // 按钮行
+      var btnRow = document.createElement('div');
+      btnRow.className = 'modal-buttons';
+      btnRow.style.cssText = [
+        'display:flex', 'gap:12px', 'justify-content:center',
+        'margin-top:16px',
+      ].join(';');
+      // 发送按钮 (金色)
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'btn-send';
+      sendBtn.type = 'button';
+      sendBtn.style.cssText = [
+        'flex:1', 'max-width:180px',
+        'padding:10px 16px',
+        'border:none', 'border-radius:8px',
+        'background:#D4AF37', 'color:#2A190E',
+        'font-size:14px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(sendBtn);
+      // 放弃按钮 (深色)
+      var giveupBtn = document.createElement('button');
+      giveupBtn.className = 'btn-giveup';
+      giveupBtn.type = 'button';
+      giveupBtn.textContent = '放弃';
+      giveupBtn.style.cssText = [
+        'flex:1', 'max-width:180px',
+        'padding:10px 16px',
+        'border:none', 'border-radius:8px',
+        'background:#0E2238', 'color:#A8D8C0',
+        'border:1px solid #4A5578',
+        'font-size:14px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(giveupBtn);
+      card.appendChild(btnRow);
+      root.appendChild(card);
+      document.body.appendChild(root);
+
+      // show/hide API
+      root.show = function () { root.style.display = 'flex'; ta.value = ''; ta.disabled = false; };
+      root.hide = function () { root.style.display = 'none'; };
+
+      // 按钮点击 → 走 scene.submitSecret / scene.giveUp
+      sendBtn.addEventListener('click', function () {
+        window.playIranSfx('button', 0.4);
+        if (root._scene && typeof root._scene.submitSecret === 'function') {
+          root._scene.submitSecret();
+        }
+      });
+      giveupBtn.addEventListener('click', function () {
+        window.playIranSfx('button', 0.4);
+        if (root._scene && typeof root._scene.giveUp === 'function') {
+          root._scene.giveUp();
+        }
+      });
+
+      return root;
+    },
+
+    hideRevive: function () {
+      this.modalContainer.setVisible(false);
+      var modal = document.getElementById('phaser-revive-modal');
+      if (modal && modal.hide) modal.hide();
+      this.joystickContainer.setVisible(true);
+    },
+
+    submitSecret: async function () {
+      // Bug 2: 输入任意非空文本 → 复活 (water 给 10%)
+      var modal = document.getElementById('phaser-revive-modal');
+      var ta = modal ? modal.querySelector('textarea') : null;
+      var sendBtn = modal ? modal.querySelector('.btn-send') : null;
+      var text = (ta && ta.value ? ta.value : '').trim();
+      if (!text) return;
+      ta.disabled = true;
+      if (sendBtn) sendBtn.disabled = true;
+
+      // 原地复活 — 给 10% water (用第一个水壶)
+      this.hideRevive();
+      if (this.jugs.length > 0) {
+        this.jugs[0].water = Math.floor(this.jugs[0].capacity * 0.1);
+      }
+      this.playerContainer.x = this.player.x;
+      this.playerContainer.y = this.player.y;
+      this._refreshHudCounts();  // 伊朗用 _refreshHudCounts 刷新 HUD
+      this.state = 'PLAYING';
+      // 反馈音 (复活成功的 pickup)
+      window.playIranSfx('pickup', 0.5);
+      this.showToast('✨ 复活！水分恢复到 10%，快去找绿洲 💧', 2000);
+    },
+
+    giveUp: function () {
+      // Bug 2: 放弃 → 直接回到 /silk-road (没有 ResultScene)
+      this.hideRevive();
+      try {
+        window.location.href = '/silk-road';
+      } catch (e) {
+        window.location.reload();
+      }
     },
 
     // ==================== DOM 辅助 (全屏 + 横屏) ====================
