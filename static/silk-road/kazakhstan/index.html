@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#4A7C3F">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="msapplication-tap-highlight" content="no">
+  <title>丝绸之路 · 哈萨克斯坦 🇰🇿 · 草原套马</title>
+  <link rel="stylesheet" href="/static/silk-road/kazakhstan/style.css">
+</head>
+<body>
+
+  <!-- BGM 复用卡塔尔的丝绸之路循环音轨 -->
+  <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
+    <source src="/static/silk-road/qatar/audio/silk-road-bgm.wav" type="audio/wav">
+  </audio>
+  <!-- SFX 通道 -->
+  <audio id="sfx-click"     src="/static/silk-road/qatar/audio/sfx-click.wav"     preload="auto" style="display:none"></audio>
+  <audio id="sfx-button"    src="/static/silk-road/qatar/audio/sfx-button.wav"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-pickup"    src="/static/silk-road/qatar/audio/sfx-pickup.wav"    preload="auto" style="display:none"></audio>
+  <audio id="sfx-exchange"  src="/static/silk-road/qatar/audio/sfx-exchange.wav"  preload="auto" style="display:none"></audio>
+  <audio id="sfx-voyage"    src="/static/silk-road/qatar/audio/sfx-voyage.wav"    preload="auto" style="display:none"></audio>
+
+  <!-- Phaser 容器 -->
+  <div id="game-container"></div>
+
+  <!-- 竖屏提示 overlay -->
+  <div id="orientation-lock" aria-hidden="true">
+    <div class="rotate-icon" aria-hidden="true">📱</div>
+    <div class="rotate-title">请横屏以获得最佳体验</div>
+    <div class="rotate-sub">Rotate your phone to landscape mode</div>
+    <div class="rotate-arrow">↻</div>
+  </div>
+
+  <!-- 全屏按钮 (DOM 兜底) -->
+  <button type="button" id="kazakhstan-fullscreen" aria-label="全屏">
+    全屏
+  </button>
+
+  <!-- Phaser 3.80 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js"></script>
+  <!-- 公共组件 -->
+  <script src="/static/silk-road/common.js"></script>
+  <!-- 关卡配置 -->
+  <script src="/static/silk-road/kazakhstan/levels.js"></script>
+  <!-- 游戏逻辑 -->
+  <script src="/static/silk-road/kazakhstan/game.js"></script>
+
+</body>
+</html>
