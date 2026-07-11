@@ -59,6 +59,9 @@
   {# 关卡数据 → game.js #}
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
 
+  {# 跨关共享代码 (可选, qatar 仍用本地 _buildAvatarSprite, 不强制依赖) #}
+  <script src="{{ url_for('static', filename='silk-road/common.js') }}"></script>
+
   {# Phaser 引擎 —— Boot → Intro → Play → Result → window.location 跳关 #}
   <script src="{{ url_for('static', filename='silk-road/qatar/game.js') }}"></script>
 

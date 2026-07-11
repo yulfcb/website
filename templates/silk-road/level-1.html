@@ -69,6 +69,9 @@
   <script src="{{ url_for('static', filename='silk-road/qatar/levels.js') }}"></script>
   <script src="{{ url_for('static', filename='silk-road/iran/levels.js') }}"></script>
 
+  {# 跨关共享代码 — 必须在 iran/game.js 之前加载 #}
+  <script src="{{ url_for('static', filename='silk-road/common.js') }}"></script>
+
   {# M1: Phaser 引擎 —— Boot → Play (M2 之后会加 ResultScene) #}
   <script src="{{ url_for('static', filename='silk-road/iran/game.js') }}"></script>
 

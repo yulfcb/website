@@ -186,6 +186,7 @@
       this.purchasedItems = {};
       this.fabric = null;
       this.merchantShown = {};  // 每个 location 的"已触发过"标记
+      this.merchantBubbles = {}; // M28: 必须在 create 早期初始化, 否则首次靠近触发 bubble 时 crash
       this.moveCount = 0;
 
       // 水量系统 (M28): 从 100 随行走下降, oasis 补水
@@ -256,73 +257,78 @@
       this._avatar = avatarId;
       var elf = this._buildAvatarSprite(avatarId);
       var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
-      // 骆驼 sprite (hidden by default, shown when camelMode=true)
-      this.camelGfx = this.add.graphics();
-      this._drawCamel(this.camelGfx);
-      this.camelGfx.setVisible(false);
+      // 骆驼 emoji — 默认隐藏, 用 common.createCamelSystem 创建
+      this.camelSystem = window.SilkRoadCommon.createCamelSystem(this, {
+        sfxToggle: function () {
+          window.playTurkeySfx('click', 0.4);
+          window.playTurkeySfx('pickup', 0.3);
+        },
+      });
+      this.camelBackEmoji = this.camelSystem.camelEmoji;
       // 玩家起始位置: 左下角, 不在任何一个 location 上, 避开 joystick
       var startPos = { x: 150, y: 650 };
-      this.playerContainer = this.add.container(startPos.x, startPos.y, [shadow, this.camelGfx, elf]);
-      this.playerSprite = { shadow: shadow, elf: elf, camel: this.camelGfx, avatarId: avatarId };
+      this.playerContainer = this.add.container(startPos.x, startPos.y, [shadow, this.camelBackEmoji, elf]);
+      this.playerSprite = { shadow: shadow, elf: elf, camel: this.camelBackEmoji, avatarId: avatarId };
       this.player = { x: startPos.x, y: startPos.y, facing: 1, lastMoveAt: 0, walkPhase: 0 };
 
-      // —— HUD (顶部条, 7 项, 跟 iran 完全一致) ——
+      // —— HUD (顶部条, 7 项; 5 项核心对齐伊朗关位置, 2 项材料/世界地图为土耳其专属) ——
       var hudBg = this.add.rectangle(640, 36, 1280, 72, 0x2A1606, 0.92);
 
-      // 1. 💧 水分 (左)
-      this.waterText = this.add.text(140, 30, '', {
+      // 1. 💧 水分 (左, x=180, 跟伊朗一致)
+      this.waterText = this.add.text(180, 30, '', {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       this.waterText.setDepth(100);
       this._renderJugHud();
 
-      // 2. 💰 里拉 (中左)
-      this.coinText = this.add.text(260, 30, '💰 0 ₺', {
+      // 2. 💰 里拉 (中左, x=310, 跟伊朗一致)
+      this.coinText = this.add.text(310, 30, '💰 0 ₺', {
         fontSize: '15px', color: '#D4AF37', fontStyle: 'bold',
         stroke: '#2A1606', strokeThickness: 2,
       }).setOrigin(0.5);
 
-      // 3. 🐪 骑乘切换 (中)
-      this.camelBtn = this.add.text(420, 30, '🚶 步行', {
+      // 3. 🐪 骑乘切换 (中, x=520, 跟伊朗一致; 默认步行蓝色, 骑乘中绿色)
+      this.camelBtn = this.add.text(520, 30, '🚶 步行', {
         fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
         backgroundColor: '#1B5E8A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
       this.camelBtn.setInteractive({ useHandCursor: true });
       this.camelBtn.on('pointerdown', function () { self.toggleCamelMode(); });
-      this._updateCamelBtn();
 
-      // 4. 🧳 行李 (中右, clickable)
-      this.luggageBtn = this.add.text(580, 30, '🧳 行李 ' + this._luggageTotalCount(), {
+      // 4. 🧳 行李 (中右, x=770, 跟伊朗一致)
+      this.luggageBtn = this.add.text(770, 30, '🧳 行李 ' + this._luggageTotalCount(), {
         fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
       this.luggageBtn.setInteractive({ useHandCursor: true });
       this.luggageBtn.on('pointerdown', function () { self.openLuggageModal(); });
 
-      // 5. 📦 材料 (右, clickable)
-      this.materialBtn = this.add.text(740, 30, '📦 材料 ' + this._collectedCount() + '/7', {
+      // 5. 📦 材料 (土耳其专属 — 组装清单)
+      this.materialBtn = this.add.text(960, 30, '📦 材料 ' + this._collectedCount() + '/7', {
         fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
         backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
       }).setOrigin(0.5);
       this.materialBtn.setInteractive({ useHandCursor: true });
       this.materialBtn.on('pointerdown', function () { self.openMaterialsModal(); });
 
-      // 6. 🔊 BGM 按钮 (右)
-      this.bgmBtn = this.add.text(1080, 30, '🔊', {
+      // 6. 🔊 BGM 按钮 (右, x=1100, 跟伊朗一致)
+      this.bgmBtn = this.add.text(1100, 30, '🔊', {
         fontSize: '18px', color: '#FFD98A',
       }).setOrigin(0.5);
       this.bgmBtn.setInteractive({ useHandCursor: true });
       this.bgmBtn.on('pointerdown', function () { self._toggleBgm(); });
 
-      // 7. 🗺️ 世界地图按钮 (最右, 点击跳转到世界地图页)
-      this.worldMapBtn = this.add.text(1200, 30, '🗺️ 世界地图', {
-        fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
-        backgroundColor: '#4A2E1A', padding: { x: 8, y: 4 },
+      // 7. 🗺️ 世界地图按钮 (最右, 土耳其专属)
+      this.worldMapBtn = this.add.text(1200, 30, '🗺️', {
+        fontSize: '18px', color: '#F4ECD8',
       }).setOrigin(0.5);
       this.worldMapBtn.setInteractive({ useHandCursor: true });
       this.worldMapBtn.on('pointerdown', function () {
         window.location.href = '/games/silk-road/world-map';
       });
+
+      // 初始化 camel btn 可见性 + 玩家 elf 缩放 (基于 luggage 里有没有骆驼)
+      this._updateCamelBtn();
 
       // —— 虚拟方向键 (复用 qatar 模式, 缩小到 0.6, 左下) ——
       this.keys = { up: false, down: false, left: false, right: false };
@@ -575,8 +581,12 @@
       });
     },
 
-    // ============== 角色 sprite (复用 iran 4 角色 graphics) ==============
+    // ============== 角色 sprite — 委托 common.js ==============
     _buildAvatarSprite: function (avatarId) {
+      return window.SilkRoadCommon.buildAvatarSprite(this, avatarId);
+    },
+    // 旧版 graphics 实现已迁移到 common.js (避免重复 80 行代码)
+    _buildAvatarSpriteLegacy: function (avatarId) {
       var g = this.add.graphics();
       g.setName('avatar:' + avatarId);
       if (avatarId === 'malay') {
@@ -776,60 +786,12 @@
       else if (ratio <= 0.5) this.waterText.setColor('#FFB347');
       else this.waterText.setColor('#FFD98A');
     },
-    // ============== 骆驼骑乘 toggle (跟 iran 一样) ==============
+    // ============== 骆驼骑乘 toggle (跟 iran 一样, 委托给 camelSystem) ==============
     toggleCamelMode: function () {
-      // 简化: 任意时候都可切换 (本地 Game 没有骆驼商人, 默认有骑行能力)
-      this.camelMode = !this.camelMode;
-      this._updateCamelBtn();
-      window.playTurkeySfx('click', 0.4);
-      window.playTurkeySfx('pickup', 0.3);
+      if (this.camelSystem) this.camelSystem.toggleMode();
     },
     _updateCamelBtn: function () {
-      if (!this.camelBtn) return;
-      if (this.camelMode) {
-        this.camelBtn.setText('🐪 骑乘中');
-        this.camelBtn.setStyle({
-          backgroundColor: '#5B8C3A',
-          padding: { x: 10, y: 3 },
-        });
-        if (this.camelGfx) this.camelGfx.setVisible(true);
-        if (this.playerSprite && this.playerSprite.elf) {
-          this.playerSprite.elf.setScale(0.7);
-          this.playerSprite.elf.y = -20;
-        }
-      } else {
-        this.camelBtn.setText('🚶 步行');
-        this.camelBtn.setStyle({
-          backgroundColor: '#1B5E8A',
-          padding: { x: 10, y: 3 },
-        });
-        if (this.camelGfx) this.camelGfx.setVisible(false);
-        if (this.playerSprite && this.playerSprite.elf) {
-          this.playerSprite.elf.setScale(1.0);
-          this.playerSprite.elf.y = 0;
-        }
-      }
-    },
-    // 画一个简单的骆驼 (body + hump + neck + head + 4 legs + eye)
-    _drawCamel: function (g) {
-      g.clear();
-      // Body
-      g.fillStyle(0xC4A265, 1);
-      g.fillRoundedRect(-18, -8, 36, 16, 4);
-      // Hump
-      g.fillCircle(0, -14, 8);
-      // Neck
-      g.fillRect(14, -22, 6, 16);
-      // Head
-      g.fillRoundedRect(14, -28, 12, 8, 3);
-      // Legs (4)
-      g.fillRect(-14, 8, 4, 14);
-      g.fillRect(-6, 8, 4, 14);
-      g.fillRect(6, 8, 4, 14);
-      g.fillRect(14, 8, 4, 14);
-      // Eye
-      g.fillStyle(0x000000, 1);
-      g.fillCircle(22, -26, 2);
+      if (this.camelSystem) this.camelSystem.updateBtn();
     },
     // ============== Modal: 行李 (点击 HUD luggage 打开) ==============
     openLuggageModal: function () {
@@ -1023,11 +985,13 @@
       if (this.state !== 'PLAYING') return;
       var now = Date.now();
       if (now - this.player.lastMoveAt < MOVE_COOLDOWN_MS) return;
+      // 骑骆驼步幅 48, 步行 24 (跟 iran 一致)
+      var step = (this.camelMode && this._luggageCount(-1004) > 0) ? 48 : STEP_PX;
       var dx = 0, dy = 0;
-      if (key === 'up') dy = -STEP_PX;
-      else if (key === 'down') dy = STEP_PX;
-      else if (key === 'left') { dx = -STEP_PX; this.player.facing = -1; }
-      else if (key === 'right') { dx = STEP_PX; this.player.facing = 1; }
+      if (key === 'up') dy = -step;
+      else if (key === 'down') dy = step;
+      else if (key === 'left') { dx = -step; this.player.facing = -1; }
+      else if (key === 'right') { dx = step; this.player.facing = 1; }
       var nx = this.player.x + dx;
       var ny = this.player.y + dy;
       if (nx < 30 || nx > CANVAS_W - 30 || ny < 30 || ny > CANVAS_H - 30) {
@@ -1043,24 +1007,16 @@
         var sx = this.player.facing === -1 ? -1 : 1;
         this.playerContainer.scaleX = sx;
       }
+      // 骆驼 emoji 反向镜像, 配合 playerContainer 双重翻转, 骆驼头始终朝行进方向
+      if (this.camelBackEmoji) {
+        this.camelBackEmoji.scaleX = -1;
+      }
       this.moveCount++;
       this.checkLocationCollision();
     },
     showBoundaryToast: function () {
-      if (!this.boundaryToast) {
-        this.boundaryToast = this.add.text(CANVAS_W / 2, 200, '🚧 撞墙了', {
-          fontSize: '18px', color: '#FFD98A', backgroundColor: '#2A1606',
-          padding: { x: 12, y: 6 },
-        }).setOrigin(0.5).setDepth(1500);
-      }
-      this.boundaryToast.setAlpha(1);
-      if (this._boundaryTween) this._boundaryTween.stop();
-      this._boundaryTween = this.tweens.add({
-        targets: this.boundaryToast,
-        alpha: 0,
-        duration: 600,
-        delay: 400,
-      });
+      // 委托给 common.js (跟伊朗/卡塔尔一致)
+      window.SilkRoadCommon.showBoundaryToast(this, 200);
     },
     checkLocationCollision: function () {
       // (M28) 跟 iran 一样, 走近 (d<60) 显示气泡, 点气泡触发 modal
@@ -1143,14 +1099,15 @@
     // ============== 主循环 ==============
     update: function (time, delta) {
       if (this.state !== 'PLAYING') return;
-      // 玩家走动画
+      // 玩家走动画 — 骑乘时 elf 上移基准 -16 (跟 iran 一致)
+      var rideBaseY = (this.camelMode && this._luggageCount(-1004) > 0) ? -16 : 0;
       if (Date.now() - this.player.lastMoveAt < 200) {
         this.player.walkPhase += 0.2;
         if (this.playerSprite) {
-          this.playerSprite.elf.y = Math.sin(this.player.walkPhase) * 1.5;
+          this.playerSprite.elf.y = rideBaseY + Math.sin(this.player.walkPhase) * 1.5;
         }
       } else if (this.playerSprite) {
-        this.playerSprite.elf.y = 0;
+        this.playerSprite.elf.y = rideBaseY;
       }
       // location bubble 浮动
       for (var i = 0; i < this.locationSprites.length; i++) {
