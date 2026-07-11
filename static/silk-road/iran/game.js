@@ -262,8 +262,11 @@
       this.jugs = [{ capacity: L.JUG_CAPACITY, water: L.JUG_CAPACITY }];
       // 行李: 物品数组 [{id, qty}]
       this.luggage = this._loadLuggage();
-      // M4: 货币余额 (伊朗里亚尔 ﷼)
-      this.coins = 0;
+      // M4: 货币余额 (伊朗里亚尔 ﷼) — 持久化到 localStorage, 跨关卡(伊朗→土耳其)继续使用
+      try {
+        var savedCoins = parseInt(localStorage.getItem('silkroad_iran_coins') || '0', 10);
+        this.coins = isNaN(savedCoins) ? 0 : savedCoins;
+      } catch (e) { this.coins = 0; }
       this.camelMode = false;
       this.currentMerchantId = null;
       this.exitActive = false;
@@ -582,8 +585,11 @@
             if (parsed.length && typeof parsed[0] === 'object' && parsed[0] !== null) {
               for (var i = 0; i < parsed.length; i++) {
                 var e = parsed[i];
+                // Bug 1 fix: 负数 id (伊朗商贩商品 -1000~-1005) 不在 ALL_ITEM_IDS 里, 必须放行
+                //   旧代码 ALL_ITEM_IDS.indexOf(e.id) !== -1 会把负数 id 全部过滤掉
+                //   导致伊朗自己创建的商贩商品被剔除, 跨关卡到土耳其后看不到
                 if (e && typeof e.id === 'number' && typeof e.qty === 'number'
-                    && ALL_ITEM_IDS.indexOf(e.id) !== -1 && e.qty > 0) {
+                    && (e.id < 0 || ALL_ITEM_IDS.indexOf(e.id) !== -1) && e.qty > 0) {
                   arr.push({ id: e.id, qty: Math.floor(e.qty) });
                 }
               }
@@ -591,7 +597,7 @@
               // 旧格式: [0, 1, 3, ...] → 升级
               for (var j = 0; j < parsed.length; j++) {
                 var n = parsed[j];
-                if (typeof n === 'number' && ALL_ITEM_IDS.indexOf(n) !== -1) {
+                if (typeof n === 'number' && (n < 0 || ALL_ITEM_IDS.indexOf(n) !== -1)) {
                   arr.push({ id: n, qty: 1 });
                 }
               }
@@ -1314,6 +1320,8 @@
       }
       this._removeFromLuggage(itemId, 1);
       this.coins += rate;
+      // 持久化伊朗里亚尔余额, 跨关卡(→土耳其兑换中心)继续使用
+      try { localStorage.setItem('silkroad_iran_coins', String(this.coins)); } catch (e) {}
       this._refreshHudCounts();
       window.playIranSfx('exchange', 0.55);
       window.playIranSfx('pickup', 0.3);
@@ -1339,6 +1347,8 @@
       }
       // 1) 扣钱
       this.coins -= m.price;
+      // 持久化伊朗里亚尔余额, 跨关卡(→土耳其兑换中心)继续使用
+      try { localStorage.setItem('silkroad_iran_coins', String(this.coins)); } catch (e) {}
       // 2) 给 1 份商贩卖品 (行李)
       var customId = -1000 - m.id;
       this._addToLuggage(customId, 1);

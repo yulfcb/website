@@ -48,6 +48,27 @@
     7: 500,   // 大力神杯
   };
 
+  // 伊朗商贩商品 (luggage id = -1000 - merchantId) → 名称/emoji/卖价 (用于交易中心列出)
+  var IRAN_ITEMS = {
+    '-1000': { name: '地毯',   emoji: '🧶', price: 50 },
+    '-1001': { name: '藏红花', emoji: '🌿', price: 70 },
+    '-1002': { name: '茶',     emoji: '🫖', price: 30 },
+    '-1003': { name: '陶器',   emoji: '🏺', price: 40 },
+    '-1004': { name: '骆驼',   emoji: '🐫', price: 80 },
+    '-1005': { name: '水壶',   emoji: '🏺', price: 60 },
+  };
+
+  // 玩家角色 → emoji (FlightScene 用)
+  var AVATAR_EMOJIS = {
+    malay: '🧔',
+    fala:  '🧕',
+    cn_m:  '👨',
+    cn_f:  '👩',
+  };
+
+  // 兑换中心汇率: 10 里亚尔 → 1 里拉 (整数倍, 方便 UI)
+  var IRR_TO_TRY_RATE = 10;
+
   // 地图地点 (8 个: 兑换中心 + 交易中心 + 5 个商铺 + 组装场)
   //   兑换中心卖行李换里拉, 交易中心列所有 Qatar + Iran 行李卖里拉
   //   2 个绿洲 oasis 用于补水
@@ -334,6 +355,8 @@
       this.merchantShown = {};  // 每个 location 的"已触发过"标记
       this.merchantBubbles = {}; // M28: 必须在 create 早期初始化, 否则首次靠近触发 bubble 时 crash
       this.moveCount = 0;
+      this._oasisRefilled = false;  // Bug 2 fix: 必须初始化, 否则第一次靠近绿洲不会触发补水
+      this._nearestBubbleKey = null;
 
       // 水量系统 (M28): 从 100 随行走下降, oasis 补水
       this.waterLevel = 100;
@@ -384,6 +407,10 @@
       var avatarId = localStorage.getItem('silkroad_avatar') || 'malay';
       if (['malay', 'fala', 'cn_m', 'cn_f'].indexOf(avatarId) < 0) avatarId = 'malay';
       this._avatar = avatarId;
+      // 写入 registry, FlightScene 读取用于显示玩家角色 emoji
+      this.registry.set('turkey_avatar', avatarId);
+      // Bug 3 fix: 同时写到 localStorage 作为备份, 防止 registry 在 scene 切换时被清空
+      try { localStorage.setItem('turkey_avatar', avatarId); } catch (e) {}
       var elf = this._buildAvatarSprite(avatarId);
       var shadow = this.add.ellipse(0, 22, 22, 6, 0x000000, 0.18);
       // 骆驼 emoji — 默认隐藏, 用 common.createCamelSystem 创建
@@ -1156,7 +1183,7 @@
       window.SilkRoadCommon.showBoundaryToast(this, 200);
     },
     checkLocationCollision: function () {
-      // (M28) 跟 iran 一样, 走近 (d<60) 显示气泡, 点气泡触发 modal
+      // Bug 2 fix: 检测半径 60 → 80 (跟 iran 一致), 玩家更容易"靠近"绿洲/商铺
       var nearest = null;
       var nearestD = Infinity;
       for (var i = 0; i < this.locationSprites.length; i++) {
@@ -1165,11 +1192,11 @@
         var dx = this.player.x - loc.x;
         var dy = this.player.y - loc.y;
         var d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 60) {
+        if (d < 80) {
           if (d < nearestD) { nearestD = d; nearest = loc; }
         }
       }
-      
+
       // Bug 6 fix: 绿洲自动补水（不需要点击）
       if (nearest && (nearest.key === 'oasis1' || nearest.key === 'oasis2')) {
         if (!this._oasisRefilled) {
@@ -1234,11 +1261,11 @@
       }
     },
     tryOpenLocation: function (loc) {
-      // 必须还在 60px 内, 否则不打开
+      // Bug 2 fix: 跟 checkLocationCollision 一致, 80px 内才能打开
       if (this.state !== 'PLAYING') return;
       var dx = this.player.x - loc.x;
       var dy = this.player.y - loc.y;
-      if (Math.sqrt(dx * dx + dy * dy) >= 60) return;
+      if (Math.sqrt(dx * dx + dy * dy) >= 80) return;
       this.triggerLocation(loc);
     },
     triggerLocation: function (loc) {
@@ -1289,7 +1316,7 @@
       }
     },
 
-    // ============== Modal: 兑换中心 ==============
+    // ============== Modal: 兑换中心 (伊朗里亚尔 → 土耳其里拉) ==============
     openExchangeModal: function () {
       var self = this;
       if (this.state === 'MODAL') return;
@@ -1299,120 +1326,118 @@
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
       this.modalContainer.add(backdrop);
 
-      var card = this.add.rectangle(0, 0, 680, 520, 0x2A1606, 1)
+      var card = this.add.rectangle(0, 0, 680, 480, 0x2A1606, 1)
         .setStrokeStyle(2, 0xD4AF37, 0.7);
       this.modalContainer.add(card);
 
-      this.modalContainer.add(this.add.text(0, -220, '💱 兑换中心', {
+      this.modalContainer.add(this.add.text(0, -200, '💱 兑换中心', {
         fontSize: '26px', color: '#D4AF37', fontStyle: 'bold',
       }).setOrigin(0.5));
-      this.modalContainer.add(this.add.text(0, -190, '把行李物品换成土耳其里拉 ₺', {
+      this.modalContainer.add(this.add.text(0, -170, '把伊朗里亚尔 ﷼ 换成土耳其里拉 ₺', {
         fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
       }).setOrigin(0.5));
 
-      this._coinModalText = this.add.text(0, -160, '💰 当前余额：' + this.coins + ' ₺', {
-        fontSize: '16px', color: '#D4AF37', fontStyle: 'bold',
+      // 读取伊朗里亚尔余额 (来自 localStorage, 跨关卡)
+      var iranCoins = 0;
+      try { iranCoins = parseInt(localStorage.getItem('silkroad_iran_coins') || '0', 10) || 0; } catch (e) {}
+      var maxExchangeable = Math.floor(iranCoins / IRR_TO_TRY_RATE);  // 最多能换多少里拉 (按 10 里亚尔=1 里拉)
+
+      this.modalContainer.add(this.add.text(0, -140,
+        '﷼ ' + iranCoins + '  →  💰 ' + this.coins + ' ₺', {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
         stroke: '#2A1606', strokeThickness: 2,
-      }).setOrigin(0.5);
-      this.modalContainer.add(this._coinModalText);
+      }).setOrigin(0.5));
 
-      // 行李 grid
-      var gridY = -80;
-      var cellW = 130, cellH = 100;
-      var cols = 4;
-      var tradeable = [];
-      var heartEntry = null;
-      for (var i = 0; i < this.luggage.length; i++) {
-        var e = this.luggage[i];
-        if (e.id === HEART_ID) { heartEntry = e; continue; }
-        if (e.qty > 0 && EXCHANGE_RATES[e.id] !== undefined) tradeable.push(e);
+      this.modalContainer.add(this.add.text(0, -110,
+        '汇率：' + IRR_TO_TRY_RATE + ' 里亚尔 = 1 里拉', {
+        fontSize: '12px', color: '#C9B89A', fontStyle: 'italic',
+      }).setOrigin(0.5));
+
+      this.modalContainer.add(this.add.text(0, -80,
+        '最多可兑换：' + maxExchangeable + ' ₺', {
+        fontSize: '13px', color: '#A8D8C0', fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+      // 选择兑换数量 (10 / 50 / 100 / 全部)
+      var presets = [10, 50, 100, maxExchangeable].filter(function (n) { return n > 0; });
+      // 去重 (避免 100 和 全部相等时重复)
+      var seen = {};
+      var uniquePresets = [];
+      for (var pi = 0; pi < presets.length; pi++) {
+        if (!seen[presets[pi]]) { seen[presets[pi]] = true; uniquePresets.push(presets[pi]); }
       }
-      var cells = tradeable.slice();
-      if (heartEntry) cells.push(heartEntry);
-
-      if (cells.length === 0) {
-        this.modalContainer.add(this.add.text(0, -50, '（行李箱里没有可兑换的物品）', {
-          fontSize: '13px', color: '#C9B89A', fontStyle: 'italic',
+      // 如果只有一个或没有预设, 直接显示单个按钮
+      if (uniquePresets.length === 0) {
+        this.modalContainer.add(this.add.text(0, 0, '（里亚尔不够 ' + IRR_TO_TRY_RATE + ' ﷼，无法兑换）', {
+          fontSize: '13px', color: '#F6B5C8', fontStyle: 'italic',
         }).setOrigin(0.5));
       } else {
-        var startX = -((Math.min(cols, cells.length) - 1) * cellW) / 2 - cellW / 2;
-        for (var i = 0; i < cells.length; i++) {
-          var e = cells[i];
-          var info = this._getGiftInfo(e.id);
-          var rate = EXCHANGE_RATES[e.id];
-          var isHeart = e.id === HEART_ID;
-          var col = i % cols, row = Math.floor(i / cols);
-          var cx = startX + (col + 1) * cellW;
-          var cy = gridY + row * cellH;
-
-          var cellBg = self.add.rectangle(cx, cy, cellW - 16, cellH - 16,
-            isHeart ? 0xF6B5C8 : 0x4A2E1A, isHeart ? 0.45 : 0.85)
-            .setStrokeStyle(2, isHeart ? 0xF6B5C8 : 0x6B4423, isHeart ? 0.7 : 0.4);
-          this.modalContainer.add(cellBg);
-
-          this.modalContainer.add(this.add.text(cx, cy - 28, info.emoji, { fontSize: '30px' }).setOrigin(0.5));
-          var nm = this.add.text(cx, cy - 4, info.name, {
-            fontSize: '11px', color: '#F4ECD8', fontStyle: 'bold',
-            wordWrap: false,
-          }).setOrigin(0.5);
-          nm.setFixedSize(cellW - 28, 14);
-          this.modalContainer.add(nm);
-          if (isHeart) {
-            this.modalContainer.add(this.add.text(cx, cy + 18, '不可兑换', {
-              fontSize: '11px', color: '#F6B5C8', fontStyle: 'bold',
+        var btnW = 130, btnH = 50, gap = 16;
+        var startX = -((uniquePresets.length - 1) * (btnW + gap)) / 2;
+        for (var bi = 0; bi < uniquePresets.length; bi++) {
+          (function (amount) {
+            var bx = startX + bi * (btnW + gap);
+            var by = -10;
+            var bg = self.add.rectangle(bx, by, btnW, btnH, 0xD4AF37, 1)
+              .setStrokeStyle(2, 0xFFE9B0);
+            self.modalContainer.add(bg);
+            self.modalContainer.add(self.add.text(bx, by - 8, amount + ' ₺', {
+              fontSize: '14px', color: '#2A190E', fontStyle: 'bold',
             }).setOrigin(0.5));
-          } else {
-            this.modalContainer.add(this.add.text(cx, cy + 16, '→ ' + rate + ' ₺', {
-              fontSize: '12px', color: '#D4AF37', fontStyle: 'bold',
+            self.modalContainer.add(self.add.text(bx, by + 10, '(扣 ' + (amount * IRR_TO_TRY_RATE) + ' ﷼)', {
+              fontSize: '9px', color: '#5C3A1E',
             }).setOrigin(0.5));
-            this.modalContainer.add(this.add.text(cx, cy + 32, '×' + e.qty, {
-              fontSize: '11px', color: '#FFD98A',
-            }).setOrigin(0.5));
-          }
-          if (!isHeart) {
-            (function (itemId) {
-              var zone = self.add.zone(cx, cy, cellW - 16, cellH - 16)
-                .setInteractive({ useHandCursor: true });
-              zone.on('pointerdown', function () {
-                window.playTurkeySfx('click', 0.4);
-                self.doExchange(itemId);
-              });
-              self.modalContainer.add(zone);
-            })(e.id);
-          }
+            var zone = self.add.zone(bx, by, btnW, btnH)
+              .setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', function () {
+              window.playTurkeySfx('click', 0.4);
+              self.doExchange(amount);
+            });
+            self.modalContainer.add(zone);
+          })(uniquePresets[bi]);
         }
       }
 
-      this.modalContainer.add(this.add.text(0, 160, '👆 点击物品 → 卖出一件 → 获得里拉', {
+      // 底部说明
+      this.modalContainer.add(this.add.text(0, 60,
+        '点击按钮 → 扣除里亚尔 → 增加里拉', {
         fontSize: '13px', color: '#F4ECD8', fontStyle: 'italic',
       }).setOrigin(0.5));
+      this.modalContainer.add(this.add.text(0, 90,
+        '💡 想卖行李物品?  去 🏪 交易中心', {
+        fontSize: '12px', color: '#FFD98A', fontStyle: 'italic',
+      }).setOrigin(0.5));
 
-      var closeBg = this.add.rectangle(0, 220, 200, 50, 0xD4AF37, 1)
+      var closeBg = this.add.rectangle(0, 200, 200, 50, 0xD4AF37, 1)
         .setStrokeStyle(2, 0xFFE9B0);
       this.modalContainer.add(closeBg);
-      this.modalContainer.add(this.add.text(0, 220, '关闭', {
+      this.modalContainer.add(this.add.text(0, 200, '关闭', {
         fontSize: '16px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5));
-      var closeZone = this.add.zone(0, 220, 200, 50).setInteractive({ useHandCursor: true });
+      var closeZone = this.add.zone(0, 200, 200, 50).setInteractive({ useHandCursor: true });
       closeZone.on('pointerdown', function () { self.closeModal(); });
       this.modalContainer.add(closeZone);
 
       this.modalContainer.setVisible(true);
     },
-    doExchange: function (itemId) {
-      var rate = EXCHANGE_RATES[itemId];
-      if (rate === undefined) return;
-      if (this._luggageCount(itemId) <= 0) {
-        this.showToast('这件物品已卖完', 0xE74C3C);
+    doExchange: function (tryAmount) {
+      // tryAmount: 要兑换多少里拉
+      if (tryAmount <= 0) return;
+      var needIrr = tryAmount * IRR_TO_TRY_RATE;
+      var iranCoins = 0;
+      try { iranCoins = parseInt(localStorage.getItem('silkroad_iran_coins') || '0', 10) || 0; } catch (e) {}
+      if (iranCoins < needIrr) {
+        this.showToast('里亚尔不够! 需要 ' + needIrr + ' ﷼', 0xE74C3C);
         return;
       }
-      this._removeFromLuggage(itemId, 1);
-      this.coins += rate;
+      // 扣减里亚尔 + 增加里拉
+      var newIran = iranCoins - needIrr;
+      try { localStorage.setItem('silkroad_iran_coins', String(newIran)); } catch (e) {}
+      this.coins += tryAmount;
       window.playTurkeySfx('exchange', 0.55);
       window.playTurkeySfx('pickup', 0.3);
-      this.showToast('💰 获得 ' + rate + ' ₺', 0x5FB3A0, 900);
-      if (this._coinModalText) this._coinModalText.setText('💰 当前余额：' + this.coins + ' ₺');
-      // 重新渲染 (刷新网格)
+      this.showToast('💰 兑换成功: -' + needIrr + ' ﷼  +' + tryAmount + ' ₺', 0x5FB3A0, 1100);
+      // 重新渲染 modal 刷新余额
       var self = this;
       setTimeout(function () {
         if (self.state === 'MODAL') { self.state = 'PLAYING'; self.openExchangeModal(); }
@@ -1421,9 +1446,34 @@
     },
 
     // ============== Modal: 交易中心 (列出所有 Qatar+Iran 行李, 卖出换里拉) ==============
+    //   - 卡塔尔礼物 (id 0-7) 用 EXCHANGE_RATES 定价
+    //   - 伊朗商贩商品 (id -1000 - merchantId) 用 IRAN_ITEMS.price 定价
+    //   - HEART (id 5) 不可卖
+    _getItemSellPrice: function (id) {
+      // Bug 1 fix: 防御性类型转换, 兼容数字 id (-1000) 和字符串 id ('-1000')
+      var numId = (typeof id === 'string') ? parseInt(id, 10) : id;
+      var strId = String(numId);
+      if (EXCHANGE_RATES[numId] !== undefined) return EXCHANGE_RATES[numId];
+      var info = IRAN_ITEMS[strId];
+      if (info) return info.price;
+      return null;  // 不可卖
+    },
+    _getItemDisplayInfo: function (id) {
+      // Bug 1 fix: 同样的防御性类型转换
+      var numId = (typeof id === 'string') ? parseInt(id, 10) : id;
+      var strId = String(numId);
+      if (IRAN_ITEMS[strId]) {
+        return { name: IRAN_ITEMS[strId].name, emoji: IRAN_ITEMS[strId].emoji };
+      }
+      return this._getGiftInfo(id);
+    },
     openTradeCenter: function () {
       var self = this;
       if (this.state === 'MODAL') return;
+      // Bug 1 fix debug: 打印 luggage 验证负数 ID 格式
+      try {
+        console.log('[turkey-trade] openTradeCenter luggage:', JSON.stringify(this.luggage));
+      } catch (e) {}
       if (this.luggage.length === 0) {
         this.showToast('行李箱是空的, 先去卡塔尔/伊朗收集礼物 🎁', 0xE74C3C, 1400);
         return;
@@ -1451,16 +1501,17 @@
       }).setOrigin(0.5);
       this.modalContainer.add(this._tradeCoinText);
 
-      // 行李 grid (同 exchange 风格)
+      // 行李 grid: 卡塔尔礼物 + 伊朗商贩商品, 排除 HEART 且 qty>0
       var gridY = -80;
       var cellW = 140, cellH = 110;
       var cols = 4;
-      // 过滤: 可交易的 (排除 HEART 且 qty>0)
       var cells = [];
       for (var i = 0; i < this.luggage.length; i++) {
         var e = this.luggage[i];
         if (e.id === HEART_ID) continue;
-        if (e.qty > 0 && EXCHANGE_RATES[e.id] !== undefined) cells.push(e);
+        if (e.qty <= 0) continue;
+        if (this._getItemSellPrice(e.id) === null) continue;  // 没定价 = 不可卖
+        cells.push(e);
       }
 
       if (cells.length === 0) {
@@ -1471,14 +1522,16 @@
         var startX = -((Math.min(cols, cells.length) - 1) * cellW) / 2 - cellW / 2;
         for (var i = 0; i < cells.length; i++) {
           var e = cells[i];
-          var info = this._getGiftInfo(e.id);
-          var rate = EXCHANGE_RATES[e.id];
+          var info = this._getItemDisplayInfo(e.id);
+          var rate = this._getItemSellPrice(e.id);
+          var isIran = e.id < 0;  // 伊朗商品用不同颜色
           var col = i % cols, row = Math.floor(i / cols);
           var cx = startX + (col + 1) * cellW;
           var cy = gridY + row * cellH;
 
           var cellBg = self.add.rectangle(cx, cy, cellW - 16, cellH - 16,
-            0x4A2E1A, 0.85).setStrokeStyle(2, 0xE67E22, 0.5);
+            isIran ? 0x3A2A4A : 0x4A2E1A, 0.85)
+            .setStrokeStyle(2, isIran ? 0xB98DC9 : 0xE67E22, 0.6);
           this.modalContainer.add(cellBg);
 
           this.modalContainer.add(this.add.text(cx, cy - 32, info.emoji, { fontSize: '32px' }).setOrigin(0.5));
@@ -1489,20 +1542,24 @@
           nm.setFixedSize(cellW - 28, 14);
           this.modalContainer.add(nm);
 
-          this.modalContainer.add(this.add.text(cx, cy + 14, '→ ' + rate + ' ₺ · ×' + e.qty, {
+          // 来源标签 (Qatar / Iran) — 紧贴名字下方
+          this.modalContainer.add(this.add.text(cx, cy + 10, (isIran ? '🇮🇷' : '🇶🇦') + ' ×' + e.qty, {
+            fontSize: '10px', color: '#FFD98A',
+          }).setOrigin(0.5));
+          this.modalContainer.add(this.add.text(cx, cy + 24, '→ ' + rate + ' ₺', {
             fontSize: '11px', color: '#D4AF37', fontStyle: 'bold',
           }).setOrigin(0.5));
 
           // 卖出按钮
-          var btnBg = self.add.rectangle(cx, cy + 36, 70, 22, 0xE67E22, 1)
+          var btnBg = self.add.rectangle(cx, cy + 44, 70, 22, 0xE67E22, 1)
             .setStrokeStyle(2, 0xFFE9B0, 0.6);
           this.modalContainer.add(btnBg);
-          this.modalContainer.add(self.add.text(cx, cy + 36, '卖出', {
+          this.modalContainer.add(self.add.text(cx, cy + 44, '卖出', {
             fontSize: '11px', color: '#2A190E', fontStyle: 'bold',
           }).setOrigin(0.5));
 
           (function (itemId) {
-            var zone = self.add.zone(cx, cy + 36, 70, 22)
+            var zone = self.add.zone(cx, cy + 44, 70, 22)
               .setInteractive({ useHandCursor: true });
             zone.on('pointerdown', function () {
               window.playTurkeySfx('click', 0.4);
@@ -1532,8 +1589,8 @@
       this.modalContainer.setVisible(true);
     },
     doTradeSell: function (itemId) {
-      var rate = EXCHANGE_RATES[itemId];
-      if (rate === undefined) return;
+      var rate = this._getItemSellPrice(itemId);
+      if (rate === null) return;
       if (this._luggageCount(itemId) <= 0) {
         this.showToast('这件物品已卖完', 0xE74C3C);
         return;
@@ -2518,8 +2575,16 @@
       // 火焰 graphics (在 balloonImg 上方)
       var flameGfx = this.add.graphics();
       var flameFrame = 0;
-      // 人物 emoji (在吊篮位置)
-      var personEmoji = this.add.text(0, 0, '🧑', { fontSize: '24px' }).setOrigin(0.5);
+      // 人物像素画角色 (在吊篮位置) — 用玩家选择的角色 (malay/fala/cn_m/cn_f)
+      // Bug 3 fix: 优先用 localStorage 读, registry 读不到时 fallback (registry 在某些情况下会被清空)
+      // FlightScene fix: 用 buildAvatarSprite 像素画, 不用 emoji (跟游戏其余场景一致)
+      var avatarId = null;
+      try { avatarId = localStorage.getItem('turkey_avatar'); } catch (e) {}
+      if (!avatarId) avatarId = this.registry.get('turkey_avatar');
+      if (!avatarId || ['malay', 'fala', 'cn_m', 'cn_f'].indexOf(avatarId) < 0) avatarId = 'malay';
+      console.log('[turkey-flight] avatar:', avatarId);
+      var personAvatar = window.SilkRoadCommon.buildAvatarSprite(self, avatarId);
+      personAvatar.setScale(0.8); // 缩小到 0.8 倍, 坐在吊篮里
       var drawFlightBalloon = function (x, y) {
         balloonImg.setPosition(x, y);
         // 火焰位置: balloonImg 下方 (吊篮上方)
@@ -2533,7 +2598,7 @@
         flameGfx.fillTriangle(flameX - 3, flameY, flameX + 3, flameY, flameX, flameY - 10);
         flameFrame = (flameFrame + 1) % 2;
         // 人物位置: 吊篮中心 (balloonImg 下方)
-        personEmoji.setPosition(x, y + 120);
+        personAvatar.setPosition(x, y + 145);
       };
       // 起始位置: 左下角
       drawFlightBalloon(100, 650);
