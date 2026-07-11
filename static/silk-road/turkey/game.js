@@ -284,6 +284,7 @@
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
     preload: function () {
       this.load.image('balloon_icon', '/static/silk-road/turkey/balloon_icon_sm.jpg');
+      this.load.image('balloon_photo', '/static/silk-road/turkey/balloon_photo.png');
     },
     create: function () {
       var self = this;
@@ -920,6 +921,14 @@
     },
     _updateCamelBtn: function () {
       if (this.camelSystem) this.camelSystem.updateBtn();
+      // Bug fix: 始终显示骑乘切换按钮（即使没有骆驼也显示步行状态）
+      if (this.camelBtn) {
+        this.camelBtn.setVisible(true);
+        if (!this.camelMode) {
+          this.camelBtn.setText('🚶 步行');
+          this.camelBtn.setStyle({ backgroundColor: '#1B5E8A', padding: { x: 10, y: 3 } });
+        }
+      }
     },
     // ============== Modal: 行李 (点击 HUD luggage 打开) ==============
     openLuggageModal: function () {
@@ -1160,6 +1169,22 @@
           if (d < nearestD) { nearestD = d; nearest = loc; }
         }
       }
+      
+      // Bug 6 fix: 绿洲自动补水（不需要点击）
+      if (nearest && (nearest.key === 'oasis1' || nearest.key === 'oasis2')) {
+        if (!this._oasisRefilled) {
+          this._oasisRefilled = true;
+          var oldWater = this.waterLevel;
+          this.waterLevel = Math.min(this.waterLevel + 10, this.maxWater);
+          if (this.waterLevel > oldWater) {
+            this.showToast('💧 自动补水 +10', 0x5FB3A0, 900);
+            this._refreshHud();
+          }
+        }
+      } else {
+        this._oasisRefilled = false;
+      }
+      
       if (nearest && this._nearestBubbleKey !== nearest.key) {
         if (this._nearestBubbleKey && this.merchantBubbles[this._nearestBubbleKey]) {
           this.hideLocationBubble(this._nearestBubbleKey);
@@ -1390,7 +1415,7 @@
       // 重新渲染 (刷新网格)
       var self = this;
       setTimeout(function () {
-        if (self.state === 'MODAL') self.openExchangeModal();
+        if (self.state === 'MODAL') { self.state = 'PLAYING'; self.openExchangeModal(); }
       }, 350);
       this._refreshHud();
     },
@@ -1526,7 +1551,7 @@
       this._refreshHud();
       var self = this;
       setTimeout(function () {
-        if (self.state === 'MODAL') self.openTradeCenter();
+        if (self.state === 'MODAL') { self.state = 'PLAYING'; self.openTradeCenter(); }
       }, 350);
     },
 
@@ -2143,9 +2168,8 @@
       var self = this;
       this.basketCount = 0;
       var centerX = 640, centerY = 380;
-      var bg = this.add.graphics();
-      drawBalloon(bg, centerX, centerY - 50, 0.8, this.fabric, { basket: false });
-      this.contentLayer.add(bg);
+      var balloonImg = this.add.image(centerX, centerY - 50, 'balloon_photo').setScale(0.25);
+      this.contentLayer.add(balloonImg);
 
       var basketY = centerY + 130;
       var basketG = this.add.graphics();
@@ -2214,10 +2238,9 @@
     _renderInflate: function () {
       var self = this;
       var centerX = 640, centerY = 380;
-      var bg = this.add.graphics();
-      drawBalloon(bg, centerX, centerY - 50, 0.4, this.fabric, { basket: true });
-      this._balloonGraphics = bg;
-      this.contentLayer.add(bg);
+      var balloonImg = this.add.image(centerX, centerY - 50, 'balloon_photo').setScale(0.15);
+      this._balloonImg = balloonImg;
+      this.contentLayer.add(balloonImg);
 
       var blowerX = 250, blowerY = 480;
       var blower = this.add.graphics();
@@ -2311,19 +2334,17 @@
     },
 
     _redrawBalloon: function (cx, cy, scale) {
-      var g = this._balloonGraphics;
-      if (!g) return;
-      g.clear();
-      drawBalloon(g, cx, cy - 50, scale, this.fabric, { basket: true });
+      var img = this._balloonImg;
+      if (!img) return;
+      img.setScale(0.15 + (scale - 0.4) * 0.35);
     },
 
     // ---------- 步骤 4: 点火 ----------
     _renderIgnite: function () {
       var self = this;
       var centerX = 640, centerY = 380;
-      var bg = this.add.graphics();
-      drawBalloon(bg, centerX, centerY - 60, 0.9, this.fabric, { basket: true });
-      this.contentLayer.add(bg);
+      var balloonImg = this.add.image(centerX, centerY - 60, 'balloon_photo').setScale(0.3);
+      this.contentLayer.add(balloonImg);
 
       var burnerX = centerX, burnerY = centerY + 20;
       var burner = this.add.graphics();
@@ -2391,20 +2412,19 @@
       if (!g) return;
       g.clear();
       g.fillStyle(0xF39C12, 1);
-      g.fillTriangle(x - 14, y, x + 14, y, x, y - 36);
+      g.fillTriangle(x - 28, y, x + 28, y, x, y - 72);
       g.fillStyle(0xF1C40F, 1);
-      g.fillTriangle(x - 8, y, x + 8, y, x, y - 24);
+      g.fillTriangle(x - 16, y, x + 16, y, x, y - 48);
       g.fillStyle(this._flameFrame === 0 ? 0xFFFFFF : 0x85C1E9, 1);
-      g.fillTriangle(x - 3, y, x + 3, y, x, y - 12);
+      g.fillTriangle(x - 6, y, x + 6, y, x, y - 24);
     },
 
     // ---------- 步骤 5: 出发 ----------
     _renderDepart: function () {
       var self = this;
       var centerX = 640, centerY = 360;
-      var g = this.add.graphics();
-      drawBalloon(g, centerX, centerY - 80, 1.0, this.fabric, { basket: true, flame: true });
-      var balloonContainer = this.add.container(0, 0, [g]);
+      var balloonImg = this.add.image(centerX, centerY - 80, 'balloon_photo').setScale(0.35);
+      var balloonContainer = this.add.container(0, 0, [balloonImg]);
       this.tweens.add({
         targets: balloonContainer,
         y: 6,
@@ -2492,12 +2512,28 @@
       };
       drawGround(0);
 
-      // 热气球 sprite
+      // 热气球 sprite + 火焰 + 人物
       var fabricChoice = this.registry.get('turkey_fabric') || 'nylon';
-      var balloonG = this.add.graphics();
+      var balloonImg = this.add.image(0, 0, 'balloon_photo').setScale(0.3);
+      // 火焰 graphics (在 balloonImg 上方)
+      var flameGfx = this.add.graphics();
+      var flameFrame = 0;
+      // 人物 emoji (在吊篮位置)
+      var personEmoji = this.add.text(0, 0, '🧑', { fontSize: '24px' }).setOrigin(0.5);
       var drawFlightBalloon = function (x, y) {
-        balloonG.clear();
-        drawBalloon(balloonG, x, y, 0.8, fabricChoice, { basket: true, flame: true });
+        balloonImg.setPosition(x, y);
+        // 火焰位置: balloonImg 下方 (吊篮上方)
+        var flameX = x, flameY = y + 80;
+        flameGfx.clear();
+        flameGfx.fillStyle(0xF39C12, 1);
+        flameGfx.fillTriangle(flameX - 12, flameY, flameX + 12, flameY, flameX, flameY - 30 - flameFrame * 4);
+        flameGfx.fillStyle(0xF1C40F, 1);
+        flameGfx.fillTriangle(flameX - 7, flameY, flameX + 7, flameY, flameX, flameY - 20 - flameFrame * 3);
+        flameGfx.fillStyle(flameFrame === 0 ? 0xFFFFFF : 0x85C1E9, 1);
+        flameGfx.fillTriangle(flameX - 3, flameY, flameX + 3, flameY, flameX, flameY - 10);
+        flameFrame = (flameFrame + 1) % 2;
+        // 人物位置: 吊篮中心 (balloonImg 下方)
+        personEmoji.setPosition(x, y + 120);
       };
       // 起始位置: 左下角
       drawFlightBalloon(100, 650);
@@ -2562,10 +2598,34 @@
           self._flightTick = null;
           if (self._flightTitle) self._flightTitle.setText('🇰🇿 抵达哈萨克草原');
           window.playTurkeySfx('voyage', 0.5);
-          setTimeout(function () {
+          
+          // Bug 7 fix: 显示继续按钮，点击后才跳转
+          var btnX = CANVAS_W / 2;
+          var btnY = CANVAS_H / 2;
+          var continueBg = self.add.rectangle(btnX, btnY, 200, 60, 0x5FB3A0, 0.9)
+            .setStrokeStyle(3, 0xFFFFFF, 0.8)
+            .setDepth(1000);
+          var continueText = self.add.text(btnX, btnY, '继续', {
+            fontSize: '28px',
+            color: '#FFFFFF',
+            fontStyle: 'bold',
+          }).setOrigin(0.5).setDepth(1001);
+          
+          var continueZone = self.add.zone(btnX, btnY, 200, 60)
+            .setInteractive({ useHandCursor: true })
+            .setDepth(1002);
+          
+          continueZone.on('pointerdown', function() {
             try { window.location.href = '/games/silk-road/level/3'; }
             catch (e) { window.location.reload(); }
-          }, 500);
+          });
+          
+          continueZone.on('pointerover', function() {
+            continueBg.setFillStyle(0x4A9E8F, 1);
+          });
+          continueZone.on('pointerout', function() {
+            continueBg.setFillStyle(0x5FB3A0, 0.9);
+          });
         }
       }, 16);
     },
