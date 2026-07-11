@@ -8,7 +8,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1a1a1a;
+  background: #0E1B0E;  /* 深草原绿, 跟哈萨克主题匹配, 避免 FIT 模式黑边突兀 */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 

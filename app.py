@@ -1359,6 +1359,12 @@ def silk_road_level(n):
         game_html_path = os.path.join('static', 'silk-road', 'turkey', 'index.html')
         with open(game_html_path, 'r', encoding='utf-8') as f:
             return f.read()
+    # 哈萨克斯坦关使用 Phaser 游戏
+    if n == 3:
+        import os
+        game_html_path = os.path.join('static', 'silk-road', 'kazakhstan', 'index.html')
+        with open(game_html_path, 'r', encoding='utf-8') as f:
+            return f.read()
     
     if n < 0 or n > 5:
         return redirect(url_for('silk_road_mode'))
