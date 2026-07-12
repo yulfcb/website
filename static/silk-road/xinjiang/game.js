@@ -2479,24 +2479,28 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       //   .setDepth(2000);
 
       // v22 Bug #7: 羊皮纸卡片放大适应长信 (700x480 → 920x600, 字号 22→17, y 起点上移到 60)
+      // v25 Bug #2: 进一步放大到 1000x640 + 字号 17→13 + 按钮 y=720, 让 12 段长文 + 6 行规则全部放下
+      //   - 卡片 1000x640 @ (140, 40) → 底部 680; 文字从 y=80 开始; 按钮 y=720 在卡片下方
+      //   - 字号 13 → 593px 内容高度 → 80+593=673 < 680 (卡片底) — 全部装下
+      //   - 按钮 460/820 x=720 y → 居中在卡片下方
       var card = this.add.graphics();
       card.setDepth(2001);
       card.fillStyle(0xFFF8E7, 1);
-      card.fillRoundedRect(180, 60, 920, 600, 20);
+      card.fillRoundedRect(140, 40, 1000, 640, 20);
       card.lineStyle(4, 0x8D6E63, 1);
-      card.strokeRoundedRect(180, 60, 920, 600, 20);
+      card.strokeRoundedRect(140, 40, 1000, 640, 20);
       // 内边框装饰
       card.lineStyle(2, 0xBCAAA4, 1);
-      card.strokeRoundedRect(200, 80, 880, 560, 16);
+      card.strokeRoundedRect(160, 60, 960, 600, 16);
       // 顶部蜡封装饰
       card.fillStyle(0xC62828, 1);
-      card.fillCircle(640, 60, 26);
+      card.fillCircle(640, 40, 26);
       card.fillStyle(0x8D2424, 1);
-      card.fillCircle(640, 60, 18);
+      card.fillCircle(640, 40, 18);
 
       // v23 Bug #1: 信件宽度自适应 — wordWrap 跟随 canvas 实际宽度 (PC/mobile 横屏)
-      // 卡片 920 宽, 内边距 40+40, 留 20 给边框 → 最大 820; 窄屏按比例缩小
-      var letterMaxWidth = Math.min(820, (this.scale.width || 1280) - 360);
+      // v25 Bug #2: 卡片 1000 宽, 内边距 40+40, 留 20 给边框 → 最大 880; 窄屏按比例缩小
+      var letterMaxWidth = Math.min(880, (this.scale.width || 1280) - 280);
       // v23 Bug #1: 按 \n\n 分段渲染, 每段独立 wordWrap — 避免长段被切到怪位置
       var letterParagraphs = [
         'hello，18岁生日快乐！',
@@ -2512,21 +2516,50 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         '5. 聊天有始有终，不能主动单方面结束',
         '6. 矛盾不过夜',
       ];
-      // 把段落用空行拼成 letterContent (保留 \n\n 分隔, 让 Phaser text 渲染每段独立行间距)
-      var letterContent = letterParagraphs.join('\n\n');
-      var letterText = this.add.text(640, 110, letterContent,
+      // v25 Bug #2: Phaser 3 wordWrap 对中文 (无空格) 不换行 — textWidth 会溢出 1280+
+      //   解决方案: 手动按字符宽度估算换行, 插入 \n 让 Phaser 直接渲染
+      //   13px 字号 + Georgia: 中文 ~13px/字符, ASCII ~7px/字符, 标点 ~7px/字符
+      var wrapParagraph = function (text, maxWidth) {
+        var charW = 13;        // 中文/汉字宽度
+        var asciiW = 7;        // ASCII 字符宽度
+        var maxChars = Math.floor(maxWidth / asciiW);  // 用 ASCII 宽度作保守估算
+        var lines = [];
+        var current = '';
+        var currentW = 0;
+        for (var i = 0; i < text.length; i++) {
+          var ch = text[i];
+          var w = (ch.charCodeAt(0) > 127) ? charW : asciiW;
+          if (currentW + w > maxWidth) {
+            lines.push(current);
+            current = ch;
+            currentW = w;
+          } else {
+            current += ch;
+            currentW += w;
+          }
+        }
+        if (current) lines.push(current);
+        return lines.join('\n');
+      };
+      // 每段独立换行, 段间保留 \n\n 分隔
+      var wrappedParagraphs = letterParagraphs.map(function (p) { return wrapParagraph(p, letterMaxWidth); });
+      var letterContent = wrappedParagraphs.join('\n\n');
+      var letterText = this.add.text(640, 80, letterContent,
         {
-          fontSize: '17px', color: '#3E2723',
+          fontSize: '13px', color: '#3E2723',
           fontFamily: 'Georgia, serif',
-          align: 'left', lineSpacing: 5,
+          align: 'left', lineSpacing: 4,
+          // v25 Bug #2: wordWrap 保留 (字体回退用), 但主要换行靠手动 \n
           wordWrap: { width: letterMaxWidth },
         }).setOrigin(0.5, 0).setDepth(2002);
       // v23 Bug #1: 暴露 letterMaxWidth 给 e2e 验证
       this._letterMaxWidth = letterMaxWidth;
 
       // v22 Bug #7: 按钮下移 (card 放大到 920x600 后, btnY 530 → 680, x 调整到 460/820)
-      var btnW = 240, btnH = 52;
-      var btnY = 690;
+      // v25 Bug #2: 卡片放大到 1000x640 后, btnY → 696, btnH → 44 (卡片底部 680 + 16 padding)
+      //   - 按钮中心 696, 高度 44 → 上下 674~718, 完整在 canvas 720 内
+      var btnW = 240, btnH = 44;
+      var btnY = 696;
       // A. 我会好好想想 (绿)
       var btnAGlow = this.add.rectangle(460, btnY, btnW + 12, btnH + 12, 0x66BB6A, 0.4)
         .setDepth(2001);
