@@ -2501,6 +2501,28 @@
 
       winContainer.add([backdrop, card, titleText, quoteText, rewardText, rewardLabel, nextBg, nextBtnTxt, nextZone]);
 
+      // v25.3 Bug #3: 飞书通知提前到通关 modal 显示时 (不等用户点按钮)
+      // 用 _turkeyRewardClaimed flag 保证幂等 (避免用户点按钮时重复发)
+      if (!self._turkeyRewardClaimed) {
+        self._turkeyRewardClaimed = true;
+        try {
+          setTimeout(function () {
+            try {
+              fetch('/api/game/reward/claim', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  level: 2,
+                  amount: 125,
+                  session_id: (window.SILK_ROAD_SESSION_ID || ''),
+                  nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+                }),
+              }).catch(function() {});
+            } catch (e) {}
+          }, 100);
+        } catch (e) {}
+      }
+
       var claimAndDepart = function () {
         window.playTurkeySfx('voyage', 0.6);
         // 通关: 写入 cleared_levels
@@ -2510,19 +2532,6 @@
             cleared.push(2);
             localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
           }
-        } catch (e) {}
-        // v22 Bug #4: 飞书通知 (跟 qatar/iran/kazakhstan/xinjiang 一致, 之前缺这一步)
-        try {
-          fetch('/api/game/reward/claim', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              level: 2,
-              amount: 125,
-              session_id: (window.SILK_ROAD_SESSION_ID || ''),
-              nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
-            }),
-          }).catch(function() {});
         } catch (e) {}
         // 清理 DOM 兜底按钮
         var oldBtn = document.getElementById('turkey-win-next-btn');

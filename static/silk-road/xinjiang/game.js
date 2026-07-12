@@ -1880,6 +1880,27 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
 
       winContainer.add([backdrop, card, titleText, quoteText, rewardText, rewardLabel, nextBg, nextBtnTxt, nextZone]);
 
+      // v25.3 Bug #3: 飞书通知提前到通关 modal 显示时 (不等用户点按钮)
+      if (!self._xjRewardClaimed) {
+        self._xjRewardClaimed = true;
+        try {
+          setTimeout(function () {
+            try {
+              fetch('/api/game/reward/claim', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  level: 4,
+                  amount: 81,
+                  session_id: (window.SILK_ROAD_SESSION_ID || ''),
+                  nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+                }),
+              }).catch(function() {});
+            } catch (e) {}
+          }, 100);
+        } catch (e) {}
+      }
+
       var openEgg = function () {
         try { window.playXinjiangSfx('voyage', 0.6); } catch (e) {}
         // 清理 DOM 兜底按钮
@@ -1887,19 +1908,6 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         if (oldBtn) oldBtn.remove();
         // v18.2: 销毁通关 modal, 让小木屋画面成为唯一视觉
         winContainer.destroy();
-        // v19 Bug #1: 飞书通知 (通关新疆 +¥81)
-        try {
-          fetch('/api/game/reward/claim', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              level: 4,
-              amount: 81,
-              session_id: (window.SILK_ROAD_SESSION_ID || ''),
-              nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
-            }),
-          }).catch(function() {});
-        } catch (e) {}
         self._triggerEasterEgg();
       };
 
