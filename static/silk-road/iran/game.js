@@ -70,14 +70,7 @@
     cn_f:  '👩',
   };
 
-  // ============== BGM 持久化状态 (M3) ==============
-  // 首次进入页面, 听用户选择是否静音 (默认 false, 但浏览器 autoplay policy 仍要求一次 pointerdown)
-  function getBgmMuted() {
-    try { return localStorage.getItem('silkroad_bgm_muted') === '1'; } catch (e) { return false; }
-  }
-  function setBgmMuted(v) {
-    try { localStorage.setItem('silkroad_bgm_muted', v ? '1' : '0'); } catch (e) {}
-  }
+  // v11: BGM 删除, getBgmMuted/setBgmMuted 也删掉 (没人调用了)
 
   // ============== BootScene ==============
   var BootScene = new Phaser.Class({
@@ -95,29 +88,7 @@
         fontSize: '26px', color: '#FFD98A', fontStyle: 'bold', align: 'center',
       }).setOrigin(0.5);
 
-      // BGM 初始化 (复用 #silk-road-bgm 元素)
-      // 记住用户上次的静音选择, 但首次仍需一次 pointerdown 才能真正播放
-      var bgm = document.getElementById('silk-road-bgm');
-      var initBgm = function () {
-        if (!bgm) return;
-        var muted = getBgmMuted();
-        bgm.muted = muted;
-        if (!muted) {
-          bgm.volume = 0.35;
-          var p = bgm.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-        }
-      };
-      var unlock = function unlockBgm() {
-        initBgm();
-        document.removeEventListener('pointerdown', unlock);
-      };
-      document.addEventListener('pointerdown', unlock, { once: true });
-      // 立即尝试一次 (若浏览器 autoplay 政策允许, 立即静音/播放)
-      initBgm();
-      window.addEventListener('beforeunload', function () {
-        if (bgm) bgm.pause();
-      });
+      // v11: BGM 删除, BGM 初始化逻辑也删掉
 
       // 短暂延迟 → PlayScene
       this.time.delayedCall(30, function () {
@@ -309,14 +280,7 @@
       this.luggageBtn.setInteractive({ useHandCursor: true });
       this.luggageBtn.on('pointerdown', function () { self.openLuggageModal(); });
 
-      // 5. 🔊 BGM 按钮 (右)
-      var bgmMuted = getBgmMuted();
-      this.bgmBtn = this.add.text(1080, 30, bgmMuted ? '🔇' : '🔊', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-        backgroundColor: '#4A2E1A', padding: { x: 8, y: 2 },
-      }).setOrigin(0.5);
-      this.bgmBtn.setInteractive({ useHandCursor: true });
-      this.bgmBtn.on('pointerdown', function () { self.toggleBgm(); });
+      // v11: BGM 删除, BGM 按钮也删掉
 
       // 任务提示
       this.add.text(640, 80, '🎯 去交易中心换里亚尔 → 购买骆驼、灌水壶 → 凑齐3骆驼+水分>20 → 🚪 伊朗 → 土耳其 🇹🇷', {
@@ -1809,22 +1773,7 @@
     },
 
     // ==================== M3: BGM 切换按钮 ====================
-    toggleBgm: function () {
-      var bgm = document.getElementById('silk-road-bgm');
-      if (!bgm) return;
-      var next = !bgm.muted;
-      bgm.muted = next;
-      setBgmMuted(next);
-      if (this.bgmBtn) this.bgmBtn.setText(next ? '🔇' : '🔊');
-      window.playIranSfx('click', 0.4);
-      if (!next) {
-        // 解除静音时尝试播放 (autoplay policy)
-        try {
-          var p = bgm.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-        } catch (e) {}
-      }
-    },
+    // v11: BGM 删除, toggleBgm 函数也删掉
 
     // ==================== 通用 toast ====================
     showToast: function (msg, durationMs) {

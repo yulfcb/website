@@ -75,22 +75,7 @@
 
       // M14 Bug B: BGM 解锁 + 卸载清理
       // 浏览器 autoplay policy: audio 必须等用户首次手势后才能 unmute + play.
-      // 用 once: true 自动解绑, 不污染后续事件.
-      document.addEventListener('pointerdown', function unlockBgm() {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) {
-          a.muted = false;
-          a.volume = 0.4;
-          var p = a.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-        }
-      }, { once: true });
-      // 关掉页面时也暂停 BGM, 避免后台 tab 继续跑音频
-      window.addEventListener('beforeunload', function () {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) a.pause();
-      });
-
+      // v11: BGM 删除, pointerdown 解锁 BGM 逻辑也删掉
       // M15 Bug B: 预取 countries-110m.json + topojson 解码 (后台进行,
       // ResultScene.buildVoyageContainer 读取 window.__qatarCountriesGeo).
       // 玩家至少玩几分钟才会触发 voyage, 给 fetch 充分时间.
@@ -165,9 +150,8 @@
 
       // 关卡任务说明 - 在 NPC banner 与 avatar picker 之间
       // M9.1: 不做 narrative card 改做一行显眼的小卡
-      // M12 Bug 3: 「礼物」→「物品」; 任务描述改为「收集 8 件物品 → 去 Doha Port 兑换船票」
-      // M15 Part 2: 6 → 8 (加 Ras Laffan 天然气 + NMoQ 沙漠玫瑰).
-      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集 8 件物品，然后去 Doha Port 用物品兑换船票，准备出发 🚢', {
+      // v11: 任务描述改"收集物品" (无具体数字)
+      this.add.text(640, 485, '🎯 任务：在卡塔尔沙海徒步收集物品，然后去 Doha Port 用物品兑换船票，准备出发 🚢', {
         fontSize: '16px', color: '#F4ECD8', fontStyle: 'italic', wordWrap: { width: 1000 },
       }).setOrigin(0.5);
 
@@ -341,12 +325,16 @@
       this.waterText = this.add.text(140, 30, '💧 水分 ' + this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0, 0.5);
-      this.pickupText = this.add.text(640, 30, '🎁 拾起 ' + this.pickupCount + ' / 8', {
+      // v11: 删掉 pickupText (玩家不需要显示拾起多少件)
+      this.luggageText = this.add.text(1100, 30, '🧳 行李 ' + this.luggageCount, {
         fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
-      this.luggageText = this.add.text(1100, 30, '🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX, {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
+      // v11: 行李按钮可点击, 弹出 modal 查看已装入物品
+      this.luggageText.setInteractive({ useHandCursor: true });
+      this.luggageText.on('pointerdown', function () {
+        window.playQatarSfx('click', 0.4);
+        self.openLuggageModal();
+      });
       // M11: 行李总价 HUD —— 跟 luggage 文字并排, 显示已装进行李的礼物总价
       this.priceText = this.add.text(1100, 56, '💰 ¥0', {
         fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
@@ -411,28 +399,7 @@
       // M18 Bug 4: 取消暂停按钮 —— 不再有暂停键和暂停图标
       // (BGM 开关按钮移到 (60, 100))
 
-      // M14 Bug B: BGM 开关按钮 (左上, 暂停位置)
-      var bgmAudio = document.getElementById('silk-road-bgm');
-      var audioBg = this.add.circle(110, 100, 24, 0x4A2E1A, 0.92)
-        .setStrokeStyle(2, 0x5fb3a0, 0.6);
-      this.audioBtnText = this.add.text(110, 100, '🔊', { fontSize: '20px' }).setOrigin(0.5);
-      var audioZone = this.add.zone(110, 100, 48, 48).setInteractive({ useHandCursor: true });
-      audioZone.on('pointerdown', function () {
-        if (!bgmAudio) return;
-        window.playQatarSfx('button', 0.4);  // M17: BGM toggle button blip
-        if (bgmAudio.paused) {
-          // 取消静音 + 播放
-          bgmAudio.muted = false;
-          var p = bgmAudio.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-          self.audioBtnText.setText('🔊');
-        } else {
-          bgmAudio.pause();
-          self.audioBtnText.setText('🔇');
-        }
-      });
-      this.audioContainer = this.add.container(0, 0, [audioBg, this.audioBtnText, audioZone]);
-
+      // v11: BGM 删除, BGM 按钮也删掉 (避免点了无反应的 UI)
       // —— Modal 容器（礼物 modal / 老商人 popup / 复活 modal 共用）——
       // M9.5b: modalContainer 移到 (640, 240) (中上), 不挡 dpad 区域 (左下 620)
       // backdrop alpha 从 0.78 降到 0.45 — 玩家能透过看到自己 + 场景
@@ -659,6 +626,78 @@
       }
     },
 
+    // v11: 行李 modal — 单击行李按钮后弹, 显示已装入的物品
+    openLuggageModal: function () {
+      var self = this;
+      this.modalContainer.removeAll(true);
+
+      // 背景遮罩
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);
+      this.modalContainer.add(backdrop);
+
+      // 卡片
+      var cardH = Math.min(420, 80 + this._selectedGiftIds.length * 60);
+      var card = this.add.rectangle(0, 0, 520, cardH, 0x4A2E1A, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      // 标题
+      this.modalContainer.add(this.add.text(0, -cardH / 2 + 32, '🧳 行李 (' + this._selectedGiftIds.length + ' 件)', {
+        fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+      // 列出已装入的物品
+      var gifts = L.gifts;
+      var giftMap = {};
+      for (var i = 0; i < gifts.length; i++) giftMap[gifts[i].id] = gifts[i];
+
+      var startY = -cardH / 2 + 80;
+      if (this._selectedGiftIds.length === 0) {
+        this.modalContainer.add(this.add.text(0, startY, '（还没有装进任何物品）', {
+          fontSize: '16px', color: '#A8D8C0', fontStyle: 'italic',
+        }).setOrigin(0.5));
+      } else {
+        for (var j = 0; j < this._selectedGiftIds.length; j++) {
+          var g = giftMap[this._selectedGiftIds[j]];
+          if (!g) continue;
+          var rowY = startY + j * 50;
+          // emoji
+          this.modalContainer.add(this.add.text(-200, rowY, g.emoji, {
+            fontSize: '28px',
+          }).setOrigin(0, 0.5));
+          // 名称 + 价格
+          this.modalContainer.add(this.add.text(-160, rowY, g.name + '  ·  ¥' + (g.price || 0), {
+            fontSize: '15px', color: '#F4ECD8',
+          }).setOrigin(0, 0.5));
+        }
+        // 总价
+        this.modalContainer.add(this.add.text(0, cardH / 2 - 30, '💰 总价 ¥' + this.totalLuggagePrice(), {
+          fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5));
+      }
+
+      // 关闭按钮 (右上角 X)
+      var closeBtn = this.add.circle(220, -cardH / 2 + 30, 18, 0xC62828, 1)
+        .setInteractive({ useHandCursor: true });
+      this.modalContainer.add(closeBtn);
+      this.modalContainer.add(this.add.text(220, -cardH / 2 + 30, '✕', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5));
+      var closeLuggage = function () {
+        window.playQatarSfx('click', 0.3);
+        self.modalContainer.removeAll(true);
+        self.modalContainer.setVisible(false);
+        self.state = 'PLAYING';
+      };
+      closeBtn.on('pointerdown', closeLuggage);
+      // 点背景也能关闭
+      backdrop.setInteractive({ useHandCursor: false });
+      backdrop.on('pointerdown', closeLuggage);
+
+      this.modalContainer.setVisible(true);
+      this.state = 'PLAYING';  // 不锁定状态 (LUGGAGE_MAX 取消后, 玩家可继续走路)
+    },
+
     // ==================== 礼物 modal ====================
     openGiftModal: function (g) {
       var self = this;
@@ -686,7 +725,8 @@
         fontSize: '13px', color: '#FFE9B0', wordWrap: { width: 400 },
       }).setOrigin(0.5));
 
-      var isFull = this.luggageCount >= L.LUGGAGE_MAX;
+      // v11: LUGGAGE_MAX 取消, 行李不再有上限, isFull 永远 false
+      var isFull = false;
       var makeModalBtn = function (txt, subTxt, dy, isPrimary, callback) {
         var color = isPrimary ? 0xFFD98A : 0x6B4423;
         var textColor = isPrimary ? '#2A190E' : '#F4ECD8';
@@ -706,13 +746,9 @@
         return [bg, label, subT, zone];
       };
 
-      // M16 Bug 5: 行李满时不再禁用装进按钮, 改为允许点 → 弹替换 modal
-      var bucketTxt = isFull
-        ? '🔁 替换行李 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')'
-        : '🧳 装进 (' + this.luggageCount + '/' + L.LUGGAGE_MAX + ')';
-      var bucketSub = isFull
-        ? '选一个丢弃, 把这件装进去'
-        : '占 1 行李位 (用于兑换船票)';
+      // v11: 行李不再有上限, 装进按钮直接显示, 不再有"替换"分支
+      var bucketTxt = '🧳 装进 (' + this.luggageCount + ')';
+      var bucketSub = '不限数量, 总价用于兑换船票';
       var bucket = makeModalBtn(bucketTxt, bucketSub, 30, true, function () { self.decideGift('bucket'); });
       var stay = makeModalBtn('⏳ 留后', '留到后面 (不占位)', 100, false, function () { self.decideGift('stay'); });
       var drop = makeModalBtn('❌ 放弃', '这条路不带', 170, false, function () { self.decideGift('drop'); });
@@ -733,7 +769,7 @@
       this.currentGiftId = null;
       this.state = 'PLAYING';
       this.pickupCount++;
-      this.pickupText.setText('🎁 拾起 ' + this.pickupCount + ' / 8');
+      // v11: 删掉 pickupText.setText (不再显示拾取件数)
 
       if (!this.npcShownPickup3 && this.pickupCount >= 3) {
         this.npcShownPickup3 = true;
@@ -770,7 +806,7 @@
         fontSize: '22px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
       // M12 Bug 3 + Bug 4 + M18 Bug 7: 「去 Doha Port 用物品兑换船票」改"去 Doha Port 用物品兑换船票，准备出发"
-      this.modalContainer.add(this.add.text(0, -15, '去 Doha Port ⚓ 用物品兑换船票，准备出发\n装进行李 ' + this.luggageCount + '/' + L.LUGGAGE_MAX + '  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
+      this.modalContainer.add(this.add.text(0, -15, '去 Doha Port ⚓ 用物品兑换船票，准备出发\n装进行李 ' + this.luggageCount + ' 件  ·  总价 ¥' + this.totalLuggagePrice() + ' / ¥' + L.PORT_TICKET_PRICE_THRESHOLD, {
         fontSize: '13px', color: '#A8D8C0', align: 'center', wordWrap: { width: 380 },
       }).setOrigin(0.5));
 
@@ -799,7 +835,9 @@
     decideGift: function (choice) {
       if (this.currentGiftId === null) return;
       // M16 Bug 5: 行李满时点"装进/替换" → 弹替换 modal 让玩家选要替换哪个
-      if (choice === 'bucket' && this.luggageCount >= L.LUGGAGE_MAX) {
+      // v11: LUGGAGE_MAX 取消, 行李永远装得下, 这段是之前的"行李满时禁用装进"逻辑, 已不需要
+      // (M16 Bug 5 时改成点替换 modal, v11 直接无上限, 这段保留无害)
+      if (false && choice === 'bucket' && this.luggageCount >= L.LUGGAGE_MAX) {
         // 关闭当前 gift modal (但保留 currentGiftId 供 _showReplaceModal 用)
         var newGiftId = this.currentGiftId;
         this.modalContainer.setVisible(false);
@@ -809,7 +847,7 @@
       this.giftBuckets[this.currentGiftId] = choice;
       if (choice === 'bucket') {
         this.luggageCount++;
-        this.luggageText.setText('🧳 行李 ' + this.luggageCount + ' / ' + L.LUGGAGE_MAX);
+        this.luggageText.setText('🧳 行李 ' + this.luggageCount);
       }
       // M11: 行李总价 HUD 实时更新 (bucket/drop 都影响)
       this._updatePriceHud();
@@ -885,7 +923,7 @@
             self.giftBuckets[newGiftId] = 'bucket';
             // 3) 重算总价 (丢弃的 gift price 减掉, 新 gift price 加上)
             self._updatePriceHud();
-            self.luggageText.setText('🧳 行李 ' + self.luggageCount + ' / ' + L.LUGGAGE_MAX);
+            self.luggageText.setText('🧳 行李 ' + self.luggageCount);
             window.playQatarSfx('button', 0.4);  // M17: replace modal 丢弃按钮 blip
             // 4) 关闭 modal + 走正常 closeGiftModal 流程 (更新 HUD/状态)
             self.modalContainer.setVisible(false);
@@ -2262,25 +2300,8 @@ ResultScene.prototype.playVoyageAnimation = function (nextUrl, hasHomeHeart) {
   // M17: voyage 出发 whoosh + chime (BGM 淡出前先播, 避免淡到 0 听不到)
   window.playQatarSfx('voyage', 0.6);
 
-  // M14 Bug B: voyage 期间 BGM 淡出 (避免关 1 也继承播放, 但 reset 场景时 BGM 不停)
-  var bgmAudio = document.getElementById('silk-road-bgm');
-  if (bgmAudio && !bgmAudio.paused && hasHomeHeart) {
-    var startVol = bgmAudio.volume;
-    self.tweens.add({
-      targets: { v: startVol },
-      v: 0,
-      duration: 1800,
-      ease: 'Linear',
-      onUpdate: function (tween) {
-        bgmAudio.volume = tween.getValue();
-      },
-      onComplete: function () {
-        bgmAudio.pause();
-        bgmAudio.volume = startVol;
-      },
-    });
-  }
-  // M18 Bug 3: 没归家之心 → BGM 不暂停, 保持当前播放
+  // v11: BGM 删除, voyage 淡出逻辑也删掉
+  // M18 Bug 3: 没归家之心 → 保持当前播放 (BGM 不存在, 无需处理)
 
   // M23.10: force refresh - 某些 viewport 缩放下 Phaser 渲染管线需要重置可见性
   this.voyageContainer.setVisible(false);

@@ -372,17 +372,7 @@
         fontSize: '26px', color: '#1565C0', fontStyle: 'bold', align: 'center',
       }).setOrigin(0.5);
 
-      // BGM 初始化
-      var bgm = document.getElementById('silk-road-bgm');
-      if (bgm) {
-        var muted = localStorage.getItem('silkroad_bgm_muted') === '1';
-        bgm.muted = muted;
-        if (!muted) {
-          var tryPlay = function () { bgm.play().catch(function () {}); };
-          this.input.once('pointerdown', tryPlay);
-          setTimeout(tryPlay, 500);
-        }
-      }
+      // v11: BGM 删除, BGM 初始化逻辑也删掉
 
       this.time.delayedCall(800, function () {
         try { self.scene.start('SlidingScene'); }

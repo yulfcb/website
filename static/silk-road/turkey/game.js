@@ -311,20 +311,7 @@
       var self = this;
       this.cameras.main.setBackgroundColor('#FFD9A8');
 
-      // BGM 解锁 + 卸载清理 (跟 qatar 一致)
-      document.addEventListener('pointerdown', function unlockBgm() {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) {
-          a.muted = false;
-          a.volume = 0.4;
-          var p = a.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-        }
-      }, { once: true });
-      window.addEventListener('beforeunload', function () {
-        var a = document.getElementById('silk-road-bgm');
-        if (a) a.pause();
-      });
+      // v11: BGM 删除, 解锁 + 卸载清理逻辑也删掉
 
       this.add.text(640, 360, '加载中…', {
         fontSize: '24px', color: '#FFD98A', fontStyle: 'bold',
@@ -467,13 +454,7 @@
       this.materialBtn.setInteractive({ useHandCursor: true });
       this.materialBtn.on('pointerdown', function () { self.openMaterialsModal(); });
 
-      // 6. 🔊 BGM 按钮 (右, x=1100, 跟伊朗一致)
-      this.bgmBtn = this.add.text(1100, 30, '🔊', {
-        fontSize: '18px', color: '#FFD98A',
-      }).setOrigin(0.5);
-      this.bgmBtn.setInteractive({ useHandCursor: true });
-      this.bgmBtn.on('pointerdown', function () { self._toggleBgm(); });
-
+      // v11: BGM 删除, BGM 按钮也删掉
       // 7. 🗺️ 世界地图按钮 (最右, 土耳其专属)
       this.worldMapBtn = this.add.text(1200, 30, '🗺️', {
         fontSize: '18px', color: '#F4ECD8',
@@ -561,23 +542,7 @@
       this.checkLocationCollision();
     },
 
-    // ============== BGM 切换按钮 ==============
-    _toggleBgm: function () {
-      var bgm = document.getElementById('silk-road-bgm');
-      if (!bgm) return;
-      window.playTurkeySfx('button', 0.4);
-      if (bgm.paused) {
-        bgm.muted = false;
-        try {
-          var p = bgm.play();
-          if (p && typeof p.catch === 'function') p.catch(function () {});
-        } catch (e) {}
-        if (this.bgmBtn) this.bgmBtn.setText('🔊');
-      } else {
-        bgm.pause();
-        if (this.bgmBtn) this.bgmBtn.setText('🔇');
-      }
-    },
+    // v11: BGM 删除, _toggleBgm 函数也删掉
 
     // ============== 背景 ==============
     _drawBackground: function () {

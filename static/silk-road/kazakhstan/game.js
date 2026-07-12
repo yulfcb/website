@@ -518,19 +518,7 @@
         fontSize: '26px', color: '#2E7D32', fontStyle: 'bold', align: 'center',
       }).setOrigin(0.5);
 
-      // BGM 初始化
-      var bgm = document.getElementById('silk-road-bgm');
-      if (bgm) {
-        var muted = localStorage.getItem('silkroad_bgm_muted') === '1';
-        bgm.muted = muted;
-        if (!muted) {
-          var tryPlay = function () {
-            bgm.play().catch(function () {});
-          };
-          this.input.once('pointerdown', tryPlay);
-          setTimeout(tryPlay, 500);
-        }
-      }
+      // v11: BGM 删除, BGM 初始化逻辑也删掉
       this.time.delayedCall(800, function () {
         try {
           self.scene.start('TamingScene');
@@ -1844,14 +1832,7 @@
       this.luggageBtn.setInteractive({ useHandCursor: true });
       this.luggageBtn.on('pointerdown', function () { self.openLuggageModal(); });
 
-      // 5. 🔊 BGM 按钮 (x=1100)
-      var bgmMuted = (localStorage.getItem('silkroad_bgm_muted') === '1');
-      this.bgmBtn = this.add.text(1100, 30, bgmMuted ? '🔇' : '🔊', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-        backgroundColor: '#4A2E1A', padding: { x: 8, y: 2 },
-      }).setOrigin(0.5);
-      this.bgmBtn.setInteractive({ useHandCursor: true });
-      this.bgmBtn.on('pointerdown', function () { self.toggleBgm(); });
+      // v11: BGM 删除, BGM 按钮也删掉
 
       // 6. 🗺️ 世界地图按钮 (x=1200)
       this.worldMapBtn = this.add.text(1200, 30, '🗺️', {
@@ -1897,14 +1878,7 @@
       }
     },
 
-    toggleBgm: function () {
-      var muted = localStorage.getItem('silkroad_bgm_muted') === '1';
-      muted = !muted;
-      localStorage.setItem('silkroad_bgm_muted', muted ? '1' : '0');
-      var bgm = document.getElementById('silk-road-bgm');
-      if (bgm) bgm.muted = muted;
-      if (this.bgmBtn) this.bgmBtn.setText(muted ? '🔇' : '🔊');
-    },
+    // v11: BGM 删除, toggleBgm 函数也删掉 (BGM 按钮已删, 没人调用)
 
     openLuggageModal: function () {
       var self = this;

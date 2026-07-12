@@ -14,10 +14,7 @@
 </head>
 <body>
 
-  {# M1: BGM — 共享卡塔尔的 silk-road-bgm.wav (30s 中东 pentatonic 循环) #}
-  <audio id="silk-road-bgm" loop preload="auto" muted style="display:none">
-    <source src="{{ url_for('static', filename='silk-road/qatar/audio/silk-road-bgm.wav') }}" type="audio/wav">
-  </audio>
+  {# v11: 删掉背景音乐 (silk-road-bgm), 保留 SFX 通道 #}
   {# SFX 通道 — 全部从卡塔尔 audio/ 共享 (避免重复资源) #}
   <audio id="sfx-click"     src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-click.wav') }}"     preload="auto" style="display:none"></audio>
   <audio id="sfx-button"    src="{{ url_for('static', filename='silk-road/qatar/audio/sfx-button.wav') }}"    preload="auto" style="display:none"></audio>
