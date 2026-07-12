@@ -26,9 +26,10 @@
   var LEVEL_ID = 0;
 
   // 4 档奖励（前端查表；金额与服务端 QATAR_REWARD_TIERS 一致）
+  // v14: NORMAL 改为 188（统一文案"188（微信查收）"）
   var QATAR_REWARD_TIERS = {
     PERFECT: 20.20,
-    NORMAL:  13.14,
+    NORMAL:  188,
     HARD:    6.66,
     DEAD:    0,
   };
@@ -538,22 +539,8 @@
     },
 
     tryActionPickup: function () {
-      if (this.state !== 'PLAYING' || this.paused) return;
-      var nearest = null;
-      var minDist = 60;
-      for (var i = 0; i < this.giftSprites.length; i++) {
-        var sp = this.giftSprites[i];
-        if (sp.collected) continue;
-        var dx = this.player.x - sp.x;
-        var dy = this.player.y - sp.y;
-        var d = Math.sqrt(dx * dx + dy * dy);
-        if (d < minDist) { nearest = sp; minDist = d; }
-      }
-      if (nearest) {
-        this.openGiftModal(nearest.giftData);
-        nearest.collected = true;
-        nearest.setVisible(false);
-      }
+      // v14: 自动拾起, 不再需要手动 action 键. 函数保留避免外部误调, 直接 return.
+      return;
     },
 
     // ==================== 水分 ====================
@@ -618,12 +605,48 @@
         var dx = this.player.x - sp.x;
         var dy = this.player.y - sp.y;
         if (Math.sqrt(dx * dx + dy * dy) < 36) {
-          this.openGiftModal(sp.giftData);
-          sp.collected = true;
-          sp.setVisible(false);
+          // v14: 靠近自动装进, 不再弹 modal
+          this.autoPickup(sp);
           return;
         }
       }
+    },
+
+    // v14: 自动拾起 —— 直接装进 bucket + 显示短 toast + 更新 HUD
+    autoPickup: function (sp) {
+      sp.collected = true;
+      sp.setVisible(false);
+      var g = sp.giftData;
+      this.giftBuckets[g.id] = 'bucket';
+      this.luggageCount++;
+      this.luggageText.setText('🧳 行李 ' + this.luggageCount);
+      this._updatePriceHud();
+      window.playQatarSfx('pickup', 0.5);  // M17: 拾起物品 chime
+      this.pickupCount++;
+      if (!this.npcShownPickup3 && this.pickupCount >= 3) {
+        this.npcShownPickup3 = true;
+        this.setNpcFrame(1);
+      }
+      this._showPickupToast(g);
+    },
+
+    // v14: 短 toast — 显示刚捡到的物品 (1.2s 自动消失)
+    _showPickupToast: function (g) {
+      if (!this._pickupToast) {
+        this._pickupToast = this.add.text(640, 120, '', {
+          fontSize: '20px', color: '#FFD98A', backgroundColor: '#2A2140',
+          padding: { x: 16, y: 8 }, fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(1500);
+      }
+      this._pickupToast.setText(g.emoji + '  ' + g.name + '  +¥' + (g.price || 0));
+      this._pickupToast.setAlpha(1);
+      if (this._pickupToastTween) this._pickupToastTween.stop();
+      this._pickupToastTween = this.tweens.add({
+        targets: this._pickupToast,
+        alpha: 0,
+        duration: 600,
+        delay: 600,
+      });
     },
 
     // v11: 行李 modal — 单击行李按钮后弹, 显示已装入的物品
@@ -698,95 +721,9 @@
       this.state = 'PLAYING';  // 不锁定状态 (LUGGAGE_MAX 取消后, 玩家可继续走路)
     },
 
-    // ==================== 礼物 modal ====================
-    openGiftModal: function (g) {
-      var self = this;
-      this.state = 'PICKUP';
-      this.currentGiftId = g.id;
-      this.modalContainer.removeAll(true);
-      window.playQatarSfx('pickup', 0.5);  // M17: 拾起物品 chime
-
-      // 背景遮罩（吸收点击，不响应回调）
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.45);  // M9.5b 透明度 0.78->0.45
-      // M8.5：backdrop 不该 interactive，否则会截掉按钮点击
-      this.modalContainer.add(backdrop);
-
-      var card = this.add.rectangle(0, 0, 460, 420, 0x4A2E1A, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.5);
-      this.modalContainer.add(card);
-
-      this.modalContainer.add(this.add.text(0, -150, g.emoji, { fontSize: '56px' }).setOrigin(0.5));
-      // M12 Bug 3: 「你拾起了」改成更口语「你捡到了物品」(任务/教学文案统一改"物品")
-      this.modalContainer.add(this.add.text(0, -80, '你捡到了物品「' + g.name + '」', {
-        fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      // M11: 礼物价格显示 — 船票兑换门槛要算总价
-      this.modalContainer.add(this.add.text(0, -50, '💰 ¥' + (g.price || 0) + '  ·  ' + g.hint, {
-        fontSize: '13px', color: '#FFE9B0', wordWrap: { width: 400 },
-      }).setOrigin(0.5));
-
-      // v11: LUGGAGE_MAX 取消, 行李不再有上限, isFull 永远 false
-      var isFull = false;
-      var makeModalBtn = function (txt, subTxt, dy, isPrimary, callback) {
-        var color = isPrimary ? 0xFFD98A : 0x6B4423;
-        var textColor = isPrimary ? '#2A190E' : '#F4ECD8';
-        var bg = self.add.rectangle(0, dy, 380, 56, color, 1)
-          .setStrokeStyle(1, 0xFFD98A, 0.4);
-        var label = self.add.text(0, dy - 8, txt, {
-          fontSize: '15px', color: textColor, fontStyle: 'bold',
-        }).setOrigin(0.5);
-        var subT = self.add.text(0, dy + 12, subTxt, {
-          fontSize: '11px', color: '#C9B89A',
-        }).setOrigin(0.5);
-        var zone = self.add.zone(0, dy, 380, 56).setInteractive({ useHandCursor: true });
-        zone.on('pointerdown', function () {
-          window.playQatarSfx('button', 0.4);  // M17: modal 按钮 blip
-          callback();
-        });
-        return [bg, label, subT, zone];
-      };
-
-      // v11: 行李不再有上限, 装进按钮直接显示, 不再有"替换"分支
-      var bucketTxt = '🧳 装进 (' + this.luggageCount + ')';
-      var bucketSub = '不限数量, 总价用于兑换船票';
-      var bucket = makeModalBtn(bucketTxt, bucketSub, 30, true, function () { self.decideGift('bucket'); });
-      var stay = makeModalBtn('⏳ 留后', '留到后面 (不占位)', 100, false, function () { self.decideGift('stay'); });
-      var drop = makeModalBtn('❌ 放弃', '这条路不带', 170, false, function () { self.decideGift('drop'); });
-
-      this.modalContainer.add(bucket);
-      this.modalContainer.add(stay);
-      this.modalContainer.add(drop);
-
-      // 隐藏 joystick / action / pause —— 避免 modal 打开时还能点
-      this.joystickContainer.setVisible(false);
-      (this.actionContainer && this.actionContainer.setVisible(false));
-      // M18 Bug 4: pauseContainer removed
-      this.modalContainer.setVisible(true);
-    },
-
-    closeGiftModal: function () {
-      this.modalContainer.setVisible(false);
-      this.currentGiftId = null;
-      this.state = 'PLAYING';
-      this.pickupCount++;
-      // v11: 删掉 pickupText.setText (不再显示拾取件数)
-
-      if (!this.npcShownPickup3 && this.pickupCount >= 3) {
-        this.npcShownPickup3 = true;
-        this.setNpcFrame(1);
-      }
-      // M11: 拾满 8 弹 pickup-done modal —— 提示玩家去港口兑换船票 (不再直接 enterResult).
-      // M15 Part 2: 6 → 8 gifts, 所以拾满阈值从 6 升到 8.
-      if (this.pickupCount >= 8) {
-        this._showPickupMaxedModal();
-        return;
-      }
-      // 恢复 joystick / action / pause
-      this.joystickContainer.setVisible(true);
-      (this.actionContainer && this.actionContainer.setVisible(true));
-      // M18 Bug 4: pauseContainer removed
-    },
-
+    // ==================== 拾满 8 件 → 弹 pickup-done modal ====================
+    // v14: 改自动拾起后, openGiftModal/closeGiftModal/decideGift/_showReplaceModal 已删除
+    //      拾起流程在 autoPickup() 里完成, 这里只保留"拾满提示去港口"的流程 modal
     // M11 part 3: 拾满 8 件 → 弹 pickup-done modal, 提示去港口兑换船票
     // M15 Part 2: 6 → 8 gifts
     _showPickupMaxedModal: function () {
@@ -832,144 +769,7 @@
       this.modalContainer.setVisible(true);
     },
 
-    decideGift: function (choice) {
-      if (this.currentGiftId === null) return;
-      // M16 Bug 5: 行李满时点"装进/替换" → 弹替换 modal 让玩家选要替换哪个
-      // v11: LUGGAGE_MAX 取消, 行李永远装得下, 这段是之前的"行李满时禁用装进"逻辑, 已不需要
-      // (M16 Bug 5 时改成点替换 modal, v11 直接无上限, 这段保留无害)
-      if (false && choice === 'bucket' && this.luggageCount >= L.LUGGAGE_MAX) {
-        // 关闭当前 gift modal (但保留 currentGiftId 供 _showReplaceModal 用)
-        var newGiftId = this.currentGiftId;
-        this.modalContainer.setVisible(false);
-        this._showReplaceModal(newGiftId);
-        return;
-      }
-      this.giftBuckets[this.currentGiftId] = choice;
-      if (choice === 'bucket') {
-        this.luggageCount++;
-        this.luggageText.setText('🧳 行李 ' + this.luggageCount);
-      }
-      // M11: 行李总价 HUD 实时更新 (bucket/drop 都影响)
-      this._updatePriceHud();
-      this.closeGiftModal();
-    },
-
-    // M16 Bug 5: 行李满时弹替换 modal —— 玩家选要丢弃哪个, 用新 gift 替换
-    _showReplaceModal: function (newGiftId) {
-      var self = this;
-      // 取新 gift 信息
-      var newGift = null;
-      for (var i = 0; i < L.gifts.length; i++) {
-        if (L.gifts[i].id === newGiftId) { newGift = L.gifts[i]; break; }
-      }
-      if (!newGift) return;
-      // 当前 bucket 里所有 gift ids
-      var bucketIds = [];
-      var keys = Object.keys(this.giftBuckets);
-      for (var i = 0; i < keys.length; i++) {
-        if (this.giftBuckets[keys[i]] === 'bucket') bucketIds.push(parseInt(keys[i], 10));
-      }
-      bucketIds.sort(function (a, b) { return a - b; });
-
-      this.modalContainer.removeAll(true);
-
-      // backdrop
-      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x0E2A47, 0.45);
-      this.modalContainer.add(backdrop);
-
-      // card (加高, 容纳 6 个 bucket 项 + 标题 + 按钮)
-      var cardH = 80 + bucketIds.length * 38 + 80;
-      var card = this.add.rectangle(0, 0, 540, cardH, 0x1B3A5E, 1)
-        .setStrokeStyle(2, 0x5fb3a0, 0.7);
-      this.modalContainer.add(card);
-
-      // 标题
-      var titleY = -cardH / 2 + 36;
-      this.modalContainer.add(this.add.text(0, titleY, '🔁 选择要丢弃的物品', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      // 副标题 (新礼物信息)
-      var subY = titleY + 24;
-      this.modalContainer.add(this.add.text(0, subY,
-        '把 [' + newGift.emoji + ' ' + newGift.name + ' ¥' + (newGift.price || 0) + '] 装进行李, 需丢弃一件',
-        {
-          fontSize: '11px', color: '#A8D8C0', fontStyle: 'italic',
-          wordWrap: { width: 480 },
-        }).setOrigin(0.5));
-
-      // bucket 列表 — 每行: 丢弃按钮 + emoji + 名字 + 价格
-      var rowStartY = subY + 32;
-      for (var r = 0; r < bucketIds.length; r++) {
-        var gid = bucketIds[r];
-        var bg = null;
-        for (var j = 0; j < L.gifts.length; j++) {
-          if (L.gifts[j].id === gid) { bg = L.gifts[j]; break; }
-        }
-        if (!bg) continue;
-        var ry = rowStartY + r * 38;
-
-        // 丢弃按钮 (左侧红框)
-        var dropBg = self.add.rectangle(-210, ry, 56, 28, 0xC04848, 1)
-          .setStrokeStyle(1, 0xFFD98A, 0.5);
-        var dropTxt = self.add.text(-210, ry, '丢弃', {
-          fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold',
-        }).setOrigin(0.5);
-        var dropZone = self.add.zone(-210, ry, 56, 28).setInteractive({ useHandCursor: true });
-        (function (dropId) {
-          dropZone.on('pointerdown', function () {
-            // 1) 旧 gift 改 'drop' (从 bucket 移除)
-            self.giftBuckets[dropId] = 'drop';
-            // 2) 新 gift 改 'bucket' (加入 bucket, luggageCount 不变)
-            self.giftBuckets[newGiftId] = 'bucket';
-            // 3) 重算总价 (丢弃的 gift price 减掉, 新 gift price 加上)
-            self._updatePriceHud();
-            self.luggageText.setText('🧳 行李 ' + self.luggageCount);
-            window.playQatarSfx('button', 0.4);  // M17: replace modal 丢弃按钮 blip
-            // 4) 关闭 modal + 走正常 closeGiftModal 流程 (更新 HUD/状态)
-            self.modalContainer.setVisible(false);
-            self.closeGiftModal();
-          });
-        })(gid);
-
-        // emoji
-        self.modalContainer.add(self.add.text(-150, ry, bg.emoji, { fontSize: '20px' }).setOrigin(0.5));
-        // 名字
-        var nameTxt = self.add.text(-115, ry, bg.name, {
-          fontSize: '13px', color: '#F4ECD8', fontStyle: 'bold',
-          wordWrap: false,
-        }).setOrigin(0, 0.5);
-        nameTxt.setFixedSize(160, 16);
-        self.modalContainer.add(nameTxt);
-        // 价格
-        self.modalContainer.add(self.add.text(85, ry, '¥' + bg.price, {
-          fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
-        }).setOrigin(0, 0.5));
-
-        self.modalContainer.add([dropBg, dropTxt, dropZone]);
-      }
-
-      // 取消按钮 (底部)
-      var cancelY = cardH / 2 - 40;
-      var cancelBg = self.add.rectangle(0, cancelY, 200, 50, 0x1B3A5E, 1)
-        .setStrokeStyle(1, 0x5fb3a0, 0.6);
-      var cancelTxt = self.add.text(0, cancelY, '取消', {
-        fontSize: '14px', color: '#A8D8C0', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      var cancelZone = self.add.zone(0, cancelY, 200, 50).setInteractive({ useHandCursor: true });
-      cancelZone.on('pointerdown', function () {
-        window.playQatarSfx('button', 0.4);  // M17: replace modal 取消按钮 blip
-        // 玩家取消 → 新 gift 不入桶 (跟之前 'drop' 一样), 走 closeGiftModal 流程
-        self.modalContainer.setVisible(false);
-        self.closeGiftModal();
-      });
-      self.modalContainer.add([cancelBg, cancelTxt, cancelZone]);
-
-      // 隐藏 joystick / pause (跟其他 modal 一致)
-      this.joystickContainer.setVisible(false);
-      (this.actionContainer && this.actionContainer.setVisible(false));
-      // M18 Bug 4: pauseContainer removed
-      this.modalContainer.setVisible(true);
-    },
+// v14: decideGift / _showReplaceModal 已删除 (自动拾起 autoPickup 接管)
 
     // ==================== 港口 NPC popup (M11: 老商人 → 港口 ⚓) ====================
     showPort: function () {
@@ -1762,7 +1562,11 @@ _sumSelectedPrice: function (ids) {
         this.water.toFixed(1) + ' / ' + L.WATER_MAX, {
         fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
-      this.add.text(640, 380, '+¥' + amount.toFixed(2), {
+      // v14: NORMAL 档 reward 改为 188（微信查收），统一文案
+      var rewardTxt = (this.tier === 'NORMAL')
+        ? '+188（微信查收）'
+        : '+¥' + amount.toFixed(2);
+      this.add.text(640, 380, rewardTxt, {
         fontSize: '38px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
 
