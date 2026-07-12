@@ -487,11 +487,10 @@
 
       // ===== v4 重写: 屏幕 DOM 方向键 (← → ▲ ▼) =====
       // 替换 v3 的 Phaser joystick + 键盘监听
-      // 原因: 真机用户没有键盘, Phaser zone 偶发不响应 (iOS Safari 已知问题)
-      // 按钮位置固定在屏幕底部, pointerdown/up 长按可连发
+      // v9: Phaser 虚拟方向键 (跟哈萨克斯坦一致, 圆盘 + 4 圆按钮 + 金箭头)
       this.keys = { left: false, right: false };
-      this._domButtons = [];                 // 跟踪所有 DOM 按钮, scene shutdown 时清理
-      this._createDomDirectionButtons();
+      this.speedBoost = 0;
+      this._createJoystick();
 
       // ===== 键盘监听 (桌面端, 调试备用) =====
       var onKeyDown = function (k) { return function () { self.keys[k] = true; }; };
@@ -910,11 +909,11 @@
       var biomeStart = this._exitHouseBiomeStart || 0;
       var scrollInBiome = this.scrollY - biomeStart;
 
-      // v4 位置公式:
-      //   scrollInBiome=0   → container.y=-700 (屋/路径都在屏幕上方, 不可见)
-      //   scrollInBiome=600 → container.y=-286 (路径刚开始出现)
-      //   scrollInBiome=1500→ container.y=335  (屋门对准玩家脚 y=480)
-      var houseScreenY = -700 + scrollInBiome * 0.69;
+      // v9 位置公式 (屋从屏幕底部下方滚上来, 终点对准玩家脚):
+      //   scrollInBiome=0    → container.y = CANVAS_H + 200 = 920  (屋在屏幕下方外)
+      //   scrollInBiome=300  → container.y = ~782  (屋接近屏幕底部边缘)
+      //   scrollInBiome=1500 → container.y = ~30   (屋在玩家脚下, 玩家滑进屋门)
+      var houseScreenY = (CANVAS_H + 200) - scrollInBiome * 0.46;
       this._exitHouseContainer.y = houseScreenY;
 
       // 接近门口 (scrollInBiome > 1300) 时显示提示牌
@@ -924,24 +923,24 @@
         this._exitHouseSign.setAlpha(0);
       }
 
-      // —— 屋体可见性 gating ——
-      // 路径: scrollInBiome 500-700 渐显, 1300-1500 渐隐 (屋接管视觉中心)
+      // —— 屋体可见性 gating (v9: 屋从下往上滚, alpha 时机反向) ——
+      // 路径: scrollInBiome 100-300 渐显 (屋接近屏幕底部时出现), 1300-1500 渐隐
       if (this._exitHousePath) {
-        var pathAlpha = scrollInBiome < 500 ? 0 :
-                        scrollInBiome < 700 ? (scrollInBiome - 500) / 200 :
+        var pathAlpha = scrollInBiome < 100 ? 0 :
+                        scrollInBiome < 300 ? (scrollInBiome - 100) / 200 :
                         scrollInBiome > 1300 ? Math.max(0, 1 - (scrollInBiome - 1300) / 200) : 1;
         this._exitHousePath.setAlpha(pathAlpha);
       }
-      // 屋本体: 1000-1100 渐显, 通关后由 _showWin 接管 (通关前一直可见)
+      // 屋本体: 300-500 渐显 (屋进入屏幕底部), 通关后由 _showWin 接管
       if (this._exitHouseHouse) {
-        var houseAlpha = scrollInBiome < 1000 ? 0 :
-                         scrollInBiome < 1100 ? (scrollInBiome - 1000) / 100 : 1;
+        var houseAlpha = scrollInBiome < 300 ? 0 :
+                         scrollInBiome < 500 ? (scrollInBiome - 300) / 200 : 1;
         this._exitHouseHouse.setAlpha(houseAlpha);
       }
-      // 屋顶"🏠 成都"大字: 1100-1200 渐显
+      // 屋顶"🏠 成都"大字: 400-600 渐显
       if (this._exitHouseLabel) {
-        var labelAlpha = scrollInBiome < 1100 ? 0 :
-                         scrollInBiome < 1200 ? (scrollInBiome - 1100) / 100 : 1;
+        var labelAlpha = scrollInBiome < 400 ? 0 :
+                         scrollInBiome < 600 ? (scrollInBiome - 400) / 200 : 1;
         this._exitHouseLabel.setAlpha(labelAlpha);
       }
 
@@ -951,9 +950,9 @@
         for (var i = 0; i < this._cottageGfx.length; i++) {
           var c = this._cottageGfx[i];
           // 屋前小屋 y 跟随 houseScreenY 的一个比例偏移
-          // scrollInBiome 600 (houseStart) 时, 小屋在屏幕上方 (y = -200)
-          // scrollInBiome 1500 时, 小屋在中段 (y = ~360)
-          var cottageScreenY = -200 + Math.max(0, scrollInBiome - 600) * (560 / 900);
+          // scrollInBiome 600 (houseStart) 时, 小屋在屏幕底部下方 (y = CANVAS_H + 100 = 820)
+          // scrollInBiome 1500 时, 小屋在玩家上方 (y = ~80)
+          var cottageScreenY = (CANVAS_H + 100) - Math.max(0, scrollInBiome - 600) * (700 / 900);
           c.gfx.y = cottageScreenY - c.cy;
           // 小屋 alpha: 600→800 渐显, 1300→1500 渐隐 (让玩家关注主屋)
           if (scrollInBiome < 600) c.gfx.setAlpha(0);
@@ -1188,41 +1187,24 @@
 
     // ============================================================
     //  玩家 (单板 + 角色)
-    //  v8: 用 Phaser Graphics 自绘单板 (替代 emoji, 跨平台一致)
-    //       板体: 横向细长椭圆, 宽度 60px, 高度 10px, 深蓝 #1976D2
-    //       板面高光: 上半部浅蓝 #42A5F5
-    //       板尖端上翘: 右侧三角形
-    //       avatar 踩在板上 (avatar.y=-8, board.y=12)
+    //  v9: 用 emoji 🏂 (snowboarder = 人+板一体) 替代 v8 Graphics 自绘
+    //      跨关统一 (跟 levels.js:71 / progress.js:15 一致)
+    //      avatar 跟 🏂 自然叠合, 看起来角色踩在单板上
     // ============================================================
     _drawPlayer: function () {
       this.playerContainer.removeAll(true);
 
-      // —— 单板 Graphics (Phaser 自绘, 替代 emoji) ——
-      var boardGfx = this.add.graphics();
-      // 板体: 横向椭圆 (fillEllipse 居中, x=0, y=12)
-      boardGfx.fillStyle(0x1976D2, 1);                  // 深蓝板底
-      boardGfx.fillEllipse(0, 12, 60, 10);
-      // 板面高光: 上半浅蓝条纹
-      boardGfx.fillStyle(0x42A5F5, 1);                  // 浅蓝高光
-      boardGfx.fillEllipse(0, 9, 56, 4);
-      // 板尖端上翘 (右侧)
-      boardGfx.fillStyle(0x1976D2, 1);
-      boardGfx.fillTriangle(30, 12, 38, 8, 38, 16);    // 右尖端翘起
-      // 板底阴影 (深一档蓝)
-      boardGfx.fillStyle(0x0D47A1, 0.6);
-      boardGfx.fillEllipse(0, 16, 56, 3);
-      // 板底绑定 (中央深色固定带)
-      boardGfx.fillStyle(0x0D47A1, 1);
-      boardGfx.fillRect(-8, 6, 16, 10);
-      this.playerContainer.add(boardGfx);
+      // —— 单板 🏂 emoji (snowboarder, 50px) ——
+      var board = this.add.text(0, 6, '🏂', { fontSize: '50px' }).setOrigin(0.5);
+      this.playerContainer.add(board);
 
-      // —— 角色 avatar (踩在板面上, 脚 y 落在 ~12) ——
+      // —— 角色 avatar (跟 🏂 叠合, 站在板上) ——
       var avatarId = null;
       try { avatarId = localStorage.getItem('silkroad_avatar'); } catch (e) {}
       if (!avatarId) avatarId = 'malay';
       var avatar = window.SilkRoadCommon.buildAvatarSprite(this, avatarId);
       avatar.setScale(0.7);
-      avatar.setPosition(0, -8);
+      avatar.setPosition(0, -4);
       this.playerContainer.add(avatar);
 
       // 道具效果指示器 (玩家头顶)
@@ -1304,201 +1286,64 @@
     //    - 4 个按钮全部聚拢到屏幕**左下角**, 形成田字格 (土耳其参考)
     //    - 整体包裹在 wrapper div (left:20, bottom:20, 164×164, pointer-events:none)
     //    - 4 个按钮 position:absolute 在 wrapper 内 (pointer-events:auto)
-    //    - ▲ top:0 left:42   (上方居中)
-    //    - ▼ bottom:0 left:42 (下方居中)
-    //    - ◀ top:42 left:0   (左侧)
-    //    - ▶ top:42 left:84  (右侧)
-    //  颜色: 全部统一新疆蓝色系
-    //    - 背景: rgba(13, 71, 161, 0.78) 深蓝
-    //    - 边框: rgba(179, 229, 252, 0.85) 浅蓝
-    //    - 文字: rgba(179, 229, 252, 1) 浅蓝
-    //    - 按下: 背景 rgba(179, 229, 252, 0.95) 浅蓝高亮, 文字 rgba(13, 71, 161, 1) 深蓝
+// ============================================================
+    //  v9: 虚拟方向键 (跟哈萨克斯坦 kazakhstan/game.js:1418-1461 一致)
+    //    Phaser Graphics 圆盘 + 4 个圆形按钮 + 金色箭头
+    //    容器位置 (110, 560) 左下角, scale 0.6, depth 500, alpha 0.72
+    //    颜色: 0x4A2E1A 棕底 + 0xFFD98A 金色箭头/stroke (跟 kazakhstan 一致)
+    //    ▲ 减速 (speedBoost = -60), ▼ 加速 (speedBoost = +60)
+    //    ◀ ▶ 左右移动 (keys.left/right)
     // ============================================================
-    _createDomDirectionButtons: function () {
+    _createJoystick: function () {
       var self = this;
       var config = window.XINJIANG_LEVEL.sliding;
 
-      // Phaser 内放置的"占位"容器 (透明), 仅用于 depth 显示
-      // 实际按钮是 DOM 元素 (iOS Safari Phaser zone 不响应兜底)
-      this.joystickContainer = this.add.container(0, 0);
+      this.joystickContainer = this.add.container(110, 560);
+      this.joystickContainer.setAlpha(0.72);
+      this.joystickContainer.setScale(0.6);
       this.joystickContainer.setDepth(500);
 
-      // —— 统一新疆蓝色系 (v8) ——
-      var COLOR_BG        = 'rgba(13, 71, 161, 0.78)';   // 深蓝
-      var COLOR_BG_PRESS  = 'rgba(179, 229, 252, 0.95)';  // 浅蓝高亮 (按下)
-      var COLOR_BORDER    = 'rgba(179, 229, 252, 0.85)';  // 浅蓝边框
-      var COLOR_TEXT      = 'rgba(179, 229, 252, 1)';     // 浅蓝文字
-      var COLOR_TEXT_PRS  = 'rgba(13, 71, 161, 1)';       // 深蓝文字 (按下)
+      // 圆盘背景 (跟 kazakhstan 一致)
+      var dpadBg = this.add.graphics();
+      dpadBg.fillStyle(0x4A2E1A, 0.55);
+      dpadBg.fillCircle(0, 0, 115);
+      this.joystickContainer.add(dpadBg);
 
-      // —— v8: 容器 wrapper (4 按钮聚拢田字格, 屏幕左下角) ——
-      // wrapper 是 fixed 在 viewport 左下角的 164×164 容器, 内部 4 按钮 absolute 定位
-      var wrapper = document.createElement('div');
-      wrapper.id = 'xj-dir-wrapper';
-      wrapper.style.cssText = [
-        'position:fixed',
-        'left:20px',
-        'bottom:20px',
-        'width:164px',
-        'height:164px',
-        'z-index:2147483646',  // 略低于按钮, 防止遮挡按钮阴影
-        'pointer-events:none', // wrapper 本身不接收事件, 按钮单独接收
-      ].join(';');
-      document.body.appendChild(wrapper);
-      self._domWrapper = wrapper;
-
-      // —— DOM 按钮工厂 (v8: 在 wrapper 内 absolute 定位, 统一蓝) ——
-      // posStyle: { left, top, bottom, right } 字符串 CSS 值 (例: '42px')
-      // wrapper 已 fixed 在 viewport 左下角, 按钮在 wrapper 内 absolute 定位
-      var makeBtn = function (id, label, posStyle, btnW, btnH, bgColor, bgPress, borderColor, fontColor, fontColorPrs, onPress, onRelease) {
-        var btn = document.createElement('button');
-        btn.id = id;
-        btn.type = 'button';
-        btn.textContent = label;
-        var css = [
-          'position:absolute',
-          'z-index:2147483647',                  // int32 max, 永远置顶
-          'width:' + btnW + 'px',
-          'height:' + btnH + 'px',
-          'border:' + Math.max(3, Math.round(btnW * 0.025)) + 'px solid ' + borderColor,
-          'border-radius:' + Math.round(btnW * 0.18) + 'px',
-          'background:' + bgColor,
-          'color:' + fontColor,
-          'font-size:' + Math.round(btnW * 0.5) + 'px',
-          'font-weight:bold',
-          'cursor:pointer',
-          'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
-          'user-select:none',
-          '-webkit-user-select:none',
-          '-webkit-tap-highlight-color:transparent',
-          'touch-action:none',                   // iOS Safari 必加, 否则会被解释成滚动
-          'pointer-events:auto',                 // 强制接收事件
-          'box-shadow:0 4px 14px rgba(0,0,0,0.35)',
-          'transition:transform 80ms, opacity 80ms',
-          'padding:0',
-          'margin:0',
-          'display:flex',
-          'align-items:center',
-          'justify-content:center',
-          'line-height:1',
-        ];
-        // 直接用 viewport 相对定位 (left/right/top/bottom)
-        if (posStyle.left !== undefined) css.push('left:' + posStyle.left);
-        if (posStyle.right !== undefined) css.push('right:' + posStyle.right);
-        if (posStyle.top !== undefined) css.push('top:' + posStyle.top);
-        if (posStyle.bottom !== undefined) css.push('bottom:' + posStyle.bottom);
-        btn.style.cssText = css.join(';');
-        btn.setAttribute('aria-label', label);
-
-        var pressed = false;
-        var doPress = function (e) {
-          if (e) { e.preventDefault(); e.stopPropagation(); }
-          if (pressed) return;
-          pressed = true;
-          btn.style.transform = 'scale(0.92)';
-          btn.style.opacity = '0.95';
-          // v8: 按下时背景变浅蓝高亮, 文字变深蓝
-          btn.style.background = bgPress;
-          btn.style.color = fontColorPrs;
-          try { window.playXinjiangSfx('click', 0.25); } catch (err) {}
-          onPress();
+      this.joystickBtns = {};
+      var makeDpadBtn = function (txt, dx, dy, key) {
+        var bg = self.add.circle(dx, dy, 40, 0x4A2E1A, 0.85)
+          .setStrokeStyle(2, 0xFFD98A, 0.7);
+        var arrow = self.add.text(dx, dy, txt, {
+          fontSize: '30px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5);
+        var zone = self.add.zone(dx, dy, 80, 80).setInteractive({ useHandCursor: true });
+        var press = function () {
+          // v9: 4 个方向键映射到不同动作 (跟 kazakhstan 不同, 新疆有 speedBoost)
+          if (key === 'up') self.speedBoost = -config.manualBoostPress;
+          else if (key === 'down') self.speedBoost = config.manualBoostPress;
+          else self.keys[key] = true;
+          bg.setFillStyle(0xFFD98A, 0.95);
+          arrow.setColor('#2A190E');
+          try { window.playXinjiangSfx('click', 0.4); } catch (err) {}
         };
-        var doRelease = function (e) {
-          if (e) { e.preventDefault(); e.stopPropagation(); }
-          if (!pressed) return;
-          pressed = false;
-          btn.style.transform = 'scale(1)';
-          btn.style.opacity = '1';
-          // 还原背景和文字
-          btn.style.background = bgColor;
-          btn.style.color = fontColor;
-          onRelease();
+        var release = function () {
+          if (key === 'up' || key === 'down') self.speedBoost = 0;
+          else self.keys[key] = false;
+          bg.setFillStyle(0x4A2E1A, 0.85);
+          arrow.setColor('#FFD98A');
         };
-
-        // pointerdown / pointerup (统一触屏 + 鼠标)
-        btn.addEventListener('pointerdown', doPress);
-        btn.addEventListener('pointerup', doRelease);
-        btn.addEventListener('pointercancel', doRelease);
-        btn.addEventListener('pointerleave', doRelease);
-        // 兜底 mouse/touch
-        btn.addEventListener('mousedown', doPress);
-        btn.addEventListener('mouseup', doRelease);
-        btn.addEventListener('mouseleave', doRelease);
-        btn.addEventListener('touchstart', doPress, { passive: false });
-        btn.addEventListener('touchend', doRelease, { passive: false });
-
-        // v8: 按钮挂到 wrapper 内 (wrapper fixed 在 viewport 左下角)
-        wrapper.appendChild(btn);
-        self._domButtons.push(btn);
-        return btn;
+        zone.on('pointerdown', press);
+        zone.on('pointerup', release);
+        zone.on('pointerout', release);
+        self.joystickContainer.add([bg, arrow, zone]);
+        self.joystickBtns[key] = { bg: bg, arrow: arrow };
       };
+      makeDpadBtn('▲', 0, -75, 'up');
+      makeDpadBtn('▼', 0, 75, 'down');
+      makeDpadBtn('◀', -75, 0, 'left');
+      makeDpadBtn('▶', 75, 0, 'right');
 
-      // —— v8 按钮坐标: 田字格紧凑布局 (wrapper 内 absolute 定位) ——
-      // BTN_SIZE = 80 (单手拇指舒服)
-      // wrapper 164x164 在 viewport 左下角 (left:20, bottom:20)
-      // 4 按钮位置 (田字格):
-      //   ▲  top:0   left:42   (上方居中)
-      //   ▼  bottom:0 left:42  (下方居中)
-      //   ◀  top:42  left:0    (左侧)
-      //   ▶  top:42  left:84   (右侧)
-      var BTN_SIZE = 80;
-      var CENTER_X = 42;  // (164-80)/2 = 42 (居中按钮的 left)
-      // ◀ (左移, 深蓝底浅蓝字)
-      this._btnLeft = makeBtn(
-        'xj-dir-left', '◀',
-        { top: '42px', left: '0px' },
-        BTN_SIZE, BTN_SIZE,
-        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
-        function () { self.keys.left = true; },
-        function () { self.keys.left = false; }
-      );
-      // ▶ (右移, 深蓝底浅蓝字)
-      this._btnRight = makeBtn(
-        'xj-dir-right', '▶',
-        { top: '42px', left: '84px' },
-        BTN_SIZE, BTN_SIZE,
-        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
-        function () { self.keys.right = true; },
-        function () { self.keys.right = false; }
-      );
-      // ▲ (减速, 深蓝底浅蓝字)
-      this._btnUp = makeBtn(
-        'xj-dir-up', '▲',
-        { top: '0px', left: CENTER_X + 'px' },
-        BTN_SIZE, BTN_SIZE,
-        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
-        function () { self.speedBoost = -config.manualBoostPress; },
-        function () { self.speedBoost = 0; }
-      );
-      // ▼ (加速, 深蓝底浅蓝字)
-      this._btnDown = makeBtn(
-        'xj-dir-down', '▼',
-        { bottom: '0px', left: CENTER_X + 'px' },
-        BTN_SIZE, BTN_SIZE,
-        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
-        function () { self.speedBoost = config.manualBoostPress; },
-        function () { self.speedBoost = 0; }
-      );
-
-      // —— v7: viewport 相对定位, 不需要 resize 监听 (按钮天然跟随 viewport) ——
-
-      // —— Scene shutdown 时清理 (避免按钮残留) ——
-      this.events.once('shutdown', function () {
-        for (var i = 0; i < self._domButtons.length; i++) {
-          var b = self._domButtons[i];
-          if (b && b.parentNode) b.parentNode.removeChild(b);
-        }
-        self._domButtons = [];
-        // v8: 清理 wrapper
-        if (self._domWrapper && self._domWrapper.parentNode) {
-          self._domWrapper.parentNode.removeChild(self._domWrapper);
-          self._domWrapper = null;
-        }
-        self._btnLeft = self._btnRight = self._btnUp = self._btnDown = null;
-        // 兜底: 松开所有按键状态, 避免按钮已删除但状态仍 stuck
-        self.keys.left = false;
-        self.keys.right = false;
-        self.speedBoost = 0;
-      });
+      // Phaser joystick 是 scene 内对象, shutdown 时自动销毁, 不需要手动清理 DOM
     },
 
     // ============================================================
@@ -1920,20 +1765,8 @@
       if (this.state !== 'SLIDING') return;
       this.state = 'FAIL';
 
-      // v4: 失败时也隐藏 DOM 按钮 (避免按钮挡在失败界面上)
-      if (this._domButtons) {
-        for (var i = 0; i < this._domButtons.length; i++) {
-          var b = this._domButtons[i];
-          if (b && b.parentNode) b.parentNode.removeChild(b);
-        }
-        this._domButtons = [];
-        if (this._domWrapper && this._domWrapper.parentNode) {
-          this._domWrapper.parentNode.removeChild(this._domWrapper);
-          this._domWrapper = null;
-        }
-        this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
-      }
-
+      // v9: Phaser joystick 由 scene shutdown 自动销毁, 不需要手动清理
+      // v9: Phaser joystick 由 scene shutdown 自动销毁, 不需要手动清理
       var overlay = this.add.rectangle(640, 360, 600, 300, 0xC62828, 0.95);
       this.add.text(640, 280, '❌ 滑雪失败', {
         fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
@@ -1958,20 +1791,7 @@
       if (this.state !== 'SLIDING') return;
       this.state = 'WIN';
 
-      // v4: 通关瞬间隐藏屏幕 DOM 按钮 (玩家已滑进屋, 不能再移动)
-      if (this._domButtons) {
-        for (var i = 0; i < this._domButtons.length; i++) {
-          var b = this._domButtons[i];
-          if (b && b.parentNode) b.parentNode.removeChild(b);
-        }
-        this._domButtons = [];
-        if (this._domWrapper && this._domWrapper.parentNode) {
-          this._domWrapper.parentNode.removeChild(this._domWrapper);
-          this._domWrapper = null;
-        }
-        this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
-      }
-      // 销毁通关提示
+      // v9: Phaser joystick 由 scene shutdown 自动销毁, 不需要手动清理
       if (this._arrivalPrompt) {
         this._arrivalPrompt.destroy();
         this._arrivalPrompt = null;
