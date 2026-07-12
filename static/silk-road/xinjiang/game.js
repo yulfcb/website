@@ -1831,6 +1831,8 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         // 清理 DOM 兜底按钮
         var oldBtn = document.getElementById('xinjiang-win-door-btn');
         if (oldBtn) oldBtn.remove();
+        // v18.2: 销毁通关 modal, 让小木屋画面成为唯一视觉
+        winContainer.destroy();
         self._triggerEasterEgg();
       };
 
