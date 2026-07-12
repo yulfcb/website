@@ -2102,12 +2102,17 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       });
       btnBg.on('pointerdown', function () {
         window.playXinjiangSfx('click', 0.5);
+        // v25 Bug #1: 先调 _showPasswordPrompt, 再销毁按钮 — 避免在 handler 内部销毁 btnBg 自身
+        // 之前顺序销毁自身对象可能让 handler 后半段中断, 导致密码 modal 永远不显示
+        self._showPasswordPrompt();
         // v21 Bug #3: 保留 bg 暖黄墙, 不要销毁!
         // 之前 bg.destroy() 会让密码 modal 弹出时背景回到 SlidingScene 雪山
         // 现在只销毁标题 + 按钮 (这些是 modal 上层的 UI, 不该继续显示)
-        title.destroy(); subtitle.destroy();
-        btnGlow.destroy(); btnBg.destroy(); btnText.destroy();
-        self._showPasswordPrompt();
+        try { title.destroy(); } catch (e) {}
+        try { subtitle.destroy(); } catch (e) {}
+        try { btnGlow.destroy(); } catch (e) {}
+        try { btnBg.destroy(); } catch (e) {}
+        try { btnText.destroy(); } catch (e) {}
       });
 
       window.playXinjiangSfx('voyage', 0.4);
