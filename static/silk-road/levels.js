@@ -14,7 +14,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '起航·多哈',
     quote: '从你出发的地方，回到你身边',
-    reward: 6.66,
+    reward: 188,             // v15: 跟 NORMAL 188 统一
     nextUrl: '/games/silk-road/level/1',
   },
   1: {
@@ -29,7 +29,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '伊朗·沙漠骆驼',
     quote: '你还记得吗，那晚的沙漠 / 抬头看，整片天都是你的',
-    reward: 13.14,
+    reward: 188,             // v15: 通知 reward 统一 188
     nextUrl: '/games/silk-road/level/2',
   },
   2: {
@@ -44,7 +44,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '土耳其·热气球',
     quote: '慢一点也没关系，只要方向是你',
-    reward: 20.20,
+    reward: 188,             // v15: 通知 reward 统一 188
     nextUrl: '/games/silk-road/level/3',
   },
   3: {
@@ -59,7 +59,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: true,
     title: '哈萨克斯坦·草原骑马',
     quote: '策马穿过草原，只为早一点见你',
-    reward: 88.00,
+    reward: 188,             // v15: 通知 reward 统一 188
     nextUrl: '/games/silk-road/level/4',
   },
   4: {
@@ -74,7 +74,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: true,
     title: '新疆·雪山滑雪',
     quote: '那片雪，是不是我们踩过的那一片',
-    reward: 88.00,
+    reward: 188,             // v15: 通知 reward 统一 188
     nextUrl: '/games/silk-road/level/5',
   },
   5: {

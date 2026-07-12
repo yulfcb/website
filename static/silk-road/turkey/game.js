@@ -346,8 +346,19 @@
       this._nearestBubbleKey = null;
 
       // 水量系统 (M28): 从 100 随行走下降, oasis 补水
-      this.waterLevel = 100;
+      // v15: 继承自伊朗的 jugs 总水量 (按比例映射到 0-100)
       this.maxWater = 100;
+      this.waterLevel = 100;
+      try {
+        var raw = localStorage.getItem('silkroad_iran_water');
+        if (raw) {
+          var data = JSON.parse(raw);
+          if (data && typeof data.ratio === 'number') {
+            this.waterLevel = +(data.ratio * this.maxWater).toFixed(1);
+          }
+        }
+      } catch (e) {}
+      // 兜底: 任何异常都保持 100%
       // 骆驼骑乘 toggle (M28): 跟在 iran 一样, 默认步行
       this.camelMode = false;
 

@@ -1521,6 +1521,18 @@
       window.playIranSfx('pickup', 0.5);
       window.playIranSfx('exchange', 0.4);
 
+      // v15: 持久化当前总水量到 localStorage, 让土耳其继承
+      // 格式: { total: 25.5, capacity: 40 } (单位 L)
+      try {
+        var total = this._totalWater();
+        var capacity = this.jugs.length * L.JUG_CAPACITY;
+        localStorage.setItem('silkroad_iran_water', JSON.stringify({
+          total: total,
+          capacity: capacity,
+          ratio: capacity > 0 ? (total / capacity) : 1.0,  // 0-1 比例
+        }));
+      } catch (e) {}
+
       // 1) 弹简短提示
       this.showDepartToast();
 
@@ -1618,25 +1630,28 @@
       }
       this.camelVoyageContainer.add(pathG);
 
-      // 6) 商队 = 玩家 avatar + N 骆驼 🐫
+      // 6) 商队 = 玩家骑在最前骆驼 + N-1 头空载骆驼 🐫
+      // v15: 跟伊朗游戏内 "坐上骆驼" 视觉一致 (camelBackEmoji 下 + elf 上)
+      //      只有第 1 头骆驼载人 (玩家), 其它骆驼是商队空载
       // 至少 3 头骆驼 (满足出发条件的最小值), 上限 5 (UI 不爆)
       var camelCount = Math.max(3, Math.min(5, this._luggageCount(-1004)));
       this.camelVoyageCaravan = [];
 
-      // 玩家 (走最前, 缩 0.6)
-      var avatarG = this._buildAvatarSprite(this._avatar);
-      avatarG.setScale(0.6);
-      var playerSlot = this.add.container(0, 0, [avatarG]);
-      playerSlot.setDepth(35);
-      this.camelVoyageCaravan.push(playerSlot);
-      this.camelVoyageContainer.add(playerSlot);
-
-      // N 头骆驼
+      // N 头骆驼, 第 1 头载人 (玩家), 其余空载
       for (var ci = 0; ci < camelCount; ci++) {
-        var cm = this.add.text(0, 0, '🐫', { fontSize: '44px' }).setOrigin(0.5);
-        // 简化阴影 (椭圆)
+        // 骆驼阴影
         var cmShadow = this.add.ellipse(0, 22, 36, 6, 0x000000, 0.18);
-        var slot = this.add.container(0, 0, [cmShadow, cm]);
+        // 骆驼 emoji
+        var cm = this.add.text(0, 0, '🐫', { fontSize: '44px' }).setOrigin(0.5);
+        var slotItems = [cmShadow, cm];
+        // 只第 1 头骆驼载人
+        if (ci === 0) {
+          var elfOnCamel = this._buildAvatarSprite(this._avatar);
+          elfOnCamel.setScale(0.5);
+          elfOnCamel.setY(-18);  // elf 抬高 18px (骑在骆驼背上)
+          slotItems.push(elfOnCamel);
+        }
+        var slot = this.add.container(0, 0, slotItems);
         slot.setDepth(34 - ci);  // 越后面的骆驼 depth 越低
         this.camelVoyageCaravan.push(slot);
         this.camelVoyageContainer.add(slot);
