@@ -1,0 +1,126 @@
+/* 新疆·天山滑雪 — 关卡样式 (跟 kazakhstan 一致) */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1a1a;  /* 深色背景, 避免 FIT 模式黑边突兀 */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+#game-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game-container canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#xinjiang-fullscreen {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  background: rgba(46, 125, 50, 0.9);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.2s;
+}
+
+#xinjiang-fullscreen:hover {
+  background: rgba(46, 125, 50, 1);
+  transform: scale(1.05);
+}
+
+#xinjiang-fullscreen:active {
+  transform: scale(0.95);
+}
+
+/* 竖屏提示 */
+#orientation-lock {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+#orientation-lock .rotate-icon {
+  font-size: 80px;
+  margin-bottom: 30px;
+  animation: rotate 2s infinite;
+}
+
+#orientation-lock .rotate-title {
+  font-size: 28px;
+  color: white;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+#orientation-lock .rotate-sub {
+  font-size: 18px;
+  color: #aaa;
+  margin-bottom: 30px;
+}
+
+#orientation-lock .rotate-arrow {
+  font-size: 60px;
+  color: #4CAF50;
+  animation: bounce 1s infinite;
+}
+
+@keyframes rotate {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  #xinjiang-fullscreen {
+    bottom: 10px;
+    right: 10px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  #orientation-lock .rotate-icon {
+    font-size: 60px;
+  }
+
+  #orientation-lock .rotate-title {
+    font-size: 22px;
+  }
+
+  #orientation-lock .rotate-sub {
+    font-size: 14px;
+  }
+}
