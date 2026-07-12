@@ -1797,14 +1797,14 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         }
       } catch (e) {}
 
-      // v18: 通关 modal — 显示「🏂 新疆通关啦」「+¥81.00」「🥚 打开彩蛋」按钮
+      // v18.1: 通关 modal — 显示「🏠 回到成都啦」「+¥81.00」「🚪 打开房门」按钮
       // 跟 turkey 风格一致: container(640, 360), setDepth(2000)
       var winContainer = this.add.container(640, 360);
       winContainer.setDepth(2000);
 
       var backdrop = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7);
       var card = this.add.rectangle(0, 0, 520, 380, 0x4A2E1A, 1).setStrokeStyle(4, 0xFFD98A);
-      var titleText = this.add.text(0, -120, '🏂 新疆通关啦', {
+      var titleText = this.add.text(0, -120, '🏠 回到成都啦', {
         fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       var quoteText = this.add.text(0, -70, '天山雪顶滑下来，故乡炊烟等你回', {
@@ -1819,7 +1819,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       }).setOrigin(0.5);
 
       var nextBg = this.add.rectangle(0, 140, 280, 60, 0xFFD98A, 1).setStrokeStyle(2, 0xFFE9B0);
-      var nextBtnTxt = this.add.text(0, 140, '🥚 打开彩蛋', {
+      var nextBtnTxt = this.add.text(0, 140, '🚪 打开房门', {
         fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
       }).setOrigin(0.5);
       var nextZone = this.add.zone(0, 140, 280, 60).setInteractive({ useHandCursor: true });
@@ -1829,7 +1829,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       var openEgg = function () {
         try { window.playXinjiangSfx('voyage', 0.6); } catch (e) {}
         // 清理 DOM 兜底按钮
-        var oldBtn = document.getElementById('xinjiang-win-egg-btn');
+        var oldBtn = document.getElementById('xinjiang-win-door-btn');
         if (oldBtn) oldBtn.remove();
         self._triggerEasterEgg();
       };
@@ -1841,13 +1841,15 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         openEgg();
       });
 
-      // v18: iOS Safari DOM 兜底按钮 (透明化, 只保留点击区)
+      // v18.1: iOS Safari DOM 兜底按钮 (透明化, 只保留点击区)
       var oldDom = document.getElementById('xinjiang-win-egg-btn');
       if (oldDom) oldDom.remove();
+      var oldDom2 = document.getElementById('xinjiang-win-door-btn');
+      if (oldDom2) oldDom2.remove();
       var domBtn = document.createElement('button');
-      domBtn.id = 'xinjiang-win-egg-btn';
+      domBtn.id = 'xinjiang-win-door-btn';
       domBtn.type = 'button';
-      domBtn.textContent = '🥚 打开彩蛋';
+      domBtn.textContent = '🚪 打开房门';
       domBtn.style.cssText = [
         'position:fixed',
         'z-index:9000',
