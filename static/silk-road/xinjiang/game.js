@@ -1,13 +1,32 @@
 // 新疆·天山滑雪 —— 关卡 4 游戏引擎
 //
-// v6 (2026-07-12) — 修复视差方向 + 按钮缩小
-//   - v5 视差方向反了 (offset += → 元素下移, 像下山), 玩家看到背景往脚下溜走
-//     v6: offset 改为 -= 反向累加, 元素上移 = "地图飞速往上掠过" = 真正的滑雪感
-//     物理意义: offset 减小 = 向上滚动距离增加, 跟玩家朝下方滑过去一致
-//   - v5 4 按钮 120×120 还是太大, v6 缩到 80×80 (再缩 1/3, 单手拇指舒服)
-//     字号 btnW*0.42 → btnW*0.5 (80×80 时字号 40px)
-//     位置布局不变 (◀ 120, ▶ 1160, ▲ 200, ▼ 1080; 上下 y=380, 左右 y=620)
+// v8 (2026-07-12) — 5 个 bug 修复
+//   Bug 1: 单板滑雪 — 用 Phaser Graphics 自绘单板 (深蓝 #1976D2, 高光 #42A5F5, 尖端上翘)
+//          替换 emoji 🎿, 跨平台一致, avatar 踩在板面上 (avatar.y=-8, board.y=12)
+//   Bug 2: 玩家 y 移到中上 (playerScreenY 480 → 320), 720 高画面的 1/3 位置
+//   Bug 3: 4 个 DOM 方向键 → 田字格紧凑布局 (全部聚拢屏幕左下角), 统一新疆蓝色系
+//          整体包裹在 wrapper (left:20, bottom:20, 164×164) 里
+//          ▲ top:0 left:42, ▼ bottom:0 left:42, ◀ top:42 left:0, ▶ top:42 left:84
+//   Bug 4: 物品从屏幕底部出生 (y=CANVAS_H+80) + 向上移动 (y -= scrollSpeed * dt)
+//          跟背景方向一致, 像"地面从脚下往身后流过"
+//   Bug 5: 终点小屋 x=1240 右下角 (CANVAS_W-40) + 路径三角形斜向左下引导
 //
+// v7 (2026-07-12) — 真正修复背景方向 bug + 4 按钮 viewport 相对坐标
+//   - v6 改错了: 只把 offset 改成 -= 反向累加, 但 draw 里仍是 `y = baseY + modOff`
+//     结果: offset=-33.44 → modOff=686.56 (正数!) → y = baseY + 686 = 屏幕底部 (反了!)
+//   - v7 正解:
+//     1. offset 累加保持正向 (+=) → modOff 0→719
+//     2. draw 公式改成 `y = baseY - modOff` → modOff 增加 → y 减小 → 元素上移
+//     3. 效果: 远/中/近层元素向上飞 = 真正的滑雪感
+//   - v6 4 按钮在真机看不到, v7 改用 viewport 相对坐标 (不依赖 canvas rect)
+//     ◀ position fixed left:20px bottom:80px
+//     ▶ position fixed right:20px bottom:80px
+//     ▲ position fixed left:calc(50% - 160px) top:80px
+//     ▼ position fixed right:calc(50% - 160px) top:80px
+//     z-index 99999 → 2147483647 (int32 max, 永远置顶)
+//     pointer-events:auto + touch-action:none (iOS Safari 必加)
+//
+// v6 (2026-07-12) — 修复视差方向 + 按钮缩小 (v7 才发现改错了)
 // v5 (2026-07-12) — 4 按钮大小统一
 //   - 用户反馈"上下左右, 四个按键大小一样"
 //   - 4 个按钮统一为 120×120, 布局 C (左右在屏幕底部, 上下在玩家头顶上方)
@@ -590,7 +609,7 @@
       for (var i = 0; i < shapes.length; i++) {
         var s = shapes[i];
         for (var k = 0; k < 2; k++) {
-          var y = s.baseY + modOff - k * LAYER_H;
+          var y = s.baseY - modOff - k * LAYER_H;
           if (y < -300 || y > LAYER_H + 100) continue;
           g.fillStyle(s.color, s.alpha);
           if (s.kind === 'triangle') {
@@ -647,7 +666,7 @@
       for (var i = 0; i < shapes.length; i++) {
         var s = shapes[i];
         for (var k = 0; k < 2; k++) {
-          var y = s.baseY + modOff - k * LAYER_H;
+          var y = s.baseY - modOff - k * LAYER_H;
           if (y < -200 || y > LAYER_H + 100) continue;
           g.fillStyle(s.color, s.alpha);
           if (s.kind === 'triangle') {
@@ -695,7 +714,7 @@
       }
       for (var p = 0; p < stripes.length; p++) {
         var s = stripes[p];
-        var y = s.y + modOff;
+        var y = s.y - modOff;
         while (y > LAYER_H + 10) y -= LAYER_H;
         while (y < -20) y += LAYER_H;
         g.fillStyle(s.color, s.alpha);
@@ -739,7 +758,8 @@
       // 改用 playerContainer 同步位置: 屋本体深度挂 _exitHouseGfx, 在 update 中每帧重画位置
 
       // 把"屋本体容器"存到 this._exitHouseContainer, 在 update 里逐帧定位
-      this._exitHouseContainer = this.add.container(640, -200);
+      // v8: x 从 640 (居中) 改成 1240 (CANVAS_W-40, 右下角)
+      this._exitHouseContainer = this.add.container(CANVAS_W - 40, -200);
       this._exitHouseContainer.setDepth(20);
 
       // 计算 biome 4 在总滚动中的起始 offset (前三段之和)
@@ -752,77 +772,80 @@
       // (按 scrollInBiome 渐显/渐隐, 让"路径先出现 → 主屋后接管"的视觉节奏)
 
       // —— 屋前小路 (在 _exitHousePath) ——
+      // v8: 斜向左下的引导三角形, 从屋体右上方开始, 斜向左下方展开
+      //   起点 (屋体上方, x 跟屋体同 x=1240): (0, 300) — 屋体正上方窄口
+      //   终点 (屏幕底部稍偏左, x=1100): (-140, 700) — 斜向左下
       this._exitHousePath = this.add.graphics();
       this._exitHousePath.fillStyle(pathColor, 0.85);
-      // 梯形 (顶部宽 800, 底部宽 320, 居中)
-      this._exitHousePath.fillTriangle(-400, 300, 400, 300, 240, 700);
-      this._exitHousePath.fillTriangle(-400, 300, -240, 700, 240, 700);
-      // 路边深色边
+      // 单三角形: 屋体正上方 (0,300) → 斜向左下 (-200, 700) → 屋体底部 (0, 700)
+      this._exitHousePath.fillTriangle(0, 300, -200, 700, 0, 700);
+      // 路边深色边 (沿斜边 + 右竖边)
       this._exitHousePath.lineStyle(3, pathEdgeColor, 0.7);
-      this._exitHousePath.lineBetween(-400, 300, -240, 700);
-      this._exitHousePath.lineBetween(400, 300, 240, 700);
+      this._exitHousePath.lineBetween(0, 300, -200, 700);
+      this._exitHousePath.lineBetween(0, 300, 0, 700);
       this._exitHouseContainer.add(this._exitHousePath);
 
       // —— 屋本体 (在 _exitHouseHouse) ——
+      // v8: 缩小到 180x130 (从 220x160), 适合右下角不拥挤
       this._exitHouseHouse = this.add.graphics();
       var house = this._exitHouseHouse;
 
-      // 屋主体 — 棕色墙 (rect 220×160, 居中底部)
+      // 屋主体 — 棕色墙 (rect 180x130, 居中底部)
       house.fillStyle(0x8D6E63, 1);
-      house.fillRect(-110, 30, 220, 160);
+      house.fillRect(-90, 20, 180, 130);
 
       // 屋主体深色边框
       house.lineStyle(2, 0x4E342E, 1);
-      house.strokeRect(-110, 30, 220, 160);
+      house.strokeRect(-90, 20, 180, 130);
 
-      // 屋顶 — 大三角 (深棕色)
+      // 屋顶 — 大三角 (深棕色, 顶部到 y=-75)
       house.fillStyle(0x5D4037, 1);
-      house.fillTriangle(-130, 30, 130, 30, 0, -90);
+      house.fillTriangle(-105, 20, 105, 20, 0, -75);
       // 屋脊装饰线
       house.lineStyle(2, 0x3E2723, 1);
-      house.lineBetween(-130, 30, 130, 30);
-      house.lineBetween(0, -90, 0, 30);
+      house.lineBetween(-105, 20, 105, 20);
+      house.lineBetween(0, -75, 0, 20);
 
       // 屋瓦横纹 (3 条)
       house.lineStyle(1, 0x3E2723, 0.6);
-      house.lineBetween(-90, -50, 90, -50);
-      house.lineBetween(-100, -25, 100, -25);
-      house.lineBetween(-110, 0, 110, 0);
+      house.lineBetween(-72, -42, 72, -42);
+      house.lineBetween(-82, -21, 82, -21);
+      house.lineBetween(-90, 0, 90, 0);
 
-      // 屋门 — 深色矩形 (内嵌)
+      // 屋门 — 深色矩形 (内嵌, 居中, 65x75)
       house.fillStyle(0x3E2723, 1);
-      house.fillRect(-40, 100, 80, 90);
+      house.fillRect(-32, 80, 64, 70);
       // 门内暖光 (浅黄)
       house.fillStyle(0xFFE082, 0.85);
-      house.fillRect(-34, 106, 68, 84);
+      house.fillRect(-27, 85, 54, 65);
       // 门框深色描边
       house.lineStyle(2, 0x3E2723, 1);
-      house.strokeRect(-40, 100, 80, 90);
+      house.strokeRect(-32, 80, 64, 70);
       // 门中线 (双开门)
-      house.lineBetween(0, 106, 0, 188);
+      house.lineBetween(0, 85, 0, 149);
 
       // 门两侧红灯笼
       house.fillStyle(0xC62828, 1);
-      house.fillCircle(-90, 90, 14);
-      house.fillCircle(90, 90, 14);
+      house.fillCircle(-72, 72, 11);
+      house.fillCircle(72, 72, 11);
       // 灯笼顶部黑带
       house.fillStyle(0x3E2723, 1);
-      house.fillRect(-96, 76, 12, 4);
-      house.fillRect(84, 76, 12, 4);
+      house.fillRect(-77, 61, 10, 3);
+      house.fillRect(67, 61, 10, 3);
       // 灯笼底部流苏
       house.fillStyle(0xFFD54F, 1);
-      house.fillRect(-92, 104, 4, 8);
-      house.fillRect(88, 104, 4, 8);
+      house.fillRect(-74, 83, 3, 6);
+      house.fillRect(71, 83, 3, 6);
 
       // 屋顶两侧屋檐翘起 (传统中式)
       house.fillStyle(0x3E2723, 1);
-      house.fillTriangle(-130, 30, -160, 20, -110, 50);
-      house.fillTriangle(130, 30, 160, 20, 110, 50);
+      house.fillTriangle(-105, 20, -130, 12, -90, 38);
+      house.fillTriangle(105, 20, 130, 12, 90, 38);
 
       // 屋前小台阶
       house.fillStyle(0x4E342E, 1);
-      house.fillRect(-50, 188, 100, 6);
-      house.fillRect(-44, 194, 88, 6);
+      house.fillRect(-40, 148, 80, 5);
+      house.fillRect(-35, 153, 70, 5);
 
       this._exitHouseContainer.add(this._exitHouseHouse);
 
@@ -1164,18 +1187,42 @@
     },
 
     // ============================================================
-    //  玩家 (雪板 + 角色)
+    //  玩家 (单板 + 角色)
+    //  v8: 用 Phaser Graphics 自绘单板 (替代 emoji, 跨平台一致)
+    //       板体: 横向细长椭圆, 宽度 60px, 高度 10px, 深蓝 #1976D2
+    //       板面高光: 上半部浅蓝 #42A5F5
+    //       板尖端上翘: 右侧三角形
+    //       avatar 踩在板上 (avatar.y=-8, board.y=12)
     // ============================================================
     _drawPlayer: function () {
       this.playerContainer.removeAll(true);
-      var board = this.add.text(0, 18, '🎿', { fontSize: '44px' }).setOrigin(0.5);
-      this.playerContainer.add(board);
+
+      // —— 单板 Graphics (Phaser 自绘, 替代 emoji) ——
+      var boardGfx = this.add.graphics();
+      // 板体: 横向椭圆 (fillEllipse 居中, x=0, y=12)
+      boardGfx.fillStyle(0x1976D2, 1);                  // 深蓝板底
+      boardGfx.fillEllipse(0, 12, 60, 10);
+      // 板面高光: 上半浅蓝条纹
+      boardGfx.fillStyle(0x42A5F5, 1);                  // 浅蓝高光
+      boardGfx.fillEllipse(0, 9, 56, 4);
+      // 板尖端上翘 (右侧)
+      boardGfx.fillStyle(0x1976D2, 1);
+      boardGfx.fillTriangle(30, 12, 38, 8, 38, 16);    // 右尖端翘起
+      // 板底阴影 (深一档蓝)
+      boardGfx.fillStyle(0x0D47A1, 0.6);
+      boardGfx.fillEllipse(0, 16, 56, 3);
+      // 板底绑定 (中央深色固定带)
+      boardGfx.fillStyle(0x0D47A1, 1);
+      boardGfx.fillRect(-8, 6, 16, 10);
+      this.playerContainer.add(boardGfx);
+
+      // —— 角色 avatar (踩在板面上, 脚 y 落在 ~12) ——
       var avatarId = null;
       try { avatarId = localStorage.getItem('silkroad_avatar'); } catch (e) {}
       if (!avatarId) avatarId = 'malay';
       var avatar = window.SilkRoadCommon.buildAvatarSprite(this, avatarId);
       avatar.setScale(0.7);
-      avatar.setPosition(0, -10);
+      avatar.setPosition(0, -8);
       this.playerContainer.add(avatar);
 
       // 道具效果指示器 (玩家头顶)
@@ -1251,14 +1298,21 @@
     },
 
     // ============================================================
-    //  v5 重写: 屏幕 DOM 方向键 (← → ▲ ▼) — 4 个按钮大小统一 120×120
-    //  v4 替换 v3 的 Phaser joystick, 改用 4 个 DOM 按钮:
-    //    ← →  : 左右移动 (屏幕底部两端, 120×120)
-    //    ▲    : 减速 (玩家头顶上方靠左, 120×120)
-    //    ▼    : 加速 (玩家头顶上方靠右, 120×120)
-    //  v5: 4 个按钮完全统一大小 (120×120), 布局 C (上下 y=380, 左右 y=620, 不重叠)
-    //  按钮使用 pointerdown / pointerup, 支持长按持续触发
-    //  位置根据 canvas 实际渲染区域 + scale 计算, 跟随窗口 resize
+    //  v8 重写: 屏幕 DOM 方向键 — 4 按钮田字格紧凑布局 + 统一新疆蓝色系
+    //  v7 之前布局 C: ◀▶ 在屏幕底部两端, ▲▼ 在屏幕顶部中央两侧 (4 个按钮散落各处)
+    //  v8 新布局:
+    //    - 4 个按钮全部聚拢到屏幕**左下角**, 形成田字格 (土耳其参考)
+    //    - 整体包裹在 wrapper div (left:20, bottom:20, 164×164, pointer-events:none)
+    //    - 4 个按钮 position:absolute 在 wrapper 内 (pointer-events:auto)
+    //    - ▲ top:0 left:42   (上方居中)
+    //    - ▼ bottom:0 left:42 (下方居中)
+    //    - ◀ top:42 left:0   (左侧)
+    //    - ▶ top:42 left:84  (右侧)
+    //  颜色: 全部统一新疆蓝色系
+    //    - 背景: rgba(13, 71, 161, 0.78) 深蓝
+    //    - 边框: rgba(179, 229, 252, 0.85) 浅蓝
+    //    - 文字: rgba(179, 229, 252, 1) 浅蓝
+    //    - 按下: 背景 rgba(179, 229, 252, 0.95) 浅蓝高亮, 文字 rgba(13, 71, 161, 1) 深蓝
     // ============================================================
     _createDomDirectionButtons: function () {
       var self = this;
@@ -1269,38 +1323,42 @@
       this.joystickContainer = this.add.container(0, 0);
       this.joystickContainer.setDepth(500);
 
-      // —— 计算 canvas 实际渲染区域 (Phaser FIT 模式) ——
-      var getCanvasRect = function () {
-        var canvas = self.game.canvas;
-        if (!canvas) return null;
-        var rect = canvas.getBoundingClientRect();
-        var scaleX = rect.width / CANVAS_W;
-        var scaleY = rect.height / CANVAS_H;
-        var scale = Math.min(scaleX, scaleY);
-        var renderW = CANVAS_W * scale;
-        var renderH = CANVAS_H * scale;
-        var offsetX = rect.left + (rect.width - renderW) / 2;
-        var offsetY = rect.top + (rect.height - renderH) / 2;
-        return {
-          scale: scale,
-          offsetX: offsetX,
-          offsetY: offsetY,
-          renderW: renderW,
-          renderH: renderH,
-        };
-      };
+      // —— 统一新疆蓝色系 (v8) ——
+      var COLOR_BG        = 'rgba(13, 71, 161, 0.78)';   // 深蓝
+      var COLOR_BG_PRESS  = 'rgba(179, 229, 252, 0.95)';  // 浅蓝高亮 (按下)
+      var COLOR_BORDER    = 'rgba(179, 229, 252, 0.85)';  // 浅蓝边框
+      var COLOR_TEXT      = 'rgba(179, 229, 252, 1)';     // 浅蓝文字
+      var COLOR_TEXT_PRS  = 'rgba(13, 71, 161, 1)';       // 深蓝文字 (按下)
 
-      // —— DOM 按钮工厂 ——
-      // btnX/btnY 是 Phaser 画布坐标 (CANVAS_W=1280, CANVAS_H=720)
-      // 内部转成 viewport 像素
-      var makeBtn = function (id, label, btnX, btnY, btnW, btnH, bgColor, borderColor, fontColor, onPress, onRelease) {
+      // —— v8: 容器 wrapper (4 按钮聚拢田字格, 屏幕左下角) ——
+      // wrapper 是 fixed 在 viewport 左下角的 164×164 容器, 内部 4 按钮 absolute 定位
+      var wrapper = document.createElement('div');
+      wrapper.id = 'xj-dir-wrapper';
+      wrapper.style.cssText = [
+        'position:fixed',
+        'left:20px',
+        'bottom:20px',
+        'width:164px',
+        'height:164px',
+        'z-index:2147483646',  // 略低于按钮, 防止遮挡按钮阴影
+        'pointer-events:none', // wrapper 本身不接收事件, 按钮单独接收
+      ].join(';');
+      document.body.appendChild(wrapper);
+      self._domWrapper = wrapper;
+
+      // —— DOM 按钮工厂 (v8: 在 wrapper 内 absolute 定位, 统一蓝) ——
+      // posStyle: { left, top, bottom, right } 字符串 CSS 值 (例: '42px')
+      // wrapper 已 fixed 在 viewport 左下角, 按钮在 wrapper 内 absolute 定位
+      var makeBtn = function (id, label, posStyle, btnW, btnH, bgColor, bgPress, borderColor, fontColor, fontColorPrs, onPress, onRelease) {
         var btn = document.createElement('button');
         btn.id = id;
         btn.type = 'button';
         btn.textContent = label;
-        btn.style.cssText = [
-          'position:fixed',
-          'z-index:99999',
+        var css = [
+          'position:absolute',
+          'z-index:2147483647',                  // int32 max, 永远置顶
+          'width:' + btnW + 'px',
+          'height:' + btnH + 'px',
           'border:' + Math.max(3, Math.round(btnW * 0.025)) + 'px solid ' + borderColor,
           'border-radius:' + Math.round(btnW * 0.18) + 'px',
           'background:' + bgColor,
@@ -1312,7 +1370,8 @@
           'user-select:none',
           '-webkit-user-select:none',
           '-webkit-tap-highlight-color:transparent',
-          'touch-action:none',
+          'touch-action:none',                   // iOS Safari 必加, 否则会被解释成滚动
+          'pointer-events:auto',                 // 强制接收事件
           'box-shadow:0 4px 14px rgba(0,0,0,0.35)',
           'transition:transform 80ms, opacity 80ms',
           'padding:0',
@@ -1321,7 +1380,13 @@
           'align-items:center',
           'justify-content:center',
           'line-height:1',
-        ].join(';');
+        ];
+        // 直接用 viewport 相对定位 (left/right/top/bottom)
+        if (posStyle.left !== undefined) css.push('left:' + posStyle.left);
+        if (posStyle.right !== undefined) css.push('right:' + posStyle.right);
+        if (posStyle.top !== undefined) css.push('top:' + posStyle.top);
+        if (posStyle.bottom !== undefined) css.push('bottom:' + posStyle.bottom);
+        btn.style.cssText = css.join(';');
         btn.setAttribute('aria-label', label);
 
         var pressed = false;
@@ -1330,7 +1395,10 @@
           if (pressed) return;
           pressed = true;
           btn.style.transform = 'scale(0.92)';
-          btn.style.opacity = '0.85';
+          btn.style.opacity = '0.95';
+          // v8: 按下时背景变浅蓝高亮, 文字变深蓝
+          btn.style.background = bgPress;
+          btn.style.color = fontColorPrs;
           try { window.playXinjiangSfx('click', 0.25); } catch (err) {}
           onPress();
         };
@@ -1340,6 +1408,9 @@
           pressed = false;
           btn.style.transform = 'scale(1)';
           btn.style.opacity = '1';
+          // 还原背景和文字
+          btn.style.background = bgColor;
+          btn.style.color = fontColor;
           onRelease();
         };
 
@@ -1355,99 +1426,73 @@
         btn.addEventListener('touchstart', doPress, { passive: false });
         btn.addEventListener('touchend', doRelease, { passive: false });
 
-        document.body.appendChild(btn);
+        // v8: 按钮挂到 wrapper 内 (wrapper fixed 在 viewport 左下角)
+        wrapper.appendChild(btn);
         self._domButtons.push(btn);
         return btn;
       };
 
-      // —— 按钮坐标 (Phaser 画布坐标 1280×720) ——
-      // v6: 4 个按钮统一大小 = 80×80 (v5 120 还是太大, 单手拇指不舒服, 再缩 1/3)
-      // 布局 C 不变: 左右按钮 (◀ ▶) 在屏幕底部 (y=620), 上下按钮 (▲ ▼) 在玩家头顶上方 (y=380)
-      // 玩家 y=480, 上下按钮 y=380 (玩家上方 100px), 左右按钮 y=620 (屏幕底部上方 100px)
-      // 上下按钮 vs 左右按钮 间距 = 240px (远超 80 按钮大小, 不会重叠)
+      // —— v8 按钮坐标: 田字格紧凑布局 (wrapper 内 absolute 定位) ——
+      // BTN_SIZE = 80 (单手拇指舒服)
+      // wrapper 164x164 在 viewport 左下角 (left:20, bottom:20)
+      // 4 按钮位置 (田字格):
+      //   ▲  top:0   left:42   (上方居中)
+      //   ▼  bottom:0 left:42  (下方居中)
+      //   ◀  top:42  left:0    (左侧)
+      //   ▶  top:42  left:84   (右侧)
       var BTN_SIZE = 80;
-      var LR_W = BTN_SIZE, LR_H = BTN_SIZE;       // 左右按钮大小 (80×80)
-      var UD_W = BTN_SIZE, UD_H = BTN_SIZE;       // 上下按钮大小 (80×80)
-      var LR_Y = CANVAS_H - 100;                   // 左右按钮 y = 620 (屏幕底部)
-      var UD_Y = 380;                              // 上下按钮 y = 380 (玩家头顶上方)
-      var LR_LEFT_X = 120;                         // ◀ x = 120 (屏幕左)
-      var LR_RIGHT_X = CANVAS_W - 120;             // ▶ x = 1160 (屏幕右)
-      var UD_LEFT_X = 200;                         // ▲ x = 200 (屏幕左偏中)
-      var UD_RIGHT_X = CANVAS_W - 200;             // ▼ x = 1080 (屏幕右偏中)
-
-      var positionAll = function () {
-        var r = getCanvasRect();
-        if (!r) return;
-        var positions = [
-          { btn: self._btnLeft,  x: LR_LEFT_X,  y: LR_Y, w: LR_W, h: LR_H },
-          { btn: self._btnRight, x: LR_RIGHT_X, y: LR_Y, w: LR_W, h: LR_H },
-          { btn: self._btnUp,    x: UD_LEFT_X,  y: UD_Y, w: UD_W, h: UD_H },
-          { btn: self._btnDown,  x: UD_RIGHT_X, y: UD_Y, w: UD_W, h: UD_H },
-        ];
-        for (var i = 0; i < positions.length; i++) {
-          var p = positions[i];
-          if (!p.btn) continue;
-          var px = r.offsetX + p.x * r.scale - p.w / 2;
-          var py = r.offsetY + p.y * r.scale - p.h / 2;
-          p.btn.style.left = px + 'px';
-          p.btn.style.top = py + 'px';
-          p.btn.style.width = p.w + 'px';
-          p.btn.style.height = p.h + 'px';
-        }
-      };
-
-      // —— 创建 4 个按钮 ——
-      // ← (蓝色, 大)
+      var CENTER_X = 42;  // (164-80)/2 = 42 (居中按钮的 left)
+      // ◀ (左移, 深蓝底浅蓝字)
       this._btnLeft = makeBtn(
         'xj-dir-left', '◀',
-        LR_LEFT_X, LR_Y, LR_W, LR_H,
-        'rgba(13, 71, 161, 0.78)', '#B3E5FC', '#B3E5FC',
+        { top: '42px', left: '0px' },
+        BTN_SIZE, BTN_SIZE,
+        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
         function () { self.keys.left = true; },
         function () { self.keys.left = false; }
       );
-      // → (蓝色, 大)
+      // ▶ (右移, 深蓝底浅蓝字)
       this._btnRight = makeBtn(
         'xj-dir-right', '▶',
-        LR_RIGHT_X, LR_Y, LR_W, LR_H,
-        'rgba(13, 71, 161, 0.78)', '#B3E5FC', '#B3E5FC',
+        { top: '42px', left: '84px' },
+        BTN_SIZE, BTN_SIZE,
+        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
         function () { self.keys.right = true; },
         function () { self.keys.right = false; }
       );
-      // ▲ (减速, 蓝底)
+      // ▲ (减速, 深蓝底浅蓝字)
       this._btnUp = makeBtn(
         'xj-dir-up', '▲',
-        UD_LEFT_X, UD_Y, UD_W, UD_H,
-        'rgba(33, 150, 243, 0.85)', '#FFFFFF', '#FFFFFF',
+        { top: '0px', left: CENTER_X + 'px' },
+        BTN_SIZE, BTN_SIZE,
+        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
         function () { self.speedBoost = -config.manualBoostPress; },
         function () { self.speedBoost = 0; }
       );
-      // ▼ (加速, 黄底)
+      // ▼ (加速, 深蓝底浅蓝字)
       this._btnDown = makeBtn(
         'xj-dir-down', '▼',
-        UD_RIGHT_X, UD_Y, UD_W, UD_H,
-        'rgba(255, 193, 7, 0.88)', '#5D4037', '#5D4037',
+        { bottom: '0px', left: CENTER_X + 'px' },
+        BTN_SIZE, BTN_SIZE,
+        COLOR_BG, COLOR_BG_PRESS, COLOR_BORDER, COLOR_TEXT, COLOR_TEXT_PRS,
         function () { self.speedBoost = config.manualBoostPress; },
         function () { self.speedBoost = 0; }
       );
 
-      // —— 初始化位置 + 监听 resize ——
-      positionAll();
-      this._domBtnResizeHandler = function () { positionAll(); };
-      window.addEventListener('resize', this._domBtnResizeHandler);
-      window.addEventListener('orientationchange', this._domBtnResizeHandler);
+      // —— v7: viewport 相对定位, 不需要 resize 监听 (按钮天然跟随 viewport) ——
 
       // —— Scene shutdown 时清理 (避免按钮残留) ——
       this.events.once('shutdown', function () {
-        if (self._domBtnResizeHandler) {
-          window.removeEventListener('resize', self._domBtnResizeHandler);
-          window.removeEventListener('orientationchange', self._domBtnResizeHandler);
-          self._domBtnResizeHandler = null;
-        }
         for (var i = 0; i < self._domButtons.length; i++) {
           var b = self._domButtons[i];
           if (b && b.parentNode) b.parentNode.removeChild(b);
         }
         self._domButtons = [];
+        // v8: 清理 wrapper
+        if (self._domWrapper && self._domWrapper.parentNode) {
+          self._domWrapper.parentNode.removeChild(self._domWrapper);
+          self._domWrapper = null;
+        }
         self._btnLeft = self._btnRight = self._btnUp = self._btnDown = null;
         // 兜底: 松开所有按键状态, 避免按钮已删除但状态仍 stuck
         self.keys.left = false;
@@ -1489,18 +1534,20 @@
       var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
       var chosen = this._weightedPick(biome.obstacles);
       var x = this._pickFreeX(this.obstacles, config.obstacleMinGap);
+      // v8: 物品从屏幕底部出生 (CANVAS_H + 80), 向上移动, 跟背景方向一致
+      var startY = CANVAS_H + 80;
       var ob = {
         id: chosen.id,
         emoji: chosen.emoji,
         size: chosen.size,
         x: x,
-        y: -80,
-        gfx: this.add.text(x, -80, chosen.emoji, {
+        y: startY,
+        gfx: this.add.text(x, startY, chosen.emoji, {
           fontSize: chosen.size + 'px',
         }).setOrigin(0.5).setDepth(40),
       };
       if (chosen.id === 'friendly_npc') {
-        ob.glow = this.add.circle(x, -80, chosen.size * 0.8, 0xFFD54F, 0.35)
+        ob.glow = this.add.circle(x, startY, chosen.size * 0.8, 0xFFD54F, 0.35)
           .setDepth(39);
       }
       this.obstacles.push(ob);
@@ -1513,6 +1560,8 @@
       // 奖品跟障碍物 + 已存在奖品 都不重叠
       var occupied = this.obstacles.concat(this.prizes);
       var x = this._pickFreeX(occupied, config.prizeMinGap);
+      // v8: 物品从屏幕底部出生 (CANVAS_H + 80), 向上移动, 跟背景方向一致
+      var startY = CANVAS_H + 80;
       var p = {
         id: chosen.id,
         emoji: chosen.emoji,
@@ -1523,11 +1572,11 @@
         duration: chosen.duration,
         size: 38,
         x: x,
-        y: -80,
-        gfx: this.add.text(x, -80, chosen.emoji, {
+        y: startY,
+        gfx: this.add.text(x, startY, chosen.emoji, {
           fontSize: '42px',
         }).setOrigin(0.5).setDepth(41),
-        glow: this.add.circle(x, -80, 30, chosen.color, 0.35).setDepth(40),
+        glow: this.add.circle(x, startY, 30, chosen.color, 0.35).setDepth(40),
       };
       this.prizes.push(p);
     },
@@ -1735,15 +1784,16 @@
       this.scrollSpeed = Math.max(0, Math.min(config.maxSpeed, targetSpeed));
       this.lastSlope = currentSlope;
 
-      // ===== 滚动累加 + 视差偏移 (v6 反向: 背景向上飞) =====
-      // scrollY 还是 += (biome 进度一直推进, 永远正向)
-      // 但视差 offset 改为 -= (元素绘制 y = baseY + modOff, modOff 减小 → 元素上移)
+      // ===== 滚动累加 + 视差偏移 (v7 正向累加 + draw 减号) =====
+      // scrollY += (biome 进度一直推进, 永远正向)
+      // 视差 offset += (正向累加 0→719 循环)
+      // draw 公式 y = s.baseY - modOff (modOff 增加 → 元素上移 = 滑雪感)
       // 视觉: 玩家站在 y=480 不动, 远/中/近背景飞速向上掠过 = 真正在朝下方滑过去
       // 障碍物/奖品仍然 ob.y += scrollSpeed (从屏幕上方生成, 向下冲向玩家脚下) — 不变
       this.scrollY += this.scrollSpeed * dt;
-      this.farScrollOffset  -= this.scrollSpeed * dt * config.parallaxFar;   // 0.4 (反向: 背景向上)
-      this.midScrollOffset  -= this.scrollSpeed * dt * config.parallaxMid;   // 0.7 (反向)
-      this.nearScrollOffset -= this.scrollSpeed * dt * config.parallaxNear;  // 1.2 (反向)
+      this.farScrollOffset  += this.scrollSpeed * dt * config.parallaxFar;   // 0.4 (正向累加 + draw 减号 → 元素上移)
+      this.midScrollOffset  += this.scrollSpeed * dt * config.parallaxMid;   // 0.7 (正向累加)
+      this.nearScrollOffset += this.scrollSpeed * dt * config.parallaxNear;  // 1.2 (正向累加)
 
       // 重绘 3 层视差
       this._redrawLayers();
@@ -1793,13 +1843,14 @@
       this._updateSnowParticles();
 
       // ===== 障碍物位置 + 碰撞 =====
+      // v8: 物品从屏幕底部出生, 向上移动 (y -= scrollSpeed * dt), 跟背景方向一致
       for (var i = this.obstacles.length - 1; i >= 0; i--) {
         var ob = this.obstacles[i];
-        ob.y += this.scrollSpeed * dt;
+        ob.y -= this.scrollSpeed * dt;
         ob.gfx.setPosition(ob.x, ob.y);
         if (ob.glow) ob.glow.setPosition(ob.x, ob.y);
 
-        if (ob.y > CANVAS_H + 80) {
+        if (ob.y < -80) {
           ob.gfx.destroy();
           if (ob.glow) ob.glow.destroy();
           this.obstacles.splice(i, 1);
@@ -1829,7 +1880,8 @@
             p.y += (mdy / mdist) * 400 * dt;
           }
         } else {
-          p.y += this.scrollSpeed * dt;
+          // v8: 奖品从底部向上移动
+          p.y -= this.scrollSpeed * dt;
         }
         p.gfx.setPosition(p.x, p.y);
         if (p.glow) {
@@ -1839,7 +1891,7 @@
           p.glow.setScale(pulse);
         }
 
-        if (p.y > CANVAS_H + 80) {
+        if (p.y < -80) {
           p.gfx.destroy();
           if (p.glow) p.glow.destroy();
           this.prizes.splice(j, 1);
@@ -1875,6 +1927,10 @@
           if (b && b.parentNode) b.parentNode.removeChild(b);
         }
         this._domButtons = [];
+        if (this._domWrapper && this._domWrapper.parentNode) {
+          this._domWrapper.parentNode.removeChild(this._domWrapper);
+          this._domWrapper = null;
+        }
         this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
       }
 
@@ -1909,6 +1965,10 @@
           if (b && b.parentNode) b.parentNode.removeChild(b);
         }
         this._domButtons = [];
+        if (this._domWrapper && this._domWrapper.parentNode) {
+          this._domWrapper.parentNode.removeChild(this._domWrapper);
+          this._domWrapper = null;
+        }
         this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
       }
       // 销毁通关提示

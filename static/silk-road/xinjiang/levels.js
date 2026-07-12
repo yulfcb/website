@@ -41,7 +41,7 @@ window.XINJIANG_LEVEL = {
 
     startY: 80,                  // 玩家起始 y (兼容字段)
     finishY: 700,                // 通关 y (兼容字段, 不再使用)
-    playerScreenY: 480,          // v4: 玩家固定屏幕 y (中下, 离底部 240px)
+    playerScreenY: 320,          // v8: 玩家固定屏幕 y (中上, 720 高画面的 320 = 上 1/3)
     initialX: 640,               // 玩家起始 x (屏幕中央)
     playerHalfW: 22,             // 玩家 hitbox 半宽
     playerHalfH: 28,             // 玩家 hitbox 半高
