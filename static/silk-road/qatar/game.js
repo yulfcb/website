@@ -27,10 +27,11 @@
 
   // 4 档奖励（前端查表；金额与服务端 QATAR_REWARD_TIERS 一致）
   // v14: NORMAL 改为 188（统一文案"188（微信查收）"）
+  // v16: HARD 改为 188（消除 6.66, 统一微信查收文案）
   var QATAR_REWARD_TIERS = {
     PERFECT: 20.20,
     NORMAL:  188,
-    HARD:    6.66,
+    HARD:    188,
     DEAD:    0,
   };
 
@@ -1563,7 +1564,8 @@ _sumSelectedPrice: function (ids) {
         fontSize: '13px', color: '#C9B89A',
       }).setOrigin(0.5);
       // v14: NORMAL 档 reward 改为 188（微信查收），统一文案
-      var rewardTxt = (this.tier === 'NORMAL')
+      // v16: HARD 档也改为 188, 一并展示 "188（微信查收）"
+      var rewardTxt = (this.tier === 'NORMAL' || this.tier === 'HARD')
         ? '+188（微信查收）'
         : '+¥' + amount.toFixed(2);
       this.add.text(640, 380, rewardTxt, {

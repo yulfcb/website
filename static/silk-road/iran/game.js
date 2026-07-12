@@ -258,7 +258,8 @@
       this._renderJugHud();
 
       // 2. 💰 余额 (中左) — 新增 M4
-      this.coinText = this.add.text(310, 30, this._coinHudText(), {
+      // v16: x 310 → 380 (拉远 70px, 让水分跟余额之间有视觉缓冲)
+      this.coinText = this.add.text(380, 30, this._coinHudText(), {
         fontSize: '15px', color: '#D4AF37', fontStyle: 'bold',
         stroke: '#2A1606', strokeThickness: 2,
       }).setOrigin(0.5);
@@ -1509,12 +1510,219 @@
         window.playIranSfx('click', 0.3);
         return;
       }
+      // v16: 出发前先弹 4 档奖励 modal 让玩家选档, 选完后再 voyage
       this._exitingIran = true;
-      this.departIran();
+      this.iranResultModal();
+    },
+
+    // v16: 伊朗通关奖励 modal — 4 档选择 (PERFECT/NORMAL/HARD/DEAD)
+    // 玩家选档 → iranClaimReward(amount) → 1.5s 后调 departIranContinue() 进入 voyage
+    iranResultModal: function () {
+      var self = this;
+      this.state = 'MODAL';
+      this.modalContainer.removeAll(true);
+      this.joystickContainer.setVisible(false);
+      window.playIranSfx('button', 0.4);
+
+      // 根据当前状态判定档位
+      var camelCount = this._luggageCount(-1004);
+      var totalWater = this._totalWater();
+      var totalCapacity = this.jugs.length * L.JUG_CAPACITY;
+      var waterRatio = totalCapacity > 0 ? (totalWater / totalCapacity) : 0;
+      var allJugsFull = totalCapacity > 0 && totalWater >= totalCapacity - 0.1;  // 全满判定
+
+      var tier;
+      if (totalWater <= 0) tier = 'DEAD';
+      else if (camelCount >= 5 && allJugsFull) tier = 'PERFECT';
+      else if (camelCount >= 3 && waterRatio > 0.5) tier = 'NORMAL';
+      else tier = 'HARD';
+
+      // 4 档按钮 (横排)
+      var tierDefs = [
+        { key: 'PERFECT', emoji: '🌟', name: '完美', x: -240 },
+        { key: 'NORMAL',  emoji: '☀️', name: '普通', x: -80 },
+        { key: 'HARD',    emoji: '🌾', name: '勉强', x: 80 },
+        { key: 'DEAD',    emoji: '🏜️', name: '渴死', x: 240 },
+      ];
+
+      var tiers = L.IRAN_REWARD_TIERS;
+      var quotes = L.IRAN_TIER_QUOTES;
+
+      // 背景遮罩
+      var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
+      this.modalContainer.add(backdrop);
+
+      // 卡片 540x460 (中心 (0, -40) 相对 modalContainer @ (640,360) → 屏幕 (640, 320))
+      var card = this.add.rectangle(0, -40, 540, 460, 0x6B4423, 1)
+        .setStrokeStyle(2, 0xFFD98A, 0.5);
+      this.modalContainer.add(card);
+
+      // 顶部标题 (档位 emoji + 名称, 反映推荐档)
+      var tierEmoji = tier === 'PERFECT' ? '🌟 完美'
+                    : tier === 'NORMAL'  ? '☀️ 普通'
+                    : tier === 'HARD'    ? '🌾 勉强' : '🏜️ 渴死';
+      this.modalContainer.add(this.add.text(0, -185, tierEmoji + '  (推荐)', {
+        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+// 引用文案 (相对 modalContainer (640,360), 230 → -130)
+      var quote = quotes[tier];
+      this.modalContainer.add(this.add.text(0, -130, quote, {
+        fontSize: '15px', color: '#A8D8C0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5));
+
+      // 摘要 (290 → -70)
+      this.modalContainer.add(this.add.text(0, -70, '🐫 骆驼 ' + camelCount
+        + ' / 💧 水 ' + totalWater.toFixed(1) + ' / ' + totalCapacity.toFixed(0) + 'L', {
+        fontSize: '13px', color: '#C9B89A',
+      }).setOrigin(0.5));
+
+      // 奖励金额大字 (340 → -20)
+      var amount = tiers[tier];
+      var rewardTxt = (tier === 'NORMAL' || tier === 'PERFECT')
+        ? '+' + amount + '（微信查收）'
+        : '+¥' + amount.toFixed(2);
+      this.modalContainer.add(this.add.text(0, -20, rewardTxt, {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+      // 4 档按钮 (横排, 4 个) — 相对 modalContainer 中心 (640,360) → 屏幕 y=430
+      var btnY = 70;
+      var btnW = 110, btnH = 60;
+      tierDefs.forEach(function (td) {
+        var isRecommended = (td.key === tier);
+        var btnColor = isRecommended ? 0xD4AF37 : 0x4A2E1A;
+        var txtColor = isRecommended ? '#2A190E' : '#F4ECD8';
+        var strokeColor = isRecommended ? 0xFFE9B0 : 0xFFD98A;
+        var btnBg = self.add.rectangle(td.x, btnY, btnW, btnH, btnColor, isRecommended ? 1 : 0.85)
+          .setStrokeStyle(2, strokeColor, isRecommended ? 0.9 : 0.5);
+        self.modalContainer.add(btnBg);
+        var emojiTxt = self.add.text(td.x, btnY - 12, td.emoji, {
+          fontSize: '22px',
+        }).setOrigin(0.5);
+        self.modalContainer.add(emojiTxt);
+        var nameTxt = self.add.text(td.x, btnY + 14, td.name, {
+          fontSize: '13px', color: txtColor, fontStyle: 'bold',
+        }).setOrigin(0.5);
+        self.modalContainer.add(nameTxt);
+        var amountTxt = self.add.text(td.x, btnY + 30, '+¥' + tiers[td.key].toFixed(2), {
+          fontSize: '10px', color: isRecommended ? '#5A2E0E' : '#C9B89A',
+        }).setOrigin(0.5);
+        self.modalContainer.add(amountTxt);
+
+        var zone = self.add.zone(td.x, btnY, btnW, btnH)
+          .setInteractive({ useHandCursor: true });
+        zone.on('pointerdown', (function (tkey, tamt) {
+          return function () {
+            window.playIranSfx('button', 0.4);
+            self._iranClaimAndDepart(tkey, tamt);
+          };
+        })(td.key, tiers[td.key]));
+        self.modalContainer.add(zone);
+      });
+
+      // 状态文字 (claim 反馈, 510 → 150 相对)
+      this._iranClaimStatus = this.add.text(0, 150, '👇 点击档位领取', {
+        fontSize: '12px', color: '#A8D8C0', fontStyle: 'italic',
+      }).setOrigin(0.5);
+      this.modalContainer.add(this._iranClaimStatus);
+
+      this.modalContainer.setVisible(true);
+    },
+
+    // v16: 伊朗 claim reward + 1.5s 后 voyage
+    _iranClaimAndDepart: function (tier, amount) {
+      var self = this;
+      this.state = 'CLAIMING';
+      if (this._iranClaimStatus) {
+        this._iranClaimStatus.setText('推送中…');
+        this._iranClaimStatus.setColor('#A8D8C0');
+      }
+      this.iranClaimReward(tier, amount).then(function () {
+        // 1.5s 后 voyage
+        self.time.delayedCall(1500, function () {
+          self.modalContainer.setVisible(false);
+          self.modalContainer.removeAll(true);
+          self.departIranContinue();
+        });
+      }).catch(function () {
+        // 网络错误: 也让 voyage 继续 (不阻塞游戏)
+        self.time.delayedCall(1500, function () {
+          self.modalContainer.setVisible(false);
+          self.modalContainer.removeAll(true);
+          self.departIranContinue();
+        });
+      });
+    },
+
+    // v16: claim reward 调用 /api/game/reward/claim {level:1, amount, session_id, nickname}
+    iranClaimReward: async function (tier, amount) {
+      var sessionId = localStorage.getItem('silkroad_session_id') || '';
+      var nickname = (localStorage.getItem('silkroad_nickname') || '小伊').slice(0, 20);
+      // DEAD 档不调 reward 接口 (跟卡塔尔一致, 只调 secret)
+      if (tier === 'DEAD' || amount <= 0) {
+        if (this._iranClaimStatus) {
+          this._iranClaimStatus.setText('渴死档 —— 未领取奖励');
+          this._iranClaimStatus.setColor('#C9B89A');
+        }
+        return;
+      }
+      try {
+        var r = await fetch('/api/game/reward/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            level: 1,  // 伊朗 = 关 1
+            amount: amount,
+            nickname: nickname,
+          }),
+        });
+        var data = await r.json();
+        if (data && data.success) {
+          try {
+            var sid = sessionId || 'no-session';
+            localStorage.setItem('silkroad_claimed_' + sid + '_1', '1');
+          } catch (e) {}
+          var msg = data.duplicate
+            ? '已领取过（服务端去重）'
+            : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
+          if (this._iranClaimStatus) {
+            this._iranClaimStatus.setText(msg);
+            this._iranClaimStatus.setColor('#A8D8C0');
+          }
+          // 持久化 cleared levels 包含 1
+          try {
+            var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
+            if (cleared.indexOf(1) === -1) {
+              cleared.push(1);
+              localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
+            }
+          } catch (e) {}
+        } else {
+          if (this._iranClaimStatus) {
+            this._iranClaimStatus.setText('领取失败：' + (data && data.error ? data.error : '未知错误'));
+            this._iranClaimStatus.setColor('#F6B5C8');
+          }
+        }
+      } catch (err) {
+        if (this._iranClaimStatus) {
+          this._iranClaimStatus.setText('网络错误：' + err.message);
+          this._iranClaimStatus.setColor('#F6B5C8');
+        }
+      }
     },
 
     // M23.13: 启程 — camera fade + 播放骆驼商队 voyage 动画 (完成后自动跳转 level/2)
+    // v16: 拆成 departIran (弹 modal) + departIranContinue (执行 voyage)
     departIran: function () {
+      // 保留接口兼容: 直接调用 iranResultModal (modal 弹出后再 voyage)
+      this.iranResultModal();
+    },
+
+    // v16: 从 modal 选档后真正启程 (camera fade + voyage)
+    departIranContinue: function () {
       var self = this;
       this.state = 'TRADING';
       this.joystickContainer.setVisible(false);
@@ -1643,6 +1851,8 @@
         var cmShadow = this.add.ellipse(0, 22, 36, 6, 0x000000, 0.18);
         // 骆驼 emoji
         var cm = this.add.text(0, 0, '🐫', { fontSize: '44px' }).setOrigin(0.5);
+        // v16: 镜像 🐫 emoji 头朝右 (跟商队从左到右前进方向一致; emoji 默认头朝左, 像"倒退")
+        cm.setScale(-1, 1);
         var slotItems = [cmShadow, cm];
         // 只第 1 头骆驼载人
         if (ci === 0) {
@@ -1693,7 +1903,7 @@
 
       // 4) 状态机字段
       this.camelVoyageT = 0;
-      this.camelVoyageDuration = 3500;  // ms (3.5s 走完全程)
+      this.camelVoyageDuration = 6000;  // v16: ms (6s 走完全程, 从 3500 放慢一倍)
       this.camelVoyageDone = false;
       // 用 wall clock 起点, 跟 qatar M24 修复一致 (headless / 低 FPS 下 delta 不可靠)
       this._camelVoyageStartTime = (typeof performance !== 'undefined' && performance.now)

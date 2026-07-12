@@ -73,10 +73,11 @@ window.QATAR_LEVEL = {
 
   // 4 档奖励金额（与 game.js 里 QATAR_REWARD_TIERS 一致；前端展示用）
   // v14: NORMAL 改为 188（统一文案"188（微信查收）"）
+  // v16: HARD 改为 188（消除 6.66, 统一微信查收文案）
   rewardTiers: {
     PERFECT: 20.20,
     NORMAL:  188,
-    HARD:    6.66,
+    HARD:    188,
     DEAD:    0,
   },
 

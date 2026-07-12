@@ -49,13 +49,14 @@
   };
 
   // 伊朗商贩商品 (luggage id = -1000 - merchantId) → 名称/emoji/卖价 (用于交易中心列出)
+  // v16: 价格 ×13 (跟 IRR_TO_TRY_RATE ×3000 配套, 让玩家在伊朗卖完商品的钱能在土耳其换到合理里拉数)
   var IRAN_ITEMS = {
-    '-1000': { name: '地毯',   emoji: '🧶', price: 50 },
-    '-1001': { name: '藏红花', emoji: '🌿', price: 70 },
-    '-1002': { name: '茶',     emoji: '🫖', price: 30 },
-    '-1003': { name: '陶器',   emoji: '🏺', price: 40 },
-    '-1004': { name: '骆驼',   emoji: '🐫', price: 80 },
-    '-1005': { name: '水壶',   emoji: '🏺', price: 60 },
+    '-1000': { name: '地毯',   emoji: '🧶', price: 650 },
+    '-1001': { name: '藏红花', emoji: '🌿', price: 910 },
+    '-1002': { name: '茶',     emoji: '🫖', price: 390 },
+    '-1003': { name: '陶器',   emoji: '🏺', price: 520 },
+    '-1004': { name: '骆驼',   emoji: '🐫', price: 1040 },
+    '-1005': { name: '水壶',   emoji: '🏺', price: 780 },
   };
 
   // 玩家角色 → emoji (FlightScene 用)
@@ -67,7 +68,8 @@
   };
 
   // 兑换中心汇率: 10 里亚尔 → 1 里拉 (整数倍, 方便 UI)
-  var IRR_TO_TRY_RATE = 10;
+  // v16: 10 → 30000 (跟伊朗商品价格 ×13 配套: 伊朗商品 650 ﷼ × (1/30000) ≈ 0.022 ₺ 偏低但符合"汇率稀释"逻辑)
+  var IRR_TO_TRY_RATE = 30000;
 
   // 地图地点 (8 个: 兑换中心 + 交易中心 + 5 个商铺 + 组装场)
   //   兑换中心卖行李换里拉, 交易中心列所有 Qatar + Iran 行李卖里拉
@@ -435,8 +437,8 @@
       this.waterText.setDepth(100);
       this._renderJugHud();
 
-      // 2. 💰 里拉 (中左, x=310, 跟伊朗一致)
-      this.coinText = this.add.text(310, 30, '💰 0 ₺', {
+      // 2. 💰 里拉 (中左, x=380, 跟伊朗一致 — v16: 从 310 拉到 380)
+      this.coinText = this.add.text(380, 30, '💰 0 ₺', {
         fontSize: '15px', color: '#D4AF37', fontStyle: 'bold',
         stroke: '#2A1606', strokeThickness: 2,
       }).setOrigin(0.5);

@@ -110,6 +110,20 @@ window.IRAN_LEVEL = {
     NORMAL:  188,
   },
 
+  // v16: 4 档奖励金额 (通关后弹出 modal 让玩家选档)
+  IRAN_REWARD_TIERS: {
+    PERFECT: 200,
+    NORMAL:  200,
+    HARD:    20,
+    DEAD:    0,
+  },
+  IRAN_TIER_QUOTES: {
+    PERFECT: '你和沙漠谈了一场恋爱。',
+    NORMAL:  '三壶水，够走完这段路。',
+    HARD:    '勉强也算走完了。',
+    DEAD:    '沙海很热，但你的心没有停下。',
+  },
+
   CANVAS_W: 1280,
   CANVAS_H: 720,
 };

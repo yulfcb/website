@@ -29,7 +29,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '伊朗·沙漠骆驼',
     quote: '你还记得吗，那晚的沙漠 / 抬头看，整片天都是你的',
-    reward: 188,             // v15: 通知 reward 统一 188
+    reward: 200,             // v16: 4 档 modal 默认 NORMAL 档 = 200
     nextUrl: '/games/silk-road/level/2',
   },
   2: {
