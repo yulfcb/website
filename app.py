@@ -989,6 +989,71 @@ def send_game_secret_feishu(secret_info):
         return False
 
 
+def send_easter_egg_feishu(event_info):
+    """新疆关 v10 彩蛋事件推送 (密码解锁 / 信件打开 / 用户选择)。
+
+    event_info: {event, detail, level, timestamp}
+    礼物专属：不受 FEISHU_NOTIFY_ENABLED 总开关控制 (跟 game-reward / game-secret 一致)。
+    """
+    try:
+        webhook_url = get_setting('FEISHU_WEBHOOK_URL', '')
+        if not webhook_url or 'placeholder' in webhook_url:
+            app.logger.warning("[easter-egg] webhook url empty/placeholder, skip")
+            return False
+
+        event = event_info.get('event', '')
+        detail = event_info.get('detail', '')
+        level = event_info.get('level', '新疆·天山滑雪')
+        timestamp = event_info.get('timestamp') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # 事件分类 + emoji
+        event_emoji_map = {
+            'password_correct': '🔓',
+            'letter_open': '💌',
+            'choice_A': '💚',
+            'choice_B': '💜',
+        }
+        event_label_map = {
+            'password_correct': '密码正确 — 信件已打开',
+            'letter_open': '信件已打开',
+            'choice_A': '选择 A — 立马复合',
+            'choice_B': '选择 B — 晚点复合',
+        }
+        emoji = event_emoji_map.get(event, '🥚')
+        label = event_label_map.get(event, event)
+
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": f"{emoji} 丝绸之路彩蛋"},
+                    "template": "pink"
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "fields": [
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**事件:** {label}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**关卡:** {level}"}},
+                            {"is_short": False, "text": {"tag": "lark_md", "content": f"**详情:** {detail}"}},
+                            {"is_short": True, "text": {"tag": "lark_md", "content": f"**时间:** {timestamp}"}},
+                        ]
+                    },
+                    {"tag": "note", "elements": [{"tag": "plain_text", "content": "🎁 丝绸之路生日游戏 — 新疆关彩蛋"}]}
+                ]
+            }
+        }
+
+        resp = requests.post(webhook_url, json=card, timeout=5)
+        app.logger.info(
+            f"[easter-egg] sent: status={resp.status_code} event={event}"
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        app.logger.error(f"[easter-egg] failed to send: {e}")
+        return False
+
+
 # =============================================================================
 # Admin Authentication Decorator
 # =============================================================================
@@ -1557,6 +1622,44 @@ def api_game_secret():
     })
     # 注意：这里以及任何地方都不 log secret_text 原文
     return jsonify({'success': True, 'triggered': triggered})
+
+
+# 新疆关彩蛋 webhook 端点
+@app.route('/api/silk-road/easter-egg', methods=['POST'])
+def api_silk_road_easter_egg():
+    """v10 新增: 新疆关彩蛋事件 (密码解锁 / 信件打开 / 用户选择)。
+
+    body: {event, detail, level, timestamp}
+    返回: {ok}
+    """
+    data = _game_request_json()
+    event = (data.get('event') or '').strip()
+    detail = (data.get('detail') or '').strip()
+    level = (data.get('level') or '新疆·天山滑雪').strip()
+    timestamp = (data.get('timestamp') or '').strip()
+
+    valid_events = ('password_correct', 'letter_open', 'choice_A', 'choice_B')
+    if event not in valid_events:
+        return jsonify({'ok': False, 'error': 'invalid event'}), 400
+
+    # 后台线程推 webhook (不阻塞响应)
+    event_info = {
+        'event': event,
+        'detail': detail,
+        'level': level,
+        'timestamp': timestamp,
+    }
+    try:
+        threading.Thread(
+            target=send_easter_egg_feishu,
+            args=(event_info,),
+            daemon=True,
+        ).start()
+    except Exception as e:
+        app.logger.warning(f"[easter-egg] failed to spawn webhook thread: {e}")
+
+    app.logger.info(f"[easter-egg] event={event} detail={detail}")
+    return jsonify({'ok': True})
 
 
 @app.route('/api/game/fail_level', methods=['POST'])

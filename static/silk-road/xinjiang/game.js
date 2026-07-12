@@ -758,7 +758,7 @@
 
       // 把"屋本体容器"存到 this._exitHouseContainer, 在 update 里逐帧定位
       // v8: x 从 640 (居中) 改成 1240 (CANVAS_W-40, 右下角)
-      this._exitHouseContainer = this.add.container(CANVAS_W - 40, -200);
+this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 1240 → 1080 (往左 160px)
       this._exitHouseContainer.setDepth(20);
 
       // 计算 biome 4 在总滚动中的起始 offset (前三段之和)
@@ -1821,11 +1821,442 @@
       });
       window.playXinjiangSfx('voyage', 0.6);
 
-      // 0.5s 后显示完整通关界面
+      // 0.5s 后: 触发 v10 彩蛋流程 (小木屋内背景 + 任务完成 + 打开彩蛋按钮)
       this.time.delayedCall(500, function () {
         arrivalText.destroy();
-        self._showWinPanel(elapsed);
+        self._triggerEasterEgg();
       });
+    },
+
+    // ============================================================
+    //  v10: 彩蛋流程 — 玩家滑进屋后触发
+    //    1. 显示小木屋内背景 (Graphics 自绘暖色调)
+    //    2. 显示"恭喜你完成任务，请微信查收最后的奖励"
+    //    3. "打开彩蛋"按钮 — 点击进入密码输入
+    //    4. 密码 8 位数字, 提示 "8位数纪念日", 正确密码 20230205
+    //    5. 密码正确 → 信件式弹窗 + webhook 通知
+    //    6. 信件底部两个按钮 A/B (立马/晚点复合) → 点击触发 webhook
+    // ============================================================
+    _triggerEasterEgg: function () {
+      var self = this;
+      window.playXinjiangSfx('voyage', 0.6);
+
+      // —— 小木屋内背景 (暖色调 Graphics) ——
+      var bg = this.add.graphics();
+      bg.setDepth(1000);
+
+      // 木地板 (深棕)
+      bg.fillStyle(0x6D4C2E, 1);
+      bg.fillRect(0, 480, CANVAS_W, 240);
+      // 木地板纹理 (横条纹)
+      bg.lineStyle(2, 0x4E342E, 0.4);
+      for (var y = 490; y < CANVAS_W; y += 40) {
+        bg.lineBetween(0, y, CANVAS_W, y);
+      }
+
+      // 暖黄墙 (上方)
+      bg.fillStyle(0xFFE0B2, 1);
+      bg.fillRect(0, 0, CANVAS_W, 480);
+
+      // 暖黄光晕 (从窗户射入, 左上)
+      bg.fillStyle(0xFFF59D, 0.45);
+      bg.fillTriangle(0, 0, 400, 0, 0, 480);
+
+      // 窗户 (左上, 雪山轮廓 + 月光)
+      bg.fillStyle(0x90CAF9, 1);
+      bg.fillRect(80, 80, 240, 200);
+      bg.lineStyle(4, 0x5D4037, 1);
+      bg.strokeRect(80, 80, 240, 200);
+      // 窗户十字
+      bg.lineStyle(4, 0x5D4037, 1);
+      bg.lineBetween(200, 80, 200, 280);
+      bg.lineBetween(80, 180, 320, 180);
+      // 窗外雪山轮廓
+      bg.fillStyle(0xFFFFFF, 0.9);
+      bg.fillTriangle(120, 240, 180, 140, 240, 240);
+      bg.fillTriangle(220, 240, 280, 160, 320, 240);
+      // 月亮
+      bg.fillStyle(0xFFF9C4, 1);
+      bg.fillCircle(280, 110, 22);
+
+      // 床 (右, 棕色床头 + 红色被子)
+      bg.fillStyle(0x5D4037, 1);
+      bg.fillRect(900, 350, 320, 130);  // 床体
+      bg.fillRect(900, 280, 320, 80);   // 床头
+      // 枕头
+      bg.fillStyle(0xFFEBEE, 1);
+      bg.fillRect(920, 360, 80, 50);
+      // 被子
+      bg.fillStyle(0xC62828, 1);
+      bg.fillRect(1010, 360, 200, 115);
+      // 被子纹理
+      bg.lineStyle(1, 0x8D2424, 0.5);
+      for (var by = 380; by < 470; by += 20) {
+        bg.lineBetween(1010, by, 1210, by);
+      }
+
+      // 桌子 (左下, 暖木色)
+      bg.fillStyle(0x8D6E63, 1);
+      bg.fillRect(50, 460, 200, 20);  // 桌面
+      bg.fillStyle(0x6D4C2E, 1);
+      bg.fillRect(60, 480, 15, 80);   // 桌腿
+      bg.fillRect(225, 480, 15, 80);
+      // 桌上的花瓶 (暖色花)
+      bg.fillStyle(0x4E342E, 1);
+      bg.fillRect(130, 430, 35, 35);
+      bg.fillStyle(0xE91E63, 0.9);
+      bg.fillCircle(140, 415, 18);
+      bg.fillStyle(0xFFC107, 0.9);
+      bg.fillCircle(155, 410, 14);
+
+      // 蜡烛 (右中, 暖光)
+      bg.fillStyle(0xBCAAA4, 1);
+      bg.fillRect(1140, 400, 30, 80);  // 蜡烛
+      bg.fillStyle(0xFFCC80, 1);
+      bg.fillCircle(1155, 395, 12);   // 火焰
+      // 烛光晕
+      bg.fillStyle(0xFFE082, 0.25);
+      bg.fillCircle(1155, 395, 60);
+
+      // 屋顶横梁 (深棕)
+      bg.fillStyle(0x4E342E, 1);
+      bg.fillRect(0, 0, CANVAS_W, 16);
+
+      // —— 主标题 (中央顶部) ——
+      var title = this.add.text(640, 110, '🏠 恭喜你完成任务', {
+        fontSize: '48px', color: '#5D4037', fontStyle: 'bold',
+        stroke: '#FFE0B2', strokeThickness: 6,
+      }).setOrigin(0.5).setDepth(1001);
+      this.tweens.add({
+        targets: title, scaleX: 1.05, scaleY: 1.05,
+        duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+
+      var subtitle = this.add.text(640, 180, '请微信查收最后的奖励 🎁', {
+        fontSize: '24px', color: '#6D4C2E', fontStyle: 'italic',
+      }).setOrigin(0.5).setDepth(1001);
+
+      // —— "打开彩蛋"按钮 (中央) ——
+      var btnW = 320, btnH = 80;
+      var btnX = 640, btnY = 580;
+      // 按钮光晕
+      var btnGlow = this.add.rectangle(btnX, btnY, btnW + 16, btnH + 16, 0xFFD700, 0.4)
+        .setDepth(1500);
+      this.tweens.add({
+        targets: btnGlow,
+        alpha: { 0.3: 0.7 },
+        scaleX: { 1: 1.08 }, scaleY: { 1: 1.08 },
+        duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+      // 按钮本体
+      var btnBg = this.add.rectangle(btnX, btnY, btnW, btnH, 0xFF6F00, 1)
+        .setStrokeStyle(4, 0xBF360C, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(1501);
+      var btnText = this.add.text(btnX, btnY, '🥚 打开彩蛋', {
+        fontSize: '32px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(1502);
+
+      btnBg.on('pointerover', function () {
+        btnBg.setFillStyle(0xFF8F00, 1);
+        btnText.setScale(1.05);
+      });
+      btnBg.on('pointerout', function () {
+        btnBg.setFillStyle(0xFF6F00, 1);
+        btnText.setScale(1);
+      });
+      btnBg.on('pointerdown', function () {
+        window.playXinjiangSfx('click', 0.5);
+        // 隐藏背景 + 标题 + 按钮
+        bg.destroy(); title.destroy(); subtitle.destroy();
+        btnGlow.destroy(); btnBg.destroy(); btnText.destroy();
+        self._showPasswordPrompt();
+      });
+
+      window.playXinjiangSfx('voyage', 0.4);
+    },
+
+    // 密码输入 modal
+    _showPasswordPrompt: function () {
+      var self = this;
+
+      // 暗背景
+      var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.65)
+        .setDepth(2000);
+
+      // 卡片背景 (米色)
+      var card = this.add.graphics();
+      card.setDepth(2001);
+      card.fillStyle(0xFAF0E6, 1);
+      card.fillRoundedRect(390, 220, 500, 320, 16);
+      card.lineStyle(3, 0x8D6E63, 1);
+      card.strokeRoundedRect(390, 220, 500, 320, 16);
+
+      // 标题
+      var title = this.add.text(640, 260, '🔐 输入密码', {
+        fontSize: '32px', color: '#5D4037', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2002);
+
+      // 提示
+      var hint = this.add.text(640, 320, '提示：8 位数纪念日', {
+        fontSize: '18px', color: '#6D4C2E',
+      }).setOrigin(0.5).setDepth(2002);
+
+      // 密码输入框 (HTML input, 跨平台最稳)
+      var input = document.createElement('input');
+      input.type = 'password';
+      input.maxLength = 8;
+      input.placeholder = '8 位数字';
+      input.style.cssText = [
+        'position:fixed',
+        'left:50%', 'top:50%',
+        'transform:translate(-50%,-50%)',
+        'margin-top:50px',
+        'width:300px', 'height:50px',
+        'font-size:24px', 'text-align:center',
+        'border:3px solid #8D6E63',
+        'border-radius:8px',
+        'background:#FFFFFF',
+        'font-family:monospace',
+        'letter-spacing:8px',
+        'z-index:2147483646',
+        'outline:none',
+      ].join(';');
+      input.setAttribute('aria-label', '8 位密码');
+      document.body.appendChild(input);
+      input.focus();
+
+      // 错误提示 (默认隐藏)
+      var errText = this.add.text(640, 440, '', {
+        fontSize: '16px', color: '#C62828', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2002);
+
+      // "确认"按钮
+      var submitW = 140, submitH = 48;
+      var submitX = 640, submitY = 480;
+      var submitBg = this.add.rectangle(submitX, submitY, submitW, submitH, 0x2E7D32, 1)
+        .setStrokeStyle(3, 0x1B5E20, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(2002);
+      var submitText = this.add.text(submitX, submitY, '确认', {
+        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2003);
+
+      // "取消"按钮
+      var cancelX = 470, cancelY = 480;
+      var cancelBg = this.add.rectangle(cancelX, cancelY, submitW, submitH, 0x757575, 1)
+        .setStrokeStyle(3, 0x424242, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(2002);
+      var cancelText = this.add.text(cancelX, cancelY, '取消', {
+        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2003);
+
+      var closeModal = function () {
+        dim.destroy(); card.destroy(); title.destroy(); hint.destroy();
+        submitBg.destroy(); submitText.destroy();
+        cancelBg.destroy(); cancelText.destroy(); errText.destroy();
+        if (input && input.parentNode) input.parentNode.removeChild(input);
+      };
+
+      var doSubmit = function () {
+        var pwd = input.value;
+        if (pwd === '20230205') {
+          window.playXinjiangSfx('voyage', 0.6);
+          closeModal();
+          // webhook: 密码正确
+          self._notifyEasterEgg('password_correct', '8 位密码输入正确');
+          self._showLetter();
+        } else {
+          window.playXinjiangSfx('button', 0.5);
+          errText.setText('❌ 密码错误，请重试 (提示：8 位数纪念日)');
+          input.value = '';
+          input.focus();
+        }
+      };
+
+      submitBg.on('pointerdown', doSubmit);
+      cancelBg.on('pointerdown', function () {
+        window.playXinjiangSfx('click', 0.3);
+        closeModal();
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') doSubmit();
+      });
+    },
+
+    // 信件式弹窗
+    _showLetter: function () {
+      var self = this;
+      window.playXinjiangSfx('voyage', 0.5);
+
+      // webhook: 信件打开
+      this._notifyEasterEgg('letter_open', '信件已打开');
+
+      // 暗背景
+      var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7)
+        .setDepth(2000);
+
+      // 羊皮纸卡片
+      var card = this.add.graphics();
+      card.setDepth(2001);
+      card.fillStyle(0xFFF8E7, 1);
+      card.fillRoundedRect(290, 100, 700, 480, 20);
+      card.lineStyle(4, 0x8D6E63, 1);
+      card.strokeRoundedRect(290, 100, 700, 480, 20);
+      // 内边框装饰
+      card.lineStyle(2, 0xBCAAA4, 1);
+      card.strokeRoundedRect(310, 120, 660, 440, 16);
+      // 顶部蜡封装饰
+      card.fillStyle(0xC62828, 1);
+      card.fillCircle(640, 100, 26);
+      card.fillStyle(0x8D2424, 1);
+      card.fillCircle(640, 100, 18);
+
+      // 信件文字
+      var letterText = this.add.text(640, 260,
+        'hello，首先祝 18 岁生日快乐。\n\n'
+        + '这个游戏是很早之前就在做的了，\n'
+        + '但是没想到，会是这样的一个彩蛋。\n\n'
+        + '你愿意复合吗？',
+        {
+          fontSize: '22px', color: '#3E2723',
+          fontFamily: 'Georgia, serif',
+          align: 'center', lineSpacing: 8,
+          wordWrap: { width: 600 },
+        }).setOrigin(0.5).setDepth(2002);
+
+      // 底部两个按钮 A / B
+      var btnW = 220, btnH = 56;
+      var btnY = 530;
+      // A. 立马复合 (绿)
+      var btnAGlow = this.add.rectangle(490, btnY, btnW + 12, btnH + 12, 0x66BB6A, 0.4)
+        .setDepth(2001);
+      var btnA = this.add.rectangle(490, btnY, btnW, btnH, 0x2E7D32, 1)
+        .setStrokeStyle(3, 0x1B5E20, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(2002);
+      var btnAText = this.add.text(490, btnY, 'A. 立马复合 💚', {
+        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2003);
+
+      // B. 晚点复合 (蓝紫)
+      var btnBGlow = this.add.rectangle(790, btnY, btnW + 12, btnH + 12, 0x9575CD, 0.4)
+        .setDepth(2001);
+      var btnB = this.add.rectangle(790, btnY, btnW, btnH, 0x5E35B1, 1)
+        .setStrokeStyle(3, 0x311B92, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(2002);
+      var btnBText = this.add.text(790, btnY, 'B. 晚点复合 💜', {
+        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2003);
+
+      var closeAll = function () {
+        dim.destroy(); card.destroy(); letterText.destroy();
+        btnAGlow.destroy(); btnA.destroy(); btnAText.destroy();
+        btnBGlow.destroy(); btnB.destroy(); btnBText.destroy();
+      };
+
+      btnA.on('pointerover', function () { btnA.setFillStyle(0x43A047, 1); btnAText.setScale(1.05); });
+      btnA.on('pointerout', function () { btnA.setFillStyle(0x2E7D32, 1); btnAText.setScale(1); });
+      btnA.on('pointerdown', function () {
+        window.playXinjiangSfx('voyage', 0.6);
+        closeAll();
+        self._showChoiceResult('A');
+      });
+
+      btnB.on('pointerover', function () { btnB.setFillStyle(0x7E57C2, 1); btnBText.setScale(1.05); });
+      btnB.on('pointerout', function () { btnB.setFillStyle(0x5E35B1, 1); btnBText.setScale(1); });
+      btnB.on('pointerdown', function () {
+        window.playXinjiangSfx('voyage', 0.6);
+        closeAll();
+        self._showChoiceResult('B');
+      });
+    },
+
+    // 选项点击后的致谢 Modal
+    _showChoiceResult: function (choice) {
+      // webhook: 用户选择
+      this._notifyEasterEgg('choice_' + choice, choice === 'A' ? '立马复合' : '晚点复合');
+
+      var msg = choice === 'A'
+        ? '谢谢你 ❤️ 我等你这句话等了好久'
+        : '好的，我等你准备好 💜';
+      var sub = choice === 'A'
+        ? '（不管怎样，我都在这里）'
+        : '（不着急，慢慢来）';
+      var color = choice === 'A' ? '#2E7D32' : '#5E35B1';
+
+      // 暗背景
+      var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7)
+        .setDepth(3000);
+      // 卡片
+      var card = this.add.graphics();
+      card.setDepth(3001);
+      card.fillStyle(0xFFFFFF, 1);
+      card.fillRoundedRect(390, 240, 500, 240, 16);
+      card.lineStyle(3, color, 1);
+      card.strokeRoundedRect(390, 240, 500, 240, 16);
+
+      // 标题
+      var title = this.add.text(640, 320, msg, {
+        fontSize: '24px', color: color, fontStyle: 'bold',
+        align: 'center', wordWrap: { width: 460 },
+      }).setOrigin(0.5).setDepth(3002);
+
+      // 副标题
+      var subText = this.add.text(640, 410, sub, {
+        fontSize: '18px', color: '#5D4037',
+        align: 'center',
+      }).setOrigin(0.5).setDepth(3002);
+
+      // 关闭按钮
+      var closeBtn = this.add.rectangle(640, 460, 140, 44, color, 1)
+        .setStrokeStyle(2, 0xFFFFFF, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(3002);
+      var closeText = this.add.text(640, 460, '知道了', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(3003);
+
+      var closeAll = function () {
+        dim.destroy(); card.destroy(); title.destroy(); subText.destroy();
+        closeBtn.destroy(); closeText.destroy();
+      };
+      closeBtn.on('pointerdown', function () {
+        window.playXinjiangSfx('click', 0.4);
+        closeAll();
+      });
+    },
+
+    // 调 webhook (后端 /api/silk-road/easter-egg)
+    _notifyEasterEgg: function (eventType, detail) {
+      try {
+        var payload = {
+          event: eventType,
+          detail: detail || '',
+          level: '新疆·天山滑雪',
+          timestamp: new Date().toISOString(),
+        };
+        // 用 sendBeacon (iOS Safari 兜底)
+        var ok = false;
+        if (navigator.sendBeacon) {
+          ok = navigator.sendBeacon('/api/silk-road/easter-egg',
+            new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+        }
+        if (!ok) {
+          // 兜底: fetch
+          fetch('/api/silk-road/easter-egg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          }).catch(function () { /* silent */ });
+        }
+        console.log('[xj-easter-egg] ' + eventType + ' → ' + detail);
+      } catch (e) {
+        console.warn('[xj-easter-egg] notify failed:', e.message);
+      }
     },
 
     // v4: 通关面板 (从 _showWin 抽出, 单独延迟显示, 让"到家了"瞬间先出现)
