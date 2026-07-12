@@ -305,27 +305,44 @@ const { chromium } = require('/tmp/node_modules/playwright');
   }
 
   // === 7.2 Bug 4: 物品从底部出生 + 向上移动 ===
-  // 抓 1s 内新生成的物品, 检查 y > CANVAS_H (从底部出生)
-  const spawnSample = await page.evaluate(async () => {
+  // v8.1 修复: 用 hook 拦截 _spawnObstacle/_spawnPrize, 在 spawn 瞬间抓 y 值
+  // (原来用 slice(0,5) 取前几个, 但已经滚到屏幕内了, 误判)
+  await page.evaluate(() => {
     const game = window.__xinjiangGame;
     const slideScene = game.scene.scenes.find(s => s.farScrollOffset !== undefined && s._drawFarLayer);
-    if (!slideScene) return { error: 'lost SlidingScene' };
-    // 立即记录障碍物/奖品的 y 值 (刚 spawn 的应该在屏幕下方)
-    return {
-      obstacles: slideScene.obstacles.slice(0, 5).map(ob => ({ id: ob.id, x: ob.x, y: ob.y })),
-      prizes: slideScene.prizes.slice(0, 5).map(p => ({ id: p.id, x: p.x, y: p.y })),
+    if (!slideScene) return;
+    window.__spawnSamples = { obstacles: [], prizes: [] };
+    const origOb = slideScene._spawnObstacle.bind(slideScene);
+    const origPr = slideScene._spawnPrize.bind(slideScene);
+    slideScene._spawnObstacle = function () {
+      const before = this.obstacles.length;
+      origOb();
+      const after = this.obstacles[before];
+      if (after) window.__spawnSamples.obstacles.push({ id: after.id, y: after.y });
+    };
+    slideScene._spawnPrize = function () {
+      const before = this.prizes.length;
+      origPr();
+      const after = this.prizes[before];
+      if (after) window.__spawnSamples.prizes.push({ id: after.id, y: after.y });
     };
   });
 
-  if (spawnSample.obstacles.length > 0 || spawnSample.prizes.length > 0) {
-    // 检查障碍物 y > 720 (从底部下方出生)
-    const allObFromBottom = spawnSample.obstacles.every(ob => ob.y >= 720);
-    check('Bug 4: 障碍物从屏幕底部 (CANVAS_H=720) 下方出生', allObFromBottom, `sample=${JSON.stringify(spawnSample.obstacles.slice(0, 3))}`);
+  // 等 3.5s 收集多个 spawn (obstacleInterval=800ms, prizeInterval=1200ms)
+  await page.waitForTimeout(3500);
 
-    const allPrFromBottom = spawnSample.prizes.every(p => p.y >= 720);
-    check('Bug 4: 奖品从屏幕底部 (CANVAS_H=720) 下方出生', allPrFromBottom, `sample=${JSON.stringify(spawnSample.prizes.slice(0, 3))}`);
+  const spawnSample = await page.evaluate(() => window.__spawnSamples);
+  if (spawnSample && (spawnSample.obstacles.length > 0 || spawnSample.prizes.length > 0)) {
+    // 至少一个新 spawn 的物品 y 应 === CANVAS_H + 80 === 800 (或接近 720-800, 因为 spawn 后立刻被 update 帧减了一点)
+    const obSample = spawnSample.obstacles.slice(0, 3);
+    const prSample = spawnSample.prizes.slice(0, 3);
+    // 关键: 所有 spawn 的 y 起始位置都 >= 720 (CANVAS_H, 屏幕底边)
+    const allObFromBottom = obSample.length > 0 && obSample.every(o => o.y >= 720);
+    const allPrFromBottom = prSample.length > 0 && prSample.every(p => p.y >= 720);
+    check('Bug 4: 障碍物从屏幕底部 (CANVAS_H=720) 下方出生', allObFromBottom, `sample=${JSON.stringify(obSample)}`);
+    check('Bug 4: 奖品从屏幕底部 (CANVAS_H=720) 下方出生', allPrFromBottom, `sample=${JSON.stringify(prSample)}`);
   } else {
-    check('Bug 4: 抓取到障碍物/奖品样本', false, 'no samples, 游戏可能还没开始 spawn');
+    check('Bug 4: 抓取到障碍物/奖品 spawn 样本', false, 'no spawn samples collected in 3.5s');
   }
 
   // 等 2s 再抓一次, 验证 y 减小 (物品向上移动)
