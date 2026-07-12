@@ -1274,9 +1274,11 @@
         sp.y = sp.locationData.y + Math.sin(sp.bobPhase) * 3;
       }
       // (M28) 水分随时间下降 — 跟 iran 类似 (但更慢一些)
-      if (this.waterLevel > 0) {
+      // v17: 改成只在运动时才减少 (步行/骑乘时), 站立时不变
+      var isMoving = (Date.now() - this.player.lastMoveAt) < 200;
+      if (this.waterLevel > 0 && isMoving) {
         var d = delta || 16;
-        var step = 0.012 * (d / 16);  // 每秒约 0.75 单位
+        var step = 0.012 * (d / 16);  // 运动时约每秒 0.75 单位
         this.waterLevel -= step;
         if (this.waterLevel < 0) this.waterLevel = 0;
         if (this._lastWaterHud == null || Math.abs(this.waterLevel - this._lastWaterHud) > 0.5) {

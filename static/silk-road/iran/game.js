@@ -1515,8 +1515,9 @@
       this.iranResultModal();
     },
 
-    // v16: 伊朗通关奖励 modal — 4 档选择 (PERFECT/NORMAL/HARD/DEAD)
-    // 玩家选档 → iranClaimReward(amount) → 1.5s 后调 departIranContinue() 进入 voyage
+    // v17: 伊朗通关奖励 modal — 跟 qatar ResultScene 风格一致
+    //   自动判定 tier → 显示奖励 → 1 个 next 按钮 (出发去土耳其)
+    //   点 next → iranClaimReward(amount, tier) → 显示 OK → voyage
     iranResultModal: function () {
       var self = this;
       this.state = 'MODAL';
@@ -1524,12 +1525,12 @@
       this.joystickContainer.setVisible(false);
       window.playIranSfx('button', 0.4);
 
-      // 根据当前状态判定档位
+      // 根据当前状态自动判定档位
       var camelCount = this._luggageCount(-1004);
       var totalWater = this._totalWater();
       var totalCapacity = this.jugs.length * L.JUG_CAPACITY;
       var waterRatio = totalCapacity > 0 ? (totalWater / totalCapacity) : 0;
-      var allJugsFull = totalCapacity > 0 && totalWater >= totalCapacity - 0.1;  // 全满判定
+      var allJugsFull = totalCapacity > 0 && totalWater >= totalCapacity - 0.1;
 
       var tier;
       if (totalWater <= 0) tier = 'DEAD';
@@ -1537,110 +1538,139 @@
       else if (camelCount >= 3 && waterRatio > 0.5) tier = 'NORMAL';
       else tier = 'HARD';
 
-      // 4 档按钮 (横排)
-      var tierDefs = [
-        { key: 'PERFECT', emoji: '🌟', name: '完美', x: -240 },
-        { key: 'NORMAL',  emoji: '☀️', name: '普通', x: -80 },
-        { key: 'HARD',    emoji: '🌾', name: '勉强', x: 80 },
-        { key: 'DEAD',    emoji: '🏜️', name: '渴死', x: 240 },
-      ];
+      var amount = L.IRAN_REWARD_TIERS[tier];
+      var quote = L.IRAN_TIER_QUOTES[tier];
+      var tierEmoji = tier === 'PERFECT' ? '🌟 完美'
+                    : tier === 'NORMAL'  ? '☀️ 普通'
+                    : tier === 'HARD'    ? '🌾 勉强' : '🏜️ 渴死';
 
-      var tiers = L.IRAN_REWARD_TIERS;
-      var quotes = L.IRAN_TIER_QUOTES;
-
-      // 背景遮罩
+      // 背景遮罩 (跟 qatar 一致 0x140C06 半透明)
       var backdrop = this.add.rectangle(0, 0, 1280, 720, 0x140C06, 0.55);
       this.modalContainer.add(backdrop);
 
-      // 卡片 540x460 (中心 (0, -40) 相对 modalContainer @ (640,360) → 屏幕 (640, 320))
+      // 卡片 (540x460, 屏幕 640x320) — 跟 qatar 完全一致
       var card = this.add.rectangle(0, -40, 540, 460, 0x6B4423, 1)
         .setStrokeStyle(2, 0xFFD98A, 0.5);
       this.modalContainer.add(card);
 
-      // 顶部标题 (档位 emoji + 名称, 反映推荐档)
-      var tierEmoji = tier === 'PERFECT' ? '🌟 完美'
-                    : tier === 'NORMAL'  ? '☀️ 普通'
-                    : tier === 'HARD'    ? '🌾 勉强' : '🏜️ 渴死';
-      this.modalContainer.add(this.add.text(0, -185, tierEmoji + '  (推荐)', {
-        fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-
-// 引用文案 (相对 modalContainer (640,360), 230 → -130)
-      var quote = quotes[tier];
-      this.modalContainer.add(this.add.text(0, -130, quote, {
-        fontSize: '15px', color: '#A8D8C0', fontStyle: 'italic',
-        wordWrap: { width: 460 },
-      }).setOrigin(0.5));
-
-      // 摘要 (290 → -70)
-      this.modalContainer.add(this.add.text(0, -70, '🐫 骆驼 ' + camelCount
-        + ' / 💧 水 ' + totalWater.toFixed(1) + ' / ' + totalCapacity.toFixed(0) + 'L', {
-        fontSize: '13px', color: '#C9B89A',
-      }).setOrigin(0.5));
-
-      // 奖励金额大字 (340 → -20)
-      var amount = tiers[tier];
-      var rewardTxt = (tier === 'NORMAL' || tier === 'PERFECT')
-        ? '+' + amount + '（微信查收）'
-        : '+¥' + amount.toFixed(2);
-      this.modalContainer.add(this.add.text(0, -20, rewardTxt, {
+      // 标题 (32px, y=180)
+      this.modalContainer.add(this.add.text(0, -180, tierEmoji, {
         fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5));
 
-      // 4 档按钮 (横排, 4 个) — 相对 modalContainer 中心 (640,360) → 屏幕 y=430
-      var btnY = 70;
-      var btnW = 110, btnH = 60;
-      tierDefs.forEach(function (td) {
-        var isRecommended = (td.key === tier);
-        var btnColor = isRecommended ? 0xD4AF37 : 0x4A2E1A;
-        var txtColor = isRecommended ? '#2A190E' : '#F4ECD8';
-        var strokeColor = isRecommended ? 0xFFE9B0 : 0xFFD98A;
-        var btnBg = self.add.rectangle(td.x, btnY, btnW, btnH, btnColor, isRecommended ? 1 : 0.85)
-          .setStrokeStyle(2, strokeColor, isRecommended ? 0.9 : 0.5);
-        self.modalContainer.add(btnBg);
-        var emojiTxt = self.add.text(td.x, btnY - 12, td.emoji, {
-          fontSize: '22px',
-        }).setOrigin(0.5);
-        self.modalContainer.add(emojiTxt);
-        var nameTxt = self.add.text(td.x, btnY + 14, td.name, {
-          fontSize: '13px', color: txtColor, fontStyle: 'bold',
-        }).setOrigin(0.5);
-        self.modalContainer.add(nameTxt);
-        var amountTxt = self.add.text(td.x, btnY + 30, '+¥' + tiers[td.key].toFixed(2), {
-          fontSize: '10px', color: isRecommended ? '#5A2E0E' : '#C9B89A',
-        }).setOrigin(0.5);
-        self.modalContainer.add(amountTxt);
+      // 引用 (16px italic #A8D8C0, y=240)
+      this.modalContainer.add(this.add.text(0, -120, quote, {
+        fontSize: '16px', color: '#A8D8C0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5));
 
-        var zone = self.add.zone(td.x, btnY, btnW, btnH)
-          .setInteractive({ useHandCursor: true });
-        zone.on('pointerdown', (function (tkey, tamt) {
-          return function () {
-            window.playIranSfx('button', 0.4);
-            self._iranClaimAndDepart(tkey, tamt);
-          };
-        })(td.key, tiers[td.key]));
-        self.modalContainer.add(zone);
-      });
+      // 摘要 (13px #C9B89A, y=320)
+      this.modalContainer.add(this.add.text(0, -40,
+        '🐫 骆驼 ' + camelCount + ' 头 · 💧 水 ' + totalWater.toFixed(1) + ' / ' + totalCapacity.toFixed(0) + ' L',
+        { fontSize: '13px', color: '#C9B89A' }
+      ).setOrigin(0.5));
 
-      // 状态文字 (claim 反馈, 510 → 150 相对)
-      this._iranClaimStatus = this.add.text(0, 150, '👇 点击档位领取', {
-        fontSize: '12px', color: '#A8D8C0', fontStyle: 'italic',
+      // 奖励金额大字 (38px #FFD98A bold, y=380) — 跟 qatar 完全一致
+      var rewardTxt = (tier === 'NORMAL' || tier === 'PERFECT')
+        ? '+' + amount + '（微信查收）'
+        : '+¥' + amount.toFixed(2);
+      this.modalContainer.add(this.add.text(0, 20, rewardTxt, {
+        fontSize: '38px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5));
+
+      // 叙事桥文案 (跟 qatar 一致位置 y=475)
+      this.modalContainer.add(this.add.text(0, 115, '🐪 用这一关攒的骆驼和水，下一站 → 土耳其卡帕多奇亚 🇹🇷', {
+        fontSize: '13px', color: '#A8D8C0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5));
+
+      // v17: 隐藏状态文字 — 玩家不需要看 webhook 推送结果
+      this._iranClaimStatus = this.add.text(0, 150, '', {
+        fontSize: '14px', color: '#A8D8C0',
       }).setOrigin(0.5);
       this.modalContainer.add(this._iranClaimStatus);
+
+      // ====== 1 个 next 按钮 (跟 qatar 完全一致: 280x60, 0xFFD98A 底, 屏幕 y=555) ======
+      var isDeadTier = tier === 'DEAD';
+      var nextBtnTxt = isDeadTier ? '🏜️ 返回地图' : '🐪 出发去土耳其';
+      var nextBg = this.add.rectangle(0, 195, 280, 60, isDeadTier ? 0x888888 : 0xFFD98A, 1);
+      var nextText = this.add.text(0, 195, nextBtnTxt, {
+        fontSize: '20px', color: isDeadTier ? '#666666' : '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      this.modalContainer.add([nextBg, nextText]);
+
+      var nextZone = this.add.zone(0, 195, 280, 60).setInteractive({ useHandCursor: true });
+      var claimed = false;  // 防重入
+      nextZone.on('pointerdown', function () {
+        if (claimed) return;
+        claimed = true;
+        window.playIranSfx('button', 0.4);
+        self._iranClaimAndDepart(tier, amount, isDeadTier);
+      });
+      this.modalContainer.add(nextZone);
+
+      // iOS Safari DOM 兜底按钮 (跟 qatar 一致, 解决 Zone pointerdown 不响应)
+      this._buildIranNextDomBtn(tier, amount, isDeadTier);
 
       this.modalContainer.setVisible(true);
     },
 
-    // v16: 伊朗 claim reward + 1.5s 后 voyage
-    _iranClaimAndDepart: function (tier, amount) {
+    // v17: iOS Safari 兜底按钮 (跟 qatar 完全一致, 解决 Phaser Zone 在某些 iOS 不响应)
+    _buildIranNextDomBtn: function (tier, amount, isDeadTier) {
       var self = this;
-      this.state = 'CLAIMING';
-      if (this._iranClaimStatus) {
-        this._iranClaimStatus.setText('推送中…');
-        this._iranClaimStatus.setColor('#A8D8C0');
+      // 删除旧 DOM 按钮
+      var old = document.getElementById('iran-result-next-btn');
+      if (old) old.remove();
+
+      var btn = document.createElement('button');
+      btn.id = 'iran-result-next-btn';
+      var txt = isDeadTier ? '🏜️ 返回地图' : '🐪 出发去土耳其';
+      btn.textContent = txt;
+      btn.style.cssText = [
+        'position:fixed', 'left:50%', 'top:50%',
+        'transform:translate(-50%, 195px)',
+        'width:280px', 'height:60px',
+        'background:' + (isDeadTier ? '#888888' : '#FFD98A'),
+        'color:' + (isDeadTier ? '#666666' : '#2A190E'),
+        'font-size:20px', 'font-weight:bold',
+        'border:2px solid #FFE9B0', 'border-radius:6px',
+        'cursor:pointer', 'z-index:9999',
+      ].join(';');
+      btn.onclick = function () {
+        if (self._iranDomBtnClicked) return;
+        self._iranDomBtnClicked = true;
+        window.playIranSfx('button', 0.4);
+        self._iranClaimAndDepart(tier, amount, isDeadTier);
+      };
+      document.body.appendChild(btn);
+      // 关闭 modal 时清理
+      this._iranDomBtnCleanup = function () {
+        var b = document.getElementById('iran-result-next-btn');
+        if (b) b.remove();
+      };
+    },
+
+    // v17: 伊朗 next 按钮 — 跟 qatar 完全一致: 玩家点 next 才 claim + voyage
+    // isDeadTier=true → 跳 world-map (跟 qatar DEAD 档一致), 不调 claim
+    _iranClaimAndDepart: function (tier, amount, isDeadTier) {
+      var self = this;
+      // 清理 DOM 兜底按钮
+      if (this._iranDomBtnCleanup) this._iranDomBtnCleanup();
+
+      // DEAD 档: 跟 qatar 一致, 直接跳 world-map, 不调 claim
+      if (isDeadTier) {
+        // v17: 不显示状态文字, 直接跳
+        self.time.delayedCall(1500, function () {
+          window.location.href = '/games/silk-road/world-map';
+        });
+        return;
       }
+
+      // 非 DEAD 档: claim + voyage (跟 qatar 一致)
+      // v17: 不显示状态文字 (玩家不需要看 webhook 推送结果)
+      this.state = 'CLAIMING';
       this.iranClaimReward(tier, amount).then(function () {
-        // 1.5s 后 voyage
+        // 1.5s 后 voyage (跟 qatar 一致: 给 webhook 推送留时间)
         self.time.delayedCall(1500, function () {
           self.modalContainer.setVisible(false);
           self.modalContainer.removeAll(true);
@@ -1662,10 +1692,7 @@
       var nickname = (localStorage.getItem('silkroad_nickname') || '小伊').slice(0, 20);
       // DEAD 档不调 reward 接口 (跟卡塔尔一致, 只调 secret)
       if (tier === 'DEAD' || amount <= 0) {
-        if (this._iranClaimStatus) {
-          this._iranClaimStatus.setText('渴死档 —— 未领取奖励');
-          this._iranClaimStatus.setColor('#C9B89A');
-        }
+        // v17: 不显示状态文字
         return;
       }
       try {
@@ -1685,13 +1712,7 @@
             var sid = sessionId || 'no-session';
             localStorage.setItem('silkroad_claimed_' + sid + '_1', '1');
           } catch (e) {}
-          var msg = data.duplicate
-            ? '已领取过（服务端去重）'
-            : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
-          if (this._iranClaimStatus) {
-            this._iranClaimStatus.setText(msg);
-            this._iranClaimStatus.setColor('#A8D8C0');
-          }
+          // v17: 不显示 webhook 推送结果
           // 持久化 cleared levels 包含 1
           try {
             var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
@@ -1701,16 +1722,10 @@
             }
           } catch (e) {}
         } else {
-          if (this._iranClaimStatus) {
-            this._iranClaimStatus.setText('领取失败：' + (data && data.error ? data.error : '未知错误'));
-            this._iranClaimStatus.setColor('#F6B5C8');
-          }
+          // v17: 错误也不显示
         }
       } catch (err) {
-        if (this._iranClaimStatus) {
-          this._iranClaimStatus.setText('网络错误：' + err.message);
-          this._iranClaimStatus.setColor('#F6B5C8');
-        }
+        // v17: 网络错误也不显示
       }
     },
 

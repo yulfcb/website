@@ -1587,7 +1587,8 @@ _sumSelectedPrice: function (ids) {
       }).setOrigin(0.5);
 
       // 状态
-      this.statusText = this.add.text(640, 510, this.given ? '已放弃复活' : '推送中…', {
+      // v17: 隐藏 statusText — 玩家不需要看 webhook 推送结果
+      this.statusText = this.add.text(640, 510, '', {
         fontSize: '14px', color: '#A8D8C0',
       }).setOrigin(0.5);
 
@@ -1695,11 +1696,8 @@ _sumSelectedPrice: function (ids) {
         var data = await r.json();
         if (data && data.success) {
           localStorage.setItem('silkroad_claimed_' + this.sessionId + '_' + LEVEL_ID, '1');
-          var msg = data.duplicate
-            ? '已领取过（服务端去重）'
-            : (data.triggered ? '飞书已通知 ✉️' : '飞书未推送（webhook 未配置）');
-          this.statusText.setText(msg);
-          this.statusText.setColor('#A8D8C0');
+          // v17: 不显示 webhook 推送结果 (玩家不需要看)
+          this.statusText.setText('');
           try {
             var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
             if (cleared.indexOf(LEVEL_ID) === -1) {
@@ -1708,12 +1706,12 @@ _sumSelectedPrice: function (ids) {
             }
           } catch (e) {}
         } else {
-          this.statusText.setText('领取失败：' + (data && data.error ? data.error : '未知错误'));
-          this.statusText.setColor('#F6B5C8');
+          // v17: 错误也不显示
+          this.statusText.setText('');
         }
       } catch (err) {
-        this.statusText.setText('网络错误：' + err.message);
-        this.statusText.setColor('#F6B5C8');
+        // v17: 网络错误也不显示
+        this.statusText.setText('');
       }
     },
 
