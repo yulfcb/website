@@ -52,6 +52,8 @@
     .slk-marker { cursor: pointer; transition: transform .18s ease; transform-origin: center; transform-box: fill-box; }
     .slk-marker:not(.locked):hover { transform: scale(1.12); }
     .slk-marker.locked { cursor: not-allowed; }
+    .slk-marker text { pointer-events: none; }  /* v19 Bug #3: text 不阻挡 hit circle */
+    .slk-marker circle:not(.slk-hit):not(.slk-marker-pulse) { pointer-events: none; }  /* v19: 视觉圈不阻挡 hit, 只 hit circle 接事件 */
     .slk-marker.current .slk-marker-pulse {
       animation: slk-marker-pulse 1.6s ease-in-out infinite;
       transform-origin: center; transform-box: fill-box;
@@ -507,8 +509,8 @@
           // 关 2-5 维持现状 (不全 gating 避免 locked 链)
           clickable = clearedLv || isCurrent;
         } else {
-          // 关 0 一直能去
-          clickable = clearedLv || isCurrent;
+          // v19 Bug #3: 关 0 是起点, 永远能去 (不需要前置通关, 也不依赖 isCurrent)
+          clickable = true;
         }
         var xy = markerXY[idx];
 
@@ -544,6 +546,8 @@
           + '<g class="slk-marker ' + lockClass + '" data-level="' + lv.id + '" '
           +     'data-clickable="' + (clickable ? '1' : '0') + '" '
           +     'role="link" tabindex="0" aria-label="' + esc('关 ' + lv.id + ' · ' + lv.title) + '">'
+          // v19 Bug #3: invisible hit circle 扩大触摸区到 44px (iOS HIG 标准)
+          +   '<circle class="slk-hit" cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="44" fill="transparent" pointer-events="all"/>'
           +   (isCurrent ? '<circle class="slk-marker-pulse" cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="28" fill="none" stroke="#FFD700" stroke-width="3"/>' : '')
           +   '<circle cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="22" fill="#8B5A2B" stroke="#5C3A1E" stroke-width="2" filter="url(#markerShadow)"/>'
           +   '<circle cx="' + xy[0].toFixed(1) + '" cy="' + xy[1].toFixed(1) + '" r="17" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5" opacity="' + strokeOpacity + '"/>'

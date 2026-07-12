@@ -1833,6 +1833,19 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         if (oldBtn) oldBtn.remove();
         // v18.2: 销毁通关 modal, 让小木屋画面成为唯一视觉
         winContainer.destroy();
+        // v19 Bug #1: 飞书通知 (通关新疆 +¥81)
+        try {
+          fetch('/api/game/reward/claim', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              level: 4,
+              amount: 81,
+              session_id: (window.SILK_ROAD_SESSION_ID || ''),
+              nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+            }),
+          }).catch(function() {});
+        } catch (e) {}
         self._triggerEasterEgg();
       };
 
@@ -2048,9 +2061,10 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
     _showPasswordPrompt: function () {
       var self = this;
 
+      // v19 Bug #2: 删掉 dim 全黑层, 让小木屋画面保持可见 (之前 0.65 透明度黑层遮住房间, 用户感觉 "跳转")
       // 暗背景
-      var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.65)
-        .setDepth(2000);
+      // var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.65)
+      //   .setDepth(2000);
 
       // 卡片背景 (米色)
       var card = this.add.graphics();
@@ -2134,6 +2148,19 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
           closeModal();
           // webhook: 密码正确
           self._notifyEasterEgg('password_correct', '8 位密码输入正确');
+          // v19 Bug #1: 彩蛋飞书通知 (level=4 因为彩蛋仍属关 4 流程, amount=520)
+          try {
+            fetch('/api/game/reward/claim', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                level: 4,
+                amount: 520,
+                session_id: (window.SILK_ROAD_SESSION_ID || ''),
+                nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+              }),
+            }).catch(function() {});
+          } catch (e) {}
           self._showLetter();
         } else {
           window.playXinjiangSfx('button', 0.5);

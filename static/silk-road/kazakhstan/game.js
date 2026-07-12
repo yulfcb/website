@@ -2760,6 +2760,19 @@
             localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
           }
         } catch (e) {}
+        // v19 Bug #1: 飞书通知 (跟卡塔尔/伊朗一致)
+        try {
+          fetch('/api/game/reward/claim', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              level: 3,
+              amount: 205,
+              session_id: (window.SILK_ROAD_SESSION_ID || ''),
+              nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+            }),
+          }).catch(function() {});
+        } catch (e) {}
         // 清理 DOM 兜底按钮
         var oldBtn = document.getElementById('kazakhstan-win-next-btn');
         if (oldBtn) oldBtn.remove();
