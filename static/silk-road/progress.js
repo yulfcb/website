@@ -55,14 +55,10 @@
 
     var html = ''
       + '<div class="slk-pg-wrap">'
-      +   '<div class="slk-pg-nick">你好，<b>' + escapeHtml(nick) + '</b></div>'
       +   '<div class="slk-pg-bar">'
       +     '<div class="slk-pg-track">' + dots + '</div>'
       +     '<div class="slk-pg-count">'
       +       '<span class="slk-pg-count-num">' + clearedCount + '</span> / 6 关'
-      +       (current !== null
-      ?         ' · 当前 <b>关 ' + current + ' · ' + escapeHtml(LEVEL_META[current].title) + '</b>'
-      :         '')
       +     '</div>'
       +   '</div>'
       + '</div>';
