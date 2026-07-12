@@ -2480,7 +2480,8 @@
       });
       this.contentLayer.add(balloonContainer);
 
-      // v18: 通关 modal — 显示「🎈 土耳其通关啦」「+¥125.00」「🐪 继续去哈萨克」按钮
+      // v25.5: 奖励金额改为 120
+      // v18: 通关 modal — 显示「🎈 土耳其通关啦」「+¥120.00」「🐪 继续去哈萨克」按钮
       // 跟 qatar ResultScene 风格一致: container(640, 360), setDepth(2000)
       var winContainer = this.add.container(640, 360);
       winContainer.setDepth(2000);
@@ -2494,7 +2495,8 @@
         fontSize: '18px', color: '#FFE9B0', fontStyle: 'italic',
         wordWrap: { width: 460 },
       }).setOrigin(0.5);
-      var rewardText = this.add.text(0, 0, '+¥125.00', {
+      // v25.5: 奖励 ¥125 → ¥120
+      var rewardText = this.add.text(0, 0, '+¥120.00', {
         fontSize: '48px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
       var rewardLabel = this.add.text(0, 50, '通关奖励', {
@@ -2515,8 +2517,9 @@
         self._turkeyRewardClaimed = true;
         try {
           // v25.4 Bug A: 用 sendBeacon (iOS Safari + 页面秒关 兜底)
+          // v25.5: 奖励 125 → 120
           var payload = JSON.stringify({
-            level: 2, amount: 125,
+            level: 2, amount: 120,
             session_id: (window.SILK_ROAD_SESSION_ID || ''),
             nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
           });
