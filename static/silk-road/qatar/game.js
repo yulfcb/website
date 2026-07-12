@@ -350,23 +350,28 @@
       this.keys = { up: false, down: false, left: false, right: false };
       // M9.5a: dpad 缩小到 0.6 倍 + 半透明 + 推到左下 (110, 620), 不挡场景
       this.joystickContainer = this.add.container(110, 620);
-      this.joystickContainer.setAlpha(0.72);                 // 半透明 — 玩家仍能看见自己 + 场景
-      this.joystickContainer.setScale(0.6);                  // 缩小 60%
+      this.joystickContainer.setAlpha(0.78);                 // 半透明 — 玩家仍能看见自己 + 场景
+      // v25.4 Bug C: 统一大小到新疆滑雪关 (scale 0.6 → 1.0, 颜色保持棕)
+      this.joystickContainer.setScale(1.0);
       this.joystickContainer.setDepth(500);                  // 在场景之上, 在 modal(2000) 之下
 
       var dpadBg = this.add.graphics();
       dpadBg.fillStyle(0x4A2E1A, 0.55);
-      dpadBg.fillCircle(0, 0, 115);
+      // v25.4 Bug C: 圆盘 r 115 → 138 (跟 xinjiang 1.2x, 颜色保持)
+      dpadBg.fillCircle(0, 0, 138);
       this.joystickContainer.add(dpadBg);
 
       this.joystickBtns = {};
       var makeDpadBtn = function (txt, dx, dy, key) {
-        var bg = self.add.circle(dx, dy, 40, 0x4A2E1A, 0.85)
+        // v25.4 Bug C: 按钮 r 40 → 48, 颜色保持棕
+        var bg = self.add.circle(dx, dy, 48, 0x4A2E1A, 0.85)
           .setStrokeStyle(2, 0xFFD98A, 0.7);
+        // v25.4 Bug C: 箭头 fontSize 30 → 32, 颜色保持金
         var arrow = self.add.text(dx, dy, txt, {
-          fontSize: '30px', color: '#FFD98A', fontStyle: 'bold',
+          fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
         }).setOrigin(0.5);
-        var zone = self.add.zone(dx, dy, 80, 80).setInteractive({ useHandCursor: true });
+        // v25.4 Bug C: zone 80 → 96 (1.2x)
+        var zone = self.add.zone(dx, dy, 96, 96).setInteractive({ useHandCursor: true });
         var press = function () {
           self.keys[key] = true;
           bg.setFillStyle(0xFFD98A, 0.95);
@@ -385,10 +390,11 @@
         self.joystickContainer.add([bg, arrow, zone]);
         self.joystickBtns[key] = { bg: bg, arrow: arrow };
       };
-      makeDpadBtn('▲', 0, -75, 'up');
-      makeDpadBtn('▼', 0, 75, 'down');
-      makeDpadBtn('◀', -75, 0, 'left');
-      makeDpadBtn('▶', 75, 0, 'right');
+      // v25.4 Bug C: 4 个按钮偏移 ±75 → ±90 (跟 xinjiang 一致)
+      makeDpadBtn('▲', 0, -90, 'up');
+      makeDpadBtn('▼', 0, 90, 'down');
+      makeDpadBtn('◀', -90, 0, 'left');
+      makeDpadBtn('▶', 90, 0, 'right');
 
       // M9.2: 按住持续走 update loop - 自动 walk tick
       // 通过 this.scene.events 在 update cycle 检查 self.keys[key]

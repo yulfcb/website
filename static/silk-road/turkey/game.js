@@ -483,23 +483,28 @@
       // —— 虚拟方向键 (复用 qatar 模式, 缩小到 0.6, 左下) ——
       this.keys = { up: false, down: false, left: false, right: false };
       this.joystickContainer = this.add.container(110, 560);
-      this.joystickContainer.setAlpha(0.72);
-      this.joystickContainer.setScale(0.6);
+      this.joystickContainer.setAlpha(0.78);
+      // v25.4 Bug C: 统一大小到新疆滑雪关 (scale 0.6 → 1.0, 颜色保持棕)
+      this.joystickContainer.setScale(1.0);
       this.joystickContainer.setDepth(500);
 
       var dpadBg = this.add.graphics();
       dpadBg.fillStyle(0x4A2E1A, 0.55);
-      dpadBg.fillCircle(0, 0, 115);
+      // v25.4 Bug C: 圆盘 r 115 → 138 (跟 xinjiang 1.2x, 颜色保持)
+      dpadBg.fillCircle(0, 0, 138);
       this.joystickContainer.add(dpadBg);
 
       this.joystickBtns = {};
       var makeDpadBtn = function (txt, dx, dy, key) {
-        var bg = self.add.circle(dx, dy, 40, 0x4A2E1A, 0.85)
+        // v25.4 Bug C: 按钮 r 40 → 48, 颜色保持棕
+        var bg = self.add.circle(dx, dy, 48, 0x4A2E1A, 0.85)
           .setStrokeStyle(2, 0xFFD98A, 0.7);
+        // v25.4 Bug C: 箭头 fontSize 30 → 32, 颜色保持金
         var arrow = self.add.text(dx, dy, txt, {
-          fontSize: '30px', color: '#FFD98A', fontStyle: 'bold',
+          fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
         }).setOrigin(0.5);
-        var zone = self.add.zone(dx, dy, 80, 80).setInteractive({ useHandCursor: true });
+        // v25.4 Bug C: zone 80 → 96 (1.2x)
+        var zone = self.add.zone(dx, dy, 96, 96).setInteractive({ useHandCursor: true });
         var press = function () {
           self.keys[key] = true;
           bg.setFillStyle(0xFFD98A, 0.95);
@@ -518,10 +523,11 @@
         self.joystickContainer.add([bg, arrow, zone]);
         self.joystickBtns[key] = { bg: bg, arrow: arrow };
       };
-      makeDpadBtn('▲', 0, -75, 'up');
-      makeDpadBtn('▼', 0, 75, 'down');
-      makeDpadBtn('◀', -75, 0, 'left');
-      makeDpadBtn('▶', 75, 0, 'right');
+      // v25.4 Bug C: 4 个按钮偏移 ±75 → ±90 (跟 xinjiang 一致)
+      makeDpadBtn('▲', 0, -90, 'up');
+      makeDpadBtn('▼', 0, 90, 'down');
+      makeDpadBtn('◀', -90, 0, 'left');
+      makeDpadBtn('▶', 90, 0, 'right');
 
       this.events.on('update', this._movementUpdate, this);
 
@@ -1795,16 +1801,18 @@
         }).setOrigin(0.5));
       }
 
-      // 关闭按钮
-      var closeBg = this.add.rectangle(0, 220, 200, 50, 0x6B4423, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.7);
-      this.modalContainer.add(closeBg);
-      this.modalContainer.add(this.add.text(0, 220, '关闭', {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      var closeZone = this.add.zone(0, 220, 200, 50).setInteractive({ useHandCursor: true });
-      closeZone.on('pointerdown', function () { self.closeModal(); });
-      this.modalContainer.add(closeZone);
+      // 关闭按钮 (材料齐时不显示, 因为"开始组装"就是唯一的下一步)
+      if (!allOk) {
+        var closeBg = this.add.rectangle(0, 220, 200, 50, 0x6B4423, 1)
+          .setStrokeStyle(2, 0xFFD98A, 0.7);
+        this.modalContainer.add(closeBg);
+        this.modalContainer.add(this.add.text(0, 220, '关闭', {
+          fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+        }).setOrigin(0.5));
+        var closeZone = this.add.zone(0, 220, 200, 50).setInteractive({ useHandCursor: true });
+        closeZone.on('pointerdown', function () { self.closeModal(); });
+        this.modalContainer.add(closeZone);
+      }
 
       this.modalContainer.setVisible(true);
     },
@@ -2506,20 +2514,24 @@
       if (!self._turkeyRewardClaimed) {
         self._turkeyRewardClaimed = true;
         try {
-          setTimeout(function () {
-            try {
-              fetch('/api/game/reward/claim', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  level: 2,
-                  amount: 125,
-                  session_id: (window.SILK_ROAD_SESSION_ID || ''),
-                  nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
-                }),
-              }).catch(function() {});
-            } catch (e) {}
-          }, 100);
+          // v25.4 Bug A: 用 sendBeacon (iOS Safari + 页面秒关 兜底)
+          var payload = JSON.stringify({
+            level: 2, amount: 125,
+            session_id: (window.SILK_ROAD_SESSION_ID || ''),
+            nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+          });
+          var ok = false;
+          if (navigator.sendBeacon) {
+            ok = navigator.sendBeacon('/api/game/reward/claim',
+              new Blob([payload], { type: 'application/json' }));
+          }
+          if (!ok) {
+            fetch('/api/game/reward/claim', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: payload, keepalive: true,
+            }).catch(function() {});
+          }
         } catch (e) {}
       }
 

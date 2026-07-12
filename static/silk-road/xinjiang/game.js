@@ -1884,20 +1884,24 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       if (!self._xjRewardClaimed) {
         self._xjRewardClaimed = true;
         try {
-          setTimeout(function () {
-            try {
-              fetch('/api/game/reward/claim', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  level: 4,
-                  amount: 81,
-                  session_id: (window.SILK_ROAD_SESSION_ID || ''),
-                  nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
-                }),
-              }).catch(function() {});
-            } catch (e) {}
-          }, 100);
+          // v25.4 Bug A: 用 sendBeacon (iOS Safari + 页面秒关 兜底)
+          var payload = JSON.stringify({
+            level: 4, amount: 81,
+            session_id: (window.SILK_ROAD_SESSION_ID || ''),
+            nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+          });
+          var ok = false;
+          if (navigator.sendBeacon) {
+            ok = navigator.sendBeacon('/api/game/reward/claim',
+              new Blob([payload], { type: 'application/json' }));
+          }
+          if (!ok) {
+            fetch('/api/game/reward/claim', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: payload, keepalive: true,
+            }).catch(function() {});
+          }
         } catch (e) {}
       }
 
@@ -2366,16 +2370,24 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
           }
           // v22/v24: 彩蛋飞书通知 (level=4 amount=520)
           try {
+            // v25.4 Bug A: 用 sendBeacon (iOS Safari + 页面秒关 兜底)
+          var payload = JSON.stringify({
+            level: 4, amount: 520,
+            session_id: (window.SILK_ROAD_SESSION_ID || ''),
+            nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+          });
+          var ok = false;
+          if (navigator.sendBeacon) {
+            ok = navigator.sendBeacon('/api/game/reward/claim',
+              new Blob([payload], { type: 'application/json' }));
+          }
+          if (!ok) {
             fetch('/api/game/reward/claim', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({
-                level: 4,
-                amount: 520,
-                session_id: (window.SILK_ROAD_SESSION_ID || ''),
-                nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
-              }),
+              body: payload, keepalive: true,
             }).catch(function() {});
+          }
           } catch (e) {}
           closeModal();
           // 显示奖励 modal + 信件
