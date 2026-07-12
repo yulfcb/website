@@ -2135,6 +2135,22 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       var self = this;
       try { window.playXinjiangSfx('button', 0.4); } catch (e) {}
 
+      // v25.4 Bug #4: 手机全屏下 input 被遮挡, 触发时先退出全屏
+      // 全屏时 Phaser canvas 占满 + transform:scale, iOS Safari 键盘弹起 input 飘出可视区
+      if (this.scale && this.scale.isFullscreen) {
+        try { this.scale.stopFullscreen(); } catch (e) {}
+        // 等全屏退出动画完成再显示 modal
+        var scene = this;
+        setTimeout(function () { scene._showPasswordPromptInner(); }, 180);
+        return;
+      }
+      this._showPasswordPromptInner();
+    },
+
+    // v25.4 Bug #4: 内部函数 — 实际显示 modal (全屏退出后才调)
+    _showPasswordPromptInner: function () {
+      var self = this;
+
       // 隐藏 dpad (跟 qatar showReviveModal 一致)
       if (this.joystickContainer) this.joystickContainer.setVisible(false);
       if (this.actionContainer) this.actionContainer.setVisible(false);
