@@ -2135,9 +2135,19 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       }).setOrigin(0.5).setDepth(2003);
 
       var closeModal = function () {
-        dim.destroy(); card.destroy(); title.destroy(); hint.destroy();
-        submitBg.destroy(); submitText.destroy();
-        cancelBg.destroy(); cancelText.destroy(); errText.destroy();
+        // v20 Bug #4 修复: dim 在 v19 中被注释掉了 (line 2066), closeModal 还在用 dim.destroy() → ReferenceError
+        // 改成 typeof 防御 + 直接销毁可视元素 (card/title/hint/submitBg/submitText/cancelBg/cancelText/errText/input)
+        if (typeof dim !== 'undefined' && dim && typeof dim.destroy === 'function') {
+          try { dim.destroy(); } catch (e) {}
+        }
+        try { card.destroy(); } catch (e) {}
+        try { title.destroy(); } catch (e) {}
+        try { hint.destroy(); } catch (e) {}
+        try { submitBg.destroy(); } catch (e) {}
+        try { submitText.destroy(); } catch (e) {}
+        try { cancelBg.destroy(); } catch (e) {}
+        try { cancelText.destroy(); } catch (e) {}
+        try { errText.destroy(); } catch (e) {}
         if (input && input.parentNode) input.parentNode.removeChild(input);
       };
 
