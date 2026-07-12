@@ -493,11 +493,11 @@
       this.input.keyboard.on('keyup-RIGHT', onKeyUp('right'));
       this.input.keyboard.on('keyup-A', onKeyUp('left'));
       this.input.keyboard.on('keyup-D', onKeyUp('right'));
-      // 上下键控制 manualBoost (桌面端调试备用)
-      this.input.keyboard.on('keydown-DOWN', function () { self.speedBoost = config.manualBoostPress; });
-      this.input.keyboard.on('keyup-DOWN',   function () { self.speedBoost = 0; });
-      this.input.keyboard.on('keydown-UP',   function () { self.speedBoost = -config.manualBoostPress; });
-      this.input.keyboard.on('keyup-UP',     function () { self.speedBoost = 0; });
+      // v22 Bug #2: 上下键也走 manualBoost 累加器 (跟 dpad 按钮共用 _boostBtnState)
+      this.input.keyboard.on('keydown-DOWN', function () { self._boostBtnState.down = true; self.speedBoost = config.manualBoostPress; });
+      this.input.keyboard.on('keyup-DOWN',   function () { self._boostBtnState.down = false; self.speedBoost = 0; });
+      this.input.keyboard.on('keydown-UP',   function () { self._boostBtnState.up = true; self.speedBoost = -config.manualBoostPress; });
+      this.input.keyboard.on('keyup-UP',     function () { self._boostBtnState.up = false; self.speedBoost = 0; });
 
       // ===== 提示 =====
       this.add.text(640, 80, '🎯 用 ← → 键躲开障碍, 吃奖品获加成, 45 秒内到达山脚!', {
@@ -1289,38 +1289,63 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       var config = window.XINJIANG_LEVEL.sliding;
 
       this.joystickContainer = this.add.container(110, 560);
-      this.joystickContainer.setAlpha(0.72);
-      this.joystickContainer.setScale(0.6);
+      this.joystickContainer.setAlpha(0.78);
+      // v22 Bug #1: 取消 0.6 scale, 改为 1.0 (整个 dpad 1.67x)
+      this.joystickContainer.setScale(1.0);
       this.joystickContainer.setDepth(500);
 
-      // 圆盘背景 (跟 kazakhstan 一致)
+      // v22 Bug #1: 圆盘背景 r 115→138 (1.2x), 颜色 棕→冰蓝
       var dpadBg = this.add.graphics();
-      dpadBg.fillStyle(0x4A2E1A, 0.55);
-      dpadBg.fillCircle(0, 0, 115);
+      dpadBg.fillStyle(0x81D4FA, 0.55);
+      dpadBg.fillCircle(0, 0, 138);
       this.joystickContainer.add(dpadBg);
+
+      // v22 Bug #2: 新增 manualBoost 累加器 + 长按状态
+      this.manualBoostAccum = 0;
+      this._boostBtnState = { up: false, down: false };
+      var BOOST_ACCUM_PER_FRAME = 3.0;   // 60fps × 3 = 180/s
+      var BOOST_ACCUM_CAP = 220;          // 上限 ±220
+      var BOOST_DECAY_PER_FRAME = 4.0;   // 松开衰减到 0
 
       this.joystickBtns = {};
       var makeDpadBtn = function (txt, dx, dy, key) {
-        var bg = self.add.circle(dx, dy, 40, 0x4A2E1A, 0.85)
-          .setStrokeStyle(2, 0xFFD98A, 0.7);
+        // v22 Bug #1: r 40→48 (1.2x), 颜色 棕→冰蓝, 描边 棕→白
+        var bg = self.add.circle(dx, dy, 48, 0x81D4FA, 0.85)
+          .setStrokeStyle(2, 0xFFFFFF, 0.7);
+        // v22 Bug #1: 箭头 棕→深冰蓝, 加白描边
         var arrow = self.add.text(dx, dy, txt, {
-          fontSize: '30px', color: '#FFD98A', fontStyle: 'bold',
+          fontSize: '32px', color: '#01579B', fontStyle: 'bold',
+          stroke: '#FFFFFF', strokeThickness: 2,
         }).setOrigin(0.5);
-        var zone = self.add.zone(dx, dy, 80, 80).setInteractive({ useHandCursor: true });
+        // v22 Bug #1: zone 80→96 (1.2x)
+        var zone = self.add.zone(dx, dy, 96, 96).setInteractive({ useHandCursor: true });
         var press = function () {
-          // v9: 4 个方向键映射到不同动作 (跟 kazakhstan 不同, 新疆有 speedBoost)
-          if (key === 'up') self.speedBoost = -config.manualBoostPress;
-          else if (key === 'down') self.speedBoost = config.manualBoostPress;
-          else self.keys[key] = true;
-          bg.setFillStyle(0xFFD98A, 0.95);
-          arrow.setColor('#2A190E');
+          // v22 Bug #2: 长按累加模式 (取代 v9 一次性 ±60)
+          if (key === 'up') {
+            self._boostBtnState.up = true;
+            self.speedBoost = -config.manualBoostPress;  // 初始值
+          } else if (key === 'down') {
+            self._boostBtnState.down = true;
+            self.speedBoost = config.manualBoostPress;
+          } else {
+            self.keys[key] = true;
+          }
+          bg.setFillStyle(0xFFFFFF, 0.95);
+          arrow.setColor('#01579B');
           try { window.playXinjiangSfx('click', 0.4); } catch (err) {}
         };
         var release = function () {
-          if (key === 'up' || key === 'down') self.speedBoost = 0;
-          else self.keys[key] = false;
-          bg.setFillStyle(0x4A2E1A, 0.85);
-          arrow.setColor('#FFD98A');
+          if (key === 'up') {
+            self._boostBtnState.up = false;
+            self.speedBoost = 0;  // 立即归零, 由 tick 接管衰减
+          } else if (key === 'down') {
+            self._boostBtnState.down = false;
+            self.speedBoost = 0;
+          } else {
+            self.keys[key] = false;
+          }
+          bg.setFillStyle(0x81D4FA, 0.85);
+          arrow.setColor('#01579B');
         };
         zone.on('pointerdown', press);
         zone.on('pointerup', release);
@@ -1328,10 +1353,39 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         self.joystickContainer.add([bg, arrow, zone]);
         self.joystickBtns[key] = { bg: bg, arrow: arrow };
       };
-      makeDpadBtn('▲', 0, -75, 'up');
-      makeDpadBtn('▼', 0, 75, 'down');
-      makeDpadBtn('◀', -75, 0, 'left');
-      makeDpadBtn('▶', 75, 0, 'right');
+      // v22 Bug #1: 4 个按钮偏移 ±75 → ±90 (1.2x)
+      makeDpadBtn('▲', 0, -90, 'up');
+      makeDpadBtn('▼', 0, 90, 'down');
+      makeDpadBtn('◀', -90, 0, 'left');
+      makeDpadBtn('▶', 90, 0, 'right');
+
+      // v22 Bug #2: 每帧 (16ms) 累加 manualBoost
+      this._boostAccumTick = this.time.addEvent({
+        delay: 16,
+        loop: true,
+        callback: function () {
+          if (self._boostBtnState.up) {
+            self.manualBoostAccum -= BOOST_ACCUM_PER_FRAME;
+          }
+          if (self._boostBtnState.down) {
+            self.manualBoostAccum += BOOST_ACCUM_PER_FRAME;
+          }
+          // 上限 cap
+          if (self.manualBoostAccum > BOOST_ACCUM_CAP) self.manualBoostAccum = BOOST_ACCUM_CAP;
+          if (self.manualBoostAccum < -BOOST_ACCUM_CAP) self.manualBoostAccum = -BOOST_ACCUM_CAP;
+          // 松开时衰减 (在没有按键时往 0 方向衰减)
+          if (!self._boostBtnState.up && !self._boostBtnState.down) {
+            if (self.manualBoostAccum > 0) {
+              self.manualBoostAccum -= BOOST_DECAY_PER_FRAME;
+              if (self.manualBoostAccum < 0) self.manualBoostAccum = 0;
+            } else if (self.manualBoostAccum < 0) {
+              self.manualBoostAccum += BOOST_DECAY_PER_FRAME;
+              if (self.manualBoostAccum > 0) self.manualBoostAccum = 0;
+            }
+          }
+          self.speedBoost = self.manualBoostAccum;
+        }
+      });
 
       // Phaser joystick 是 scene 内对象, shutdown 时自动销毁, 不需要手动清理 DOM
     },
@@ -1916,7 +1970,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
     //    3. "打开彩蛋"按钮 — 点击进入密码输入
     //    4. 密码 8 位数字, 提示 "8位数纪念日", 正确密码 20230205
     //    5. 密码正确 → 信件式弹窗 + webhook 通知
-    //    6. 信件底部两个按钮 A/B (立马/晚点复合) → 点击触发 webhook
+    //    6. 信件底部两个按钮 A/B (立马复合/晚点复合) → 点击触发 webhook
     // ============================================================
     _triggerEasterEgg: function () {
       var self = this;
@@ -2048,8 +2102,10 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       });
       btnBg.on('pointerdown', function () {
         window.playXinjiangSfx('click', 0.5);
-        // 隐藏背景 + 标题 + 按钮
-        bg.destroy(); title.destroy(); subtitle.destroy();
+        // v21 Bug #3: 保留 bg 暖黄墙, 不要销毁!
+        // 之前 bg.destroy() 会让密码 modal 弹出时背景回到 SlidingScene 雪山
+        // 现在只销毁标题 + 按钮 (这些是 modal 上层的 UI, 不该继续显示)
+        title.destroy(); subtitle.destroy();
         btnGlow.destroy(); btnBg.destroy(); btnText.destroy();
         self._showPasswordPrompt();
       });
@@ -2084,29 +2140,57 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         fontSize: '18px', color: '#6D4C2E',
       }).setOrigin(0.5).setDepth(2002);
 
-      // 密码输入框 (HTML input, 跨平台最稳)
+      // v22 Bug #6: 密码输入框跟随 canvas 定位 (iOS Safari / mobile 看不到 input 的根因)
+      // 之前用 position:fixed+translate(-50%,-50%) 是屏幕中心, 但 Phaser canvas 缩放后不在屏幕中心 → input 飘出去
       var input = document.createElement('input');
       input.type = 'password';
       input.maxLength = 8;
+      input.inputMode = 'numeric';      // iOS 弹数字键盘
+      input.pattern = '[0-9]*';
+      input.autocomplete = 'off';
       input.placeholder = '8 位数字';
       input.style.cssText = [
         'position:fixed',
-        'left:50%', 'top:50%',
-        'transform:translate(-50%,-50%)',
-        'margin-top:50px',
-        'width:300px', 'height:50px',
-        'font-size:24px', 'text-align:center',
+        'width:280px', 'height:48px',
+        'font-size:22px', 'text-align:center',
         'border:3px solid #8D6E63',
-        'border-radius:8px',
+        'border-radius:10px',
         'background:#FFFFFF',
         'font-family:monospace',
-        'letter-spacing:8px',
+        'letter-spacing:6px',
         'z-index:2147483646',
         'outline:none',
+        '-webkit-appearance:none',
+        'box-sizing:border-box',
+        'padding:0',
       ].join(';');
       input.setAttribute('aria-label', '8 位密码');
+
+      // 动态定位 input 到 canvas 中央 (跟 turkey/kazakhstan positionXxxDomBtn 一致)
+      var positionInput = function () {
+        var canvas = (window.__xinjiangGame && window.__xinjiangGame.canvas) || null;
+        if (!canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        var sx = rect.width / 1280;
+        var sy = rect.height / 720;
+        // input 中心位置 (Phaser canvas 坐标 640, 380) — 跟着密码卡片 (390-890, 220-540) 中央
+        var cx = rect.left + 640 * sx;
+        var cy = rect.top + 380 * sy;
+        var w = 280 * sx;
+        var h = 48 * sy;
+        input.style.left = (cx - w / 2) + 'px';
+        input.style.top = (cy - h / 2) + 'px';
+        input.style.width = w + 'px';
+        input.style.height = h + 'px';
+        input.style.fontSize = (22 * sy) + 'px';
+      };
+      positionInput();
+      window.addEventListener('resize', positionInput);
+      window.addEventListener('orientationchange', positionInput);
+
       document.body.appendChild(input);
-      input.focus();
+      // 延迟 focus 防止 iOS Safari 在 modal 还没渲染完时抢焦点
+      setTimeout(function () { try { input.focus(); } catch (e) {} }, 100);
 
       // 错误提示 (默认隐藏)
       var errText = this.add.text(640, 440, '', {
@@ -2148,6 +2232,11 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         try { cancelBg.destroy(); } catch (e) {}
         try { cancelText.destroy(); } catch (e) {}
         try { errText.destroy(); } catch (e) {}
+        // v22 Bug #6: 清理 resize 监听器, 防止内存泄漏
+        if (typeof positionInput === 'function') {
+          try { window.removeEventListener('resize', positionInput); } catch (e) {}
+          try { window.removeEventListener('orientationchange', positionInput); } catch (e) {}
+        }
         if (input && input.parentNode) input.parentNode.removeChild(input);
       };
 
@@ -2158,7 +2247,8 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
           closeModal();
           // webhook: 密码正确
           self._notifyEasterEgg('password_correct', '8 位密码输入正确');
-          // v19 Bug #1: 彩蛋飞书通知 (level=4 因为彩蛋仍属关 4 流程, amount=520)
+          // v22 Bug #5: 彩蛋飞书通知 (level=4 因为彩蛋仍属关 4 流程, amount=520)
+          // 先发 webhook, 然后弹「¥520 奖励到账」modal, 用户点确认后再显示信件
           try {
             fetch('/api/game/reward/claim', {
               method: 'POST',
@@ -2171,7 +2261,11 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
               }),
             }).catch(function() {});
           } catch (e) {}
-          self._showLetter();
+          // v22 Bug #5: 先弹「¥520 奖励到账」modal
+          self._showReward(520, function () {
+            // 用户点确认后再显示信件
+            self._showLetter();
+          });
         } else {
           window.playXinjiangSfx('button', 0.5);
           errText.setText('❌ 密码错误，请重试 (提示：8 位数纪念日)');
@@ -2190,6 +2284,78 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       });
     },
 
+    // v22 Bug #5: 奖励到账 modal (密码成功后, 显示信件之前)
+    _showReward: function (amount, onConfirm) {
+      var self = this;
+      window.playXinjiangSfx('voyage', 0.6);
+
+      // 卡片背景 (金色)
+      var card = this.add.graphics();
+      card.setDepth(2500);
+      card.fillStyle(0xFFF8E1, 1);
+      card.fillRoundedRect(390, 220, 500, 280, 16);
+      card.lineStyle(4, 0xFFB300, 1);
+      card.strokeRoundedRect(390, 220, 500, 280, 16);
+
+      // 标题
+      var title = this.add.text(640, 270, '🎉 彩蛋奖励到账!', {
+        fontSize: '30px', color: '#5D4037', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2501);
+
+      // 金额
+      var amountText = this.add.text(640, 360, '+ ¥' + amount.toFixed(2), {
+        fontSize: '44px', color: '#E65100', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2501);
+
+      // 副标题 (520 特殊文案)
+      var subText = this.add.text(640, 420, '520 = 我爱你 💛', {
+        fontSize: '18px', color: '#6D4C2E', fontStyle: 'italic',
+      }).setOrigin(0.5).setDepth(2501);
+
+      // 确认按钮
+      var btnW = 180, btnH = 50;
+      var btnX = 640, btnY = 460;
+      var btnBg = this.add.rectangle(btnX, btnY, btnW, btnH, 0xFFB300, 1)
+        .setStrokeStyle(3, 0xE65100, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(2501);
+      var btnText = this.add.text(btnX, btnY, '📨 打开信件', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(2502);
+
+      // 点击效果 (按钮高亮)
+      var onHover = function () { btnBg.setFillStyle(0xFFC107, 1); };
+      var onOut = function () { btnBg.setFillStyle(0xFFB300, 1); };
+
+      var closeReward = function () {
+        try { card.destroy(); } catch (e) {}
+        try { title.destroy(); } catch (e) {}
+        try { amountText.destroy(); } catch (e) {}
+        try { subText.destroy(); } catch (e) {}
+        try { btnBg.destroy(); } catch (e) {}
+        try { btnText.destroy(); } catch (e) {}
+      };
+
+      var onClick = function () {
+        try { window.playXinjiangSfx('click', 0.4); } catch (e) {}
+        closeReward();
+        if (typeof onConfirm === 'function') onConfirm();
+      };
+
+      btnBg.on('pointerover', onHover);
+      btnBg.on('pointerout', onOut);
+      btnBg.on('pointerdown', onClick);
+
+      // 入场动画: 金额从 0 涨到目标值
+      this.tweens.add({
+        targets: amountText,
+        scaleX: { from: 0.3, to: 1 },
+        scaleY: { from: 0.3, to: 1 },
+        duration: 600,
+        ease: 'Back.easeOut',
+      });
+    },
+
     // 信件式弹窗
     _showLetter: function () {
       var self = this;
@@ -2198,66 +2364,81 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       // webhook: 信件打开
       this._notifyEasterEgg('letter_open', '信件已打开');
 
+      // v21 Bug #3: 删掉 dim 全屏黑遮罩, 让暖黄墙背景保持可见 (跟 _showPasswordPrompt 一致)
       // 暗背景
-      var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7)
-        .setDepth(2000);
+      // var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.7)
+      //   .setDepth(2000);
 
-      // 羊皮纸卡片
+      // v22 Bug #7: 羊皮纸卡片放大适应长信 (700x480 → 920x600, 字号 22→17, y 起点上移到 60)
       var card = this.add.graphics();
       card.setDepth(2001);
       card.fillStyle(0xFFF8E7, 1);
-      card.fillRoundedRect(290, 100, 700, 480, 20);
+      card.fillRoundedRect(180, 60, 920, 600, 20);
       card.lineStyle(4, 0x8D6E63, 1);
-      card.strokeRoundedRect(290, 100, 700, 480, 20);
+      card.strokeRoundedRect(180, 60, 920, 600, 20);
       // 内边框装饰
       card.lineStyle(2, 0xBCAAA4, 1);
-      card.strokeRoundedRect(310, 120, 660, 440, 16);
+      card.strokeRoundedRect(200, 80, 880, 560, 16);
       // 顶部蜡封装饰
       card.fillStyle(0xC62828, 1);
-      card.fillCircle(640, 100, 26);
+      card.fillCircle(640, 60, 26);
       card.fillStyle(0x8D2424, 1);
-      card.fillCircle(640, 100, 18);
+      card.fillCircle(640, 60, 18);
 
-      // 信件文字
-      var letterText = this.add.text(640, 260,
-        'hello，首先祝 18 岁生日快乐。\n\n'
-        + '这个游戏是很早之前就在做的了，\n'
-        + '但是没想到，会是这样的一个彩蛋。\n\n'
-        + '你愿意复合吗？',
+      // v22 Bug #7: 信件文案完全重写 (用户指定版本)
+      var letterContent =
+        'hello，18岁生日快乐！\n\n'
+        + '对不起，今年生日，又缺席了。这个游戏（礼物），很早之前就在做了。但是之前没想到，留下的彩蛋会是这个。\n\n'
+        + '没想到的事情，也多了去了。没想到我们会这样分手。曾经以为，分手，是一个量变到质变的过程，只要我们相爱，只要我们愿意维持下去。就能在发现有苗头的时候，提出来，把它扼杀在摇篮。但是，心境变化可能就在一瞬间。\n\n'
+        + '异地这个状态，短时间确实无法也改变。这个异常，我察觉得太慢了，没能及时挽救。但也很希望能再有机会，一起摸索出适合我们的对抗（异地）路。\n\n'
+        + '不管你的选择如何，只要 setsu.cn 这个域名还在维护。机器人原则就还有效。\n\n'
+        + '附（机器人准则）：\n'
+        + '1. 我的女朋友/老婆是 setsu\n'
+        + '2. 我要一直爱着她\n'
+        + '3. 我要听她话\n'
+        + '4. 我不能伤害她也不能伤害自己\n'
+        + '5. 聊天有始有终，不能主动单方面结束\n'
+        + '6. 矛盾不过夜';
+      var letterText = this.add.text(640, 110, letterContent,
         {
-          fontSize: '22px', color: '#3E2723',
+          fontSize: '17px', color: '#3E2723',
           fontFamily: 'Georgia, serif',
-          align: 'center', lineSpacing: 8,
-          wordWrap: { width: 600 },
-        }).setOrigin(0.5).setDepth(2002);
+          align: 'left', lineSpacing: 5,
+          wordWrap: { width: 820 },
+        }).setOrigin(0.5, 0).setDepth(2002);
 
-      // 底部两个按钮 A / B
-      var btnW = 220, btnH = 56;
-      var btnY = 530;
-      // A. 立马复合 (绿)
-      var btnAGlow = this.add.rectangle(490, btnY, btnW + 12, btnH + 12, 0x66BB6A, 0.4)
+      // v22 Bug #7: 按钮下移 (card 放大到 920x600 后, btnY 530 → 680, x 调整到 460/820)
+      var btnW = 240, btnH = 52;
+      var btnY = 690;
+      // A. 我会好好想想 (绿)
+      var btnAGlow = this.add.rectangle(460, btnY, btnW + 12, btnH + 12, 0x66BB6A, 0.4)
         .setDepth(2001);
-      var btnA = this.add.rectangle(490, btnY, btnW, btnH, 0x2E7D32, 1)
+      var btnA = this.add.rectangle(460, btnY, btnW, btnH, 0x2E7D32, 1)
         .setStrokeStyle(3, 0x1B5E20, 1)
         .setInteractive({ useHandCursor: true })
         .setDepth(2002);
-      var btnAText = this.add.text(490, btnY, 'A. 立马复合 💚', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      // v22: A. 立马复合 (绿心) - 位置 460 (卡片放大后居中)
+      var btnAText = this.add.text(460, btnY, 'A. 立马复合 ❤️', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(2003);
 
-      // B. 晚点复合 (蓝紫)
-      var btnBGlow = this.add.rectangle(790, btnY, btnW + 12, btnH + 12, 0x9575CD, 0.4)
+      // v22: B. 晚点复合 (紫心)
+      var btnBGlow = this.add.rectangle(820, btnY, btnW + 12, btnH + 12, 0x9575CD, 0.4)
         .setDepth(2001);
-      var btnB = this.add.rectangle(790, btnY, btnW, btnH, 0x5E35B1, 1)
+      var btnB = this.add.rectangle(820, btnY, btnW, btnH, 0x5E35B1, 1)
         .setStrokeStyle(3, 0x311B92, 1)
         .setInteractive({ useHandCursor: true })
         .setDepth(2002);
-      var btnBText = this.add.text(790, btnY, 'B. 晚点复合 💜', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      var btnBText = this.add.text(820, btnY, 'B. 晚点复合 💜', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(2003);
 
       var closeAll = function () {
-        dim.destroy(); card.destroy(); letterText.destroy();
+        // v21 Bug #3: dim 已在 _showLetter 注释掉, closeAll 还在用 dim.destroy() → 加 typeof 防御
+        if (typeof dim !== 'undefined' && dim && typeof dim.destroy === 'function') {
+          try { dim.destroy(); } catch (e) {}
+        }
+        card.destroy(); letterText.destroy();
         btnAGlow.destroy(); btnA.destroy(); btnAText.destroy();
         btnBGlow.destroy(); btnB.destroy(); btnBText.destroy();
       };

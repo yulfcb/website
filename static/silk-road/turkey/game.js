@@ -2511,6 +2511,19 @@
             localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
           }
         } catch (e) {}
+        // v22 Bug #4: 飞书通知 (跟 qatar/iran/kazakhstan/xinjiang 一致, 之前缺这一步)
+        try {
+          fetch('/api/game/reward/claim', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              level: 2,
+              amount: 125,
+              session_id: (window.SILK_ROAD_SESSION_ID || ''),
+              nickname: (window.SILK_ROAD_NICKNAME || localStorage.getItem('silkroad_nickname') || '小卡'),
+            }),
+          }).catch(function() {});
+        } catch (e) {}
         // 清理 DOM 兜底按钮
         var oldBtn = document.getElementById('turkey-win-next-btn');
         if (oldBtn) oldBtn.remove();
