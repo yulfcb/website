@@ -1,5 +1,28 @@
 // 新疆·天山滑雪 —— 关卡 4 游戏引擎
 //
+// v6 (2026-07-12) — 修复视差方向 + 按钮缩小
+//   - v5 视差方向反了 (offset += → 元素下移, 像下山), 玩家看到背景往脚下溜走
+//     v6: offset 改为 -= 反向累加, 元素上移 = "地图飞速往上掠过" = 真正的滑雪感
+//     物理意义: offset 减小 = 向上滚动距离增加, 跟玩家朝下方滑过去一致
+//   - v5 4 按钮 120×120 还是太大, v6 缩到 80×80 (再缩 1/3, 单手拇指舒服)
+//     字号 btnW*0.42 → btnW*0.5 (80×80 时字号 40px)
+//     位置布局不变 (◀ 120, ▶ 1160, ▲ 200, ▼ 1080; 上下 y=380, 左右 y=620)
+//
+// v5 (2026-07-12) — 4 按钮大小统一
+//   - 用户反馈"上下左右, 四个按键大小一样"
+//   - 4 个按钮统一为 120×120, 布局 C (左右在屏幕底部, 上下在玩家头顶上方)
+//   - 上下按钮 y=380 (玩家 y=480 上方 100px), 左右按钮 y=620 (屏幕底部)
+//   - 4 个按钮完全不重叠 (240px 间距), 颜色仍区分功能
+//
+// v4 (2026-07-12) — 视觉效果第二轮调优 + 屏幕 DOM 方向键 + 终点小屋
+//   - 视差比例加大 (0.4 / 0.7 / 1.2, 让"地图往上走"更明显)
+//   - 玩家位置移到屏幕中下 (y=480, 原来 240 = 屏幕 1/3)
+//   - 屏幕 DOM 方向键: ← → ▲ ▼ (真机可触屏, 不依赖键盘)
+//   - 上下按钮手动加速/减速: ▼ +60, ▲ -60, max(0, ...) 保证不能往上走
+//   - biome 切换时 scroll offset 重置 (避免视差错位)
+//   - biome 4 草原延长 1100 → 1500, 终点出现"成都小屋"拱门
+//   - 通关前 200px 提示 "🏠 即将到家! 滑进去"
+//
 // v3 (2026-07-12) — biome 系统重构 + 5 种新疆主题奖品 + 45s 沉浸时长
 //
 // 流程: 哈萨克斯坦 → 进入新疆 (本场景) → 一路下滑到成都
@@ -7,13 +30,13 @@
 //
 // 设计: 所有图形 Phaser Graphics 绘制, 不依赖外部图片
 //      复用 qatar 的 BGM/SFX 音频通道
-//      移动端兼容 (pointerdown/up + 虚拟方向键)
+//      移动端兼容 (DOM 方向键 + 触屏, 不依赖 Phaser zone)
 //
-// biome 系统 (4 段, 共 ~5000 px 滚动):
-//   1. 🏔️ 雪山顶  (缓坡 0.3→0.5,  1200 px)
-//   2. 🌲 针叶林  (中坡 0.5→1.0,  1400 px)
-//   3. ❄️ 冰川    (陡坡 1.0→1.5,  1300 px)
-//   4. 🌾 山脚草原 (平缓 0.3→0.6, 1100 px)
+// biome 系统 (4 段, 共 ~5400 px 滚动):
+//   1. 🏔️ 雪山顶   (缓坡 0.3→0.5,  1200 px)
+//   2. 🌲 针叶林   (中坡 0.5→1.0,  1400 px)
+//   3. ❄️ 冰川     (陡坡 1.0→1.5,  1300 px)
+//   4. 🌾 山脚草原 (平缓 0.3→0.6,  1500 px — 含屋前 600 + 屋门 900)
 //
 // 5 种奖品:
 //   🍇 葡萄干  +10 分
@@ -22,16 +45,18 @@
 //   ❄️ 雪莲    5s magnet (奖品吸附)
 //   🫓 馕饼    3s slow  (速度 -50%)
 //
-// 速度公式:
+// 速度公式 (v4):
 //   baseSpeed = 80 (用户反馈"不能跑太快")
-//   slopeBoost = currentSlope × 60   (缓坡 ~24, 陡坡 ~90)
-//   accelBoost = Δslope × 30         (坡度变化惯性)
-//   scrollSpeed = clamp(baseSpeed + slopeBoost + accelBoost, 40, 280)
+//   slopeBoost = currentSlope × 60
+//   accelBoost = Δslope × 30
+//   manualBoost = ▼ 按下 +60, ▲ 按下 -60, 松开 = 0  (v4 新增)
+//   targetSpeed = baseSpeed + slopeBoost + accelBoost + manualBoost
+//   scrollSpeed = max(0, min(maxSpeed, targetSpeed))   ← max 0 是关键, 不能往上滑
 //
-// 视差 (3 层):
-//   far   × 0.2  (远景雪山/林海)
-//   mid   × 0.5  (中景山脊/树线)
-//   near  × 1.0  (近景地面纹理 + 障碍物/奖品)
+// 视差 (3 层, v4 加大):
+//   far   × 0.4  (远景雪山/林海, 原来 0.2)
+//   mid   × 0.7  (中景山脊/树线, 原来 0.5)
+//   near  × 1.2  (近景地面纹理 + 障碍物/奖品, 原来 1.0)
 //
 // localStorage 写入 (通关时):
 //   silkroad_cleared_levels 追加 4
@@ -371,10 +396,13 @@
 
       // 玩家
       this.playerX = config.initialX;
-      this.playerY = config.playerScreenY;  // 固定屏幕 1/3
+      this.playerY = config.playerScreenY;  // v4: 固定屏幕中下 (480)
       this.scrollY = 0;                      // 累计滚动距离 (biome 进度)
       this.scrollSpeed = config.baseSpeed;
       this.lastSlope = 0;
+
+      // v4 新增: 手动加速/减速 (屏幕 ▼ ▲ 按钮, 松开 = 0)
+      this.speedBoost = 0;
 
       // Biome 状态
       this.currentBiomeIdx = 0;
@@ -438,11 +466,15 @@
       // ===== UI (HUD 顶栏) =====
       this._createUI();
 
-      // ===== 虚拟方向键 (depth 500) =====
+      // ===== v4 重写: 屏幕 DOM 方向键 (← → ▲ ▼) =====
+      // 替换 v3 的 Phaser joystick + 键盘监听
+      // 原因: 真机用户没有键盘, Phaser zone 偶发不响应 (iOS Safari 已知问题)
+      // 按钮位置固定在屏幕底部, pointerdown/up 长按可连发
       this.keys = { left: false, right: false };
-      this._createJoystick();
+      this._domButtons = [];                 // 跟踪所有 DOM 按钮, scene shutdown 时清理
+      this._createDomDirectionButtons();
 
-      // ===== 键盘监听 =====
+      // ===== 键盘监听 (桌面端, 调试备用) =====
       var onKeyDown = function (k) { return function () { self.keys[k] = true; }; };
       var onKeyUp = function (k) { return function () { self.keys[k] = false; }; };
       this.input.keyboard.on('keydown-LEFT', onKeyDown('left'));
@@ -453,6 +485,11 @@
       this.input.keyboard.on('keyup-RIGHT', onKeyUp('right'));
       this.input.keyboard.on('keyup-A', onKeyUp('left'));
       this.input.keyboard.on('keyup-D', onKeyUp('right'));
+      // 上下键控制 manualBoost (桌面端调试备用)
+      this.input.keyboard.on('keydown-DOWN', function () { self.speedBoost = config.manualBoostPress; });
+      this.input.keyboard.on('keyup-DOWN',   function () { self.speedBoost = 0; });
+      this.input.keyboard.on('keydown-UP',   function () { self.speedBoost = -config.manualBoostPress; });
+      this.input.keyboard.on('keyup-UP',     function () { self.speedBoost = 0; });
 
       // ===== 提示 =====
       this.add.text(640, 80, '🎯 用 ← → 键躲开障碍, 吃奖品获加成, 45 秒内到达山脚!', {
@@ -673,6 +710,238 @@
     },
 
     // ============================================================
+    //  v4 新增: 终点"成都小屋" (biome 4 草原段位)
+    //  biome 4 segmentLength=1500, 600=屋前小路, 1500=滑进屋门
+    //  静态绘制 (depth 20), 不参与视差 — 玩家到达时正好在门口
+    // ============================================================
+    _buildExitHouse: function (biome) {
+      this._exitHouseGfx = this.add.graphics();
+      this._exitHouseGfx.setDepth(20);
+
+      // —— 屋前小路: 从 houseStart (600) 开始, 到 houseEnd (1500) ——
+      // 路径中央逐渐变窄 + 两侧出现房屋轮廓, 引导玩家向中央滑行
+      // 路径颜色 (暖棕, 跟草原对比)
+      var pathColor = 0xC9A06A;
+      var pathEdgeColor = 0x8D6E63;
+
+      // —— 屋本体: 位于 biome 4 末尾 (scrollY ~ 1500), 默认 y=-1500 在屏幕外
+      // y 表示该物体在 biome 4 内"距离玩家多远才到达"
+      // 我们用相对 scrollY 的 y 坐标计算屏幕位置:
+      //   screenY = -scrollYOffset + biomeBaseY
+      // 实际绘制策略: 用固定的"目标点 y"表示屋门入口 (玩家到达时正好对准)
+      // 玩家 y = 480 (屏幕中下), 屋门应该出现在屏幕底部边缘 (y ~ 660, 玩家脚下偏下)
+      // 屋本体静态画在屏幕底部, 通过 nearScrollOffset 跟随滚动
+      // 但这样屋会跟着移走 — 因此我们用绝对位置 (scrollY 实时算 offset):
+
+      // 思路: 玩家到达 biome 4 末尾 (scrollY ~ 5400 = 总长) 时, 屋门应在屏幕底部
+      // 玩家从 biome 4 起点 (scrollY 3900) 滑到 5400 时, 屋门从屏幕上方 (y=-200) 滚到 y=720
+      // 屋本体 y (屏幕坐标) = -200 + (scrollY - 3900) (近似, 假设匀速)
+      // 改用 playerContainer 同步位置: 屋本体深度挂 _exitHouseGfx, 在 update 中每帧重画位置
+
+      // 把"屋本体容器"存到 this._exitHouseContainer, 在 update 里逐帧定位
+      this._exitHouseContainer = this.add.container(640, -200);
+      this._exitHouseContainer.setDepth(20);
+
+      // 计算 biome 4 在总滚动中的起始 offset (前三段之和)
+      var biomes = window.XINJIANG_LEVEL.biomes;
+      var biome4Start = biomes[0].segmentLength + biomes[1].segmentLength + biomes[2].segmentLength;  // 1200+1400+1300=3900
+      this._exitHouseBiomeStart = biome4Start;
+
+      // —— 屋内容: 棕色墙 + 三角屋顶 + 深色门 + 暖黄门内光 + 红灯笼 + 成都文字 ——
+      // 拆成 3 个 graphics: path / house / label — 分别控制 alpha
+      // (按 scrollInBiome 渐显/渐隐, 让"路径先出现 → 主屋后接管"的视觉节奏)
+
+      // —— 屋前小路 (在 _exitHousePath) ——
+      this._exitHousePath = this.add.graphics();
+      this._exitHousePath.fillStyle(pathColor, 0.85);
+      // 梯形 (顶部宽 800, 底部宽 320, 居中)
+      this._exitHousePath.fillTriangle(-400, 300, 400, 300, 240, 700);
+      this._exitHousePath.fillTriangle(-400, 300, -240, 700, 240, 700);
+      // 路边深色边
+      this._exitHousePath.lineStyle(3, pathEdgeColor, 0.7);
+      this._exitHousePath.lineBetween(-400, 300, -240, 700);
+      this._exitHousePath.lineBetween(400, 300, 240, 700);
+      this._exitHouseContainer.add(this._exitHousePath);
+
+      // —— 屋本体 (在 _exitHouseHouse) ——
+      this._exitHouseHouse = this.add.graphics();
+      var house = this._exitHouseHouse;
+
+      // 屋主体 — 棕色墙 (rect 220×160, 居中底部)
+      house.fillStyle(0x8D6E63, 1);
+      house.fillRect(-110, 30, 220, 160);
+
+      // 屋主体深色边框
+      house.lineStyle(2, 0x4E342E, 1);
+      house.strokeRect(-110, 30, 220, 160);
+
+      // 屋顶 — 大三角 (深棕色)
+      house.fillStyle(0x5D4037, 1);
+      house.fillTriangle(-130, 30, 130, 30, 0, -90);
+      // 屋脊装饰线
+      house.lineStyle(2, 0x3E2723, 1);
+      house.lineBetween(-130, 30, 130, 30);
+      house.lineBetween(0, -90, 0, 30);
+
+      // 屋瓦横纹 (3 条)
+      house.lineStyle(1, 0x3E2723, 0.6);
+      house.lineBetween(-90, -50, 90, -50);
+      house.lineBetween(-100, -25, 100, -25);
+      house.lineBetween(-110, 0, 110, 0);
+
+      // 屋门 — 深色矩形 (内嵌)
+      house.fillStyle(0x3E2723, 1);
+      house.fillRect(-40, 100, 80, 90);
+      // 门内暖光 (浅黄)
+      house.fillStyle(0xFFE082, 0.85);
+      house.fillRect(-34, 106, 68, 84);
+      // 门框深色描边
+      house.lineStyle(2, 0x3E2723, 1);
+      house.strokeRect(-40, 100, 80, 90);
+      // 门中线 (双开门)
+      house.lineBetween(0, 106, 0, 188);
+
+      // 门两侧红灯笼
+      house.fillStyle(0xC62828, 1);
+      house.fillCircle(-90, 90, 14);
+      house.fillCircle(90, 90, 14);
+      // 灯笼顶部黑带
+      house.fillStyle(0x3E2723, 1);
+      house.fillRect(-96, 76, 12, 4);
+      house.fillRect(84, 76, 12, 4);
+      // 灯笼底部流苏
+      house.fillStyle(0xFFD54F, 1);
+      house.fillRect(-92, 104, 4, 8);
+      house.fillRect(88, 104, 4, 8);
+
+      // 屋顶两侧屋檐翘起 (传统中式)
+      house.fillStyle(0x3E2723, 1);
+      house.fillTriangle(-130, 30, -160, 20, -110, 50);
+      house.fillTriangle(130, 30, 160, 20, 110, 50);
+
+      // 屋前小台阶
+      house.fillStyle(0x4E342E, 1);
+      house.fillRect(-50, 188, 100, 6);
+      house.fillRect(-44, 194, 88, 6);
+
+      this._exitHouseContainer.add(this._exitHouseHouse);
+
+      // —— 屋顶部 "🏠 成都" 红色大字 ——
+      this._exitHouseLabel = this.add.text(0, -130, '🏠 成都', {
+        fontSize: '40px', color: '#C62828', fontStyle: 'bold',
+        stroke: '#FFFFFF', strokeThickness: 4,
+      }).setOrigin(0.5);
+      this._exitHouseContainer.add(this._exitHouseLabel);
+
+      // 屋前提示牌 "滑进屋里 = 到家!" (玩家接近时显示)
+      this._exitHouseSign = this.add.text(0, 230, '滑进屋里 = 到家!', {
+        fontSize: '24px', color: '#FFFFFF', fontStyle: 'bold',
+        backgroundColor: 'rgba(198, 40, 40, 0.85)',
+        padding: { x: 14, y: 6 },
+      }).setOrigin(0.5).setAlpha(0);
+      this._exitHouseContainer.add(this._exitHouseSign);
+
+      // —— 屋前小屋轮廓 (在 houseStart=600 之后出现, 引导玩家) ——
+      // 这些小屋在 biome 4 中段出现, 给玩家"快到家"的视觉提示
+      // 它们也跟随 _exitHouseContainer 一起滚动, 不参与 parallax
+      this._buildCottages();
+
+      // —— 房屋在屏幕外的"屋前小路指示牌" (玩家进 biome 4 立刻看到) ——
+      this._exitHouseGuide = this.add.text(640, 110, '🏠 沿小路滑向成都小屋!', {
+        fontSize: '20px', color: '#5D4037', fontStyle: 'bold',
+        backgroundColor: 'rgba(255, 248, 225, 0.9)',
+        padding: { x: 14, y: 6 },
+      }).setOrigin(0.5).setDepth(101).setAlpha(1);
+    },
+
+    // biome 4 中段小屋轮廓 (引导玩家向中央)
+    _buildCottages: function () {
+      var cottages = [
+        { x: 200, y: -80,  scale: 0.5 },
+        { x: 1080, y: -80, scale: 0.5 },
+        { x: 320, y: 100,  scale: 0.6 },
+        { x: 960, y: 100,  scale: 0.6 },
+      ];
+      this._cottageGfx = [];
+      for (var i = 0; i < cottages.length; i++) {
+        var c = cottages[i];
+        var g = this.add.graphics();
+        // 简单棕色小三角屋
+        g.fillStyle(0x6D4C2A, 0.55 * c.scale + 0.3);
+        g.fillRect(c.x - 50 * c.scale, c.y, 100 * c.scale, 60 * c.scale);
+        g.fillStyle(0x4E342E, 1);
+        g.fillTriangle(
+          c.x - 60 * c.scale, c.y,
+          c.x + 60 * c.scale, c.y,
+          c.x, c.y - 40 * c.scale
+        );
+        g.fillStyle(0xFFE082, 0.9);
+        g.fillRect(c.x - 12 * c.scale, c.y + 20 * c.scale, 24 * c.scale, 24 * c.scale);
+        this._cottageGfx.push({ gfx: g, cx: c.x, cy: c.y });
+      }
+    },
+
+    // 每帧更新屋本体位置 (跟玩家滚动同步)
+    _updateExitHouse: function () {
+      if (!this._exitHouseContainer) return;
+      var biomeStart = this._exitHouseBiomeStart || 0;
+      var scrollInBiome = this.scrollY - biomeStart;
+
+      // v4 位置公式:
+      //   scrollInBiome=0   → container.y=-700 (屋/路径都在屏幕上方, 不可见)
+      //   scrollInBiome=600 → container.y=-286 (路径刚开始出现)
+      //   scrollInBiome=1500→ container.y=335  (屋门对准玩家脚 y=480)
+      var houseScreenY = -700 + scrollInBiome * 0.69;
+      this._exitHouseContainer.y = houseScreenY;
+
+      // 接近门口 (scrollInBiome > 1300) 时显示提示牌
+      if (scrollInBiome > 1300 && this._exitHouseSign) {
+        this._exitHouseSign.setAlpha(1);
+      } else if (this._exitHouseSign) {
+        this._exitHouseSign.setAlpha(0);
+      }
+
+      // —— 屋体可见性 gating ——
+      // 路径: scrollInBiome 500-700 渐显, 1300-1500 渐隐 (屋接管视觉中心)
+      if (this._exitHousePath) {
+        var pathAlpha = scrollInBiome < 500 ? 0 :
+                        scrollInBiome < 700 ? (scrollInBiome - 500) / 200 :
+                        scrollInBiome > 1300 ? Math.max(0, 1 - (scrollInBiome - 1300) / 200) : 1;
+        this._exitHousePath.setAlpha(pathAlpha);
+      }
+      // 屋本体: 1000-1100 渐显, 通关后由 _showWin 接管 (通关前一直可见)
+      if (this._exitHouseHouse) {
+        var houseAlpha = scrollInBiome < 1000 ? 0 :
+                         scrollInBiome < 1100 ? (scrollInBiome - 1000) / 100 : 1;
+        this._exitHouseHouse.setAlpha(houseAlpha);
+      }
+      // 屋顶"🏠 成都"大字: 1100-1200 渐显
+      if (this._exitHouseLabel) {
+        var labelAlpha = scrollInBiome < 1100 ? 0 :
+                         scrollInBiome < 1200 ? (scrollInBiome - 1100) / 100 : 1;
+        this._exitHouseLabel.setAlpha(labelAlpha);
+      }
+
+      // 屋前小屋轮廓: 随 biome 4 滚动整体上移 (屏幕 y 跟随 houseScreenY 比例)
+      // 让小屋在 biome 4 后半段可见
+      if (this._cottageGfx) {
+        for (var i = 0; i < this._cottageGfx.length; i++) {
+          var c = this._cottageGfx[i];
+          // 屋前小屋 y 跟随 houseScreenY 的一个比例偏移
+          // scrollInBiome 600 (houseStart) 时, 小屋在屏幕上方 (y = -200)
+          // scrollInBiome 1500 时, 小屋在中段 (y = ~360)
+          var cottageScreenY = -200 + Math.max(0, scrollInBiome - 600) * (560 / 900);
+          c.gfx.y = cottageScreenY - c.cy;
+          // 小屋 alpha: 600→800 渐显, 1300→1500 渐隐 (让玩家关注主屋)
+          if (scrollInBiome < 600) c.gfx.setAlpha(0);
+          else if (scrollInBiome < 800) c.gfx.setAlpha((scrollInBiome - 600) / 200);
+          else if (scrollInBiome < 1300) c.gfx.setAlpha(1);
+          else c.gfx.setAlpha(Math.max(0, 1 - (scrollInBiome - 1300) / 200));
+        }
+      }
+    },
+
+    // ============================================================
     //  Biome 系统 + 连续坡度
     // ============================================================
 
@@ -737,8 +1006,16 @@
           self.transitioningBiome = false;
         }
       });
+      // v4: biome 切换时重置 3 层 scroll offset (避免视差错位 / 重叠)
+      this.farScrollOffset = 0;
+      this.midScrollOffset = 0;
+      this.nearScrollOffset = 0;
       // 重绘 3 层 (新 biome 形状)
       this._redrawLayers();
+      // biome 4 进入时画"成都小屋" — 通关目标建筑
+      if (biome.id === 'grassland') {
+        this._buildExitHouse(biome);
+      }
       // 顶部 toast 提示
       this._showToast('🏔️ 进入 ' + biome.name, 0x1565C0);
       window.playXinjiangSfx('exchange', 0.3);
@@ -974,43 +1251,209 @@
     },
 
     // ============================================================
-    //  虚拟方向键 (左/右)
+    //  v5 重写: 屏幕 DOM 方向键 (← → ▲ ▼) — 4 个按钮大小统一 120×120
+    //  v4 替换 v3 的 Phaser joystick, 改用 4 个 DOM 按钮:
+    //    ← →  : 左右移动 (屏幕底部两端, 120×120)
+    //    ▲    : 减速 (玩家头顶上方靠左, 120×120)
+    //    ▼    : 加速 (玩家头顶上方靠右, 120×120)
+    //  v5: 4 个按钮完全统一大小 (120×120), 布局 C (上下 y=380, 左右 y=620, 不重叠)
+    //  按钮使用 pointerdown / pointerup, 支持长按持续触发
+    //  位置根据 canvas 实际渲染区域 + scale 计算, 跟随窗口 resize
     // ============================================================
-    _createJoystick: function () {
+    _createDomDirectionButtons: function () {
       var self = this;
-      this.joystickContainer = this.add.container(140, CANVAS_H - 100);
-      this.joystickContainer.setAlpha(0.72);
-      this.joystickContainer.setScale(0.7);
+      var config = window.XINJIANG_LEVEL.sliding;
+
+      // Phaser 内放置的"占位"容器 (透明), 仅用于 depth 显示
+      // 实际按钮是 DOM 元素 (iOS Safari Phaser zone 不响应兜底)
+      this.joystickContainer = this.add.container(0, 0);
       this.joystickContainer.setDepth(500);
-      var dpadBg = this.add.graphics();
-      dpadBg.fillStyle(0x0D47A1, 0.5);
-      dpadBg.fillCircle(0, 0, 100);
-      this.joystickContainer.add(dpadBg);
-      var makeBtn = function (txt, dx, dy, key) {
-        var bg = self.add.circle(dx, dy, 36, 0x0D47A1, 0.85)
-          .setStrokeStyle(2, 0xB3E5FC, 0.7);
-        var arrow = self.add.text(dx, dy, txt, {
-          fontSize: '28px', color: '#B3E5FC', fontStyle: 'bold',
-        }).setOrigin(0.5);
-        var zone = self.add.zone(dx, dy, 76, 76).setInteractive({ useHandCursor: true });
-        var press = function () {
-          self.keys[key] = true;
-          bg.setFillStyle(0xB3E5FC, 0.95);
-          arrow.setColor('#0D47A1');
-          window.playXinjiangSfx('click', 0.3);
+
+      // —— 计算 canvas 实际渲染区域 (Phaser FIT 模式) ——
+      var getCanvasRect = function () {
+        var canvas = self.game.canvas;
+        if (!canvas) return null;
+        var rect = canvas.getBoundingClientRect();
+        var scaleX = rect.width / CANVAS_W;
+        var scaleY = rect.height / CANVAS_H;
+        var scale = Math.min(scaleX, scaleY);
+        var renderW = CANVAS_W * scale;
+        var renderH = CANVAS_H * scale;
+        var offsetX = rect.left + (rect.width - renderW) / 2;
+        var offsetY = rect.top + (rect.height - renderH) / 2;
+        return {
+          scale: scale,
+          offsetX: offsetX,
+          offsetY: offsetY,
+          renderW: renderW,
+          renderH: renderH,
         };
-        var release = function () {
-          self.keys[key] = false;
-          bg.setFillStyle(0x0D47A1, 0.85);
-          arrow.setColor('#B3E5FC');
-        };
-        zone.on('pointerdown', press);
-        zone.on('pointerup', release);
-        zone.on('pointerout', release);
-        self.joystickContainer.add([bg, arrow, zone]);
       };
-      makeBtn('◀', -65, 0, 'left');
-      makeBtn('▶', 65, 0, 'right');
+
+      // —— DOM 按钮工厂 ——
+      // btnX/btnY 是 Phaser 画布坐标 (CANVAS_W=1280, CANVAS_H=720)
+      // 内部转成 viewport 像素
+      var makeBtn = function (id, label, btnX, btnY, btnW, btnH, bgColor, borderColor, fontColor, onPress, onRelease) {
+        var btn = document.createElement('button');
+        btn.id = id;
+        btn.type = 'button';
+        btn.textContent = label;
+        btn.style.cssText = [
+          'position:fixed',
+          'z-index:99999',
+          'border:' + Math.max(3, Math.round(btnW * 0.025)) + 'px solid ' + borderColor,
+          'border-radius:' + Math.round(btnW * 0.18) + 'px',
+          'background:' + bgColor,
+          'color:' + fontColor,
+          'font-size:' + Math.round(btnW * 0.5) + 'px',
+          'font-weight:bold',
+          'cursor:pointer',
+          'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
+          'user-select:none',
+          '-webkit-user-select:none',
+          '-webkit-tap-highlight-color:transparent',
+          'touch-action:none',
+          'box-shadow:0 4px 14px rgba(0,0,0,0.35)',
+          'transition:transform 80ms, opacity 80ms',
+          'padding:0',
+          'margin:0',
+          'display:flex',
+          'align-items:center',
+          'justify-content:center',
+          'line-height:1',
+        ].join(';');
+        btn.setAttribute('aria-label', label);
+
+        var pressed = false;
+        var doPress = function (e) {
+          if (e) { e.preventDefault(); e.stopPropagation(); }
+          if (pressed) return;
+          pressed = true;
+          btn.style.transform = 'scale(0.92)';
+          btn.style.opacity = '0.85';
+          try { window.playXinjiangSfx('click', 0.25); } catch (err) {}
+          onPress();
+        };
+        var doRelease = function (e) {
+          if (e) { e.preventDefault(); e.stopPropagation(); }
+          if (!pressed) return;
+          pressed = false;
+          btn.style.transform = 'scale(1)';
+          btn.style.opacity = '1';
+          onRelease();
+        };
+
+        // pointerdown / pointerup (统一触屏 + 鼠标)
+        btn.addEventListener('pointerdown', doPress);
+        btn.addEventListener('pointerup', doRelease);
+        btn.addEventListener('pointercancel', doRelease);
+        btn.addEventListener('pointerleave', doRelease);
+        // 兜底 mouse/touch
+        btn.addEventListener('mousedown', doPress);
+        btn.addEventListener('mouseup', doRelease);
+        btn.addEventListener('mouseleave', doRelease);
+        btn.addEventListener('touchstart', doPress, { passive: false });
+        btn.addEventListener('touchend', doRelease, { passive: false });
+
+        document.body.appendChild(btn);
+        self._domButtons.push(btn);
+        return btn;
+      };
+
+      // —— 按钮坐标 (Phaser 画布坐标 1280×720) ——
+      // v6: 4 个按钮统一大小 = 80×80 (v5 120 还是太大, 单手拇指不舒服, 再缩 1/3)
+      // 布局 C 不变: 左右按钮 (◀ ▶) 在屏幕底部 (y=620), 上下按钮 (▲ ▼) 在玩家头顶上方 (y=380)
+      // 玩家 y=480, 上下按钮 y=380 (玩家上方 100px), 左右按钮 y=620 (屏幕底部上方 100px)
+      // 上下按钮 vs 左右按钮 间距 = 240px (远超 80 按钮大小, 不会重叠)
+      var BTN_SIZE = 80;
+      var LR_W = BTN_SIZE, LR_H = BTN_SIZE;       // 左右按钮大小 (80×80)
+      var UD_W = BTN_SIZE, UD_H = BTN_SIZE;       // 上下按钮大小 (80×80)
+      var LR_Y = CANVAS_H - 100;                   // 左右按钮 y = 620 (屏幕底部)
+      var UD_Y = 380;                              // 上下按钮 y = 380 (玩家头顶上方)
+      var LR_LEFT_X = 120;                         // ◀ x = 120 (屏幕左)
+      var LR_RIGHT_X = CANVAS_W - 120;             // ▶ x = 1160 (屏幕右)
+      var UD_LEFT_X = 200;                         // ▲ x = 200 (屏幕左偏中)
+      var UD_RIGHT_X = CANVAS_W - 200;             // ▼ x = 1080 (屏幕右偏中)
+
+      var positionAll = function () {
+        var r = getCanvasRect();
+        if (!r) return;
+        var positions = [
+          { btn: self._btnLeft,  x: LR_LEFT_X,  y: LR_Y, w: LR_W, h: LR_H },
+          { btn: self._btnRight, x: LR_RIGHT_X, y: LR_Y, w: LR_W, h: LR_H },
+          { btn: self._btnUp,    x: UD_LEFT_X,  y: UD_Y, w: UD_W, h: UD_H },
+          { btn: self._btnDown,  x: UD_RIGHT_X, y: UD_Y, w: UD_W, h: UD_H },
+        ];
+        for (var i = 0; i < positions.length; i++) {
+          var p = positions[i];
+          if (!p.btn) continue;
+          var px = r.offsetX + p.x * r.scale - p.w / 2;
+          var py = r.offsetY + p.y * r.scale - p.h / 2;
+          p.btn.style.left = px + 'px';
+          p.btn.style.top = py + 'px';
+          p.btn.style.width = p.w + 'px';
+          p.btn.style.height = p.h + 'px';
+        }
+      };
+
+      // —— 创建 4 个按钮 ——
+      // ← (蓝色, 大)
+      this._btnLeft = makeBtn(
+        'xj-dir-left', '◀',
+        LR_LEFT_X, LR_Y, LR_W, LR_H,
+        'rgba(13, 71, 161, 0.78)', '#B3E5FC', '#B3E5FC',
+        function () { self.keys.left = true; },
+        function () { self.keys.left = false; }
+      );
+      // → (蓝色, 大)
+      this._btnRight = makeBtn(
+        'xj-dir-right', '▶',
+        LR_RIGHT_X, LR_Y, LR_W, LR_H,
+        'rgba(13, 71, 161, 0.78)', '#B3E5FC', '#B3E5FC',
+        function () { self.keys.right = true; },
+        function () { self.keys.right = false; }
+      );
+      // ▲ (减速, 蓝底)
+      this._btnUp = makeBtn(
+        'xj-dir-up', '▲',
+        UD_LEFT_X, UD_Y, UD_W, UD_H,
+        'rgba(33, 150, 243, 0.85)', '#FFFFFF', '#FFFFFF',
+        function () { self.speedBoost = -config.manualBoostPress; },
+        function () { self.speedBoost = 0; }
+      );
+      // ▼ (加速, 黄底)
+      this._btnDown = makeBtn(
+        'xj-dir-down', '▼',
+        UD_RIGHT_X, UD_Y, UD_W, UD_H,
+        'rgba(255, 193, 7, 0.88)', '#5D4037', '#5D4037',
+        function () { self.speedBoost = config.manualBoostPress; },
+        function () { self.speedBoost = 0; }
+      );
+
+      // —— 初始化位置 + 监听 resize ——
+      positionAll();
+      this._domBtnResizeHandler = function () { positionAll(); };
+      window.addEventListener('resize', this._domBtnResizeHandler);
+      window.addEventListener('orientationchange', this._domBtnResizeHandler);
+
+      // —— Scene shutdown 时清理 (避免按钮残留) ——
+      this.events.once('shutdown', function () {
+        if (self._domBtnResizeHandler) {
+          window.removeEventListener('resize', self._domBtnResizeHandler);
+          window.removeEventListener('orientationchange', self._domBtnResizeHandler);
+          self._domBtnResizeHandler = null;
+        }
+        for (var i = 0; i < self._domButtons.length; i++) {
+          var b = self._domButtons[i];
+          if (b && b.parentNode) b.parentNode.removeChild(b);
+        }
+        self._domButtons = [];
+        self._btnLeft = self._btnRight = self._btnUp = self._btnDown = null;
+        // 兜底: 松开所有按键状态, 避免按钮已删除但状态仍 stuck
+        self.keys.left = false;
+        self.keys.right = false;
+        self.speedBoost = 0;
+      });
     },
 
     // ============================================================
@@ -1197,6 +1640,51 @@
     },
 
     // ============================================================
+    //  v4: 通关前 200px 提示 — "🏠 即将到家! 滑进去"
+    //  在 biome 4 后 housePromptOffset 距离开始显示, 通关触发时消失
+    // ============================================================
+    _checkHousePrompt: function () {
+      var biomes = window.XINJIANG_LEVEL.biomes;
+      var lastBiome = biomes[biomes.length - 1];
+      if (lastBiome.id !== 'grassland') return;
+      var biomeStart = biomes[0].segmentLength + biomes[1].segmentLength + biomes[2].segmentLength;
+      var scrollInBiome = this.scrollY - biomeStart;
+      var distanceToEnd = lastBiome.houseEnd - scrollInBiome;
+
+      // 进入 biome 4 时显示"沿小路滑向成都小屋"
+      if (scrollInBiome > 0 && scrollInBiome < 100 && !this._exitHouseGuideShown) {
+        this._exitHouseGuideShown = true;
+        // 已在 _buildExitHouse 中创建, 此处只是淡入效果
+      }
+
+      // 距终点 200px 内显示"即将到家"
+      if (distanceToEnd > 0 && distanceToEnd <= (lastBiome.housePromptOffset || 200)) {
+        if (!this._arrivalPrompt) {
+          this._arrivalPrompt = this.add.text(640, 200, '🏠 即将到家! 滑进去', {
+            fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold',
+            backgroundColor: 'rgba(198, 40, 40, 0.92)',
+            padding: { x: 20, y: 10 },
+            stroke: '#FFFFFF', strokeThickness: 2,
+          }).setOrigin(0.5).setDepth(500);
+          // 上下浮动提示
+          this.tweens.add({
+            targets: this._arrivalPrompt,
+            y: 180,
+            duration: 700,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+          });
+          window.playXinjiangSfx('exchange', 0.4);
+        }
+      } else if (this._arrivalPrompt && distanceToEnd <= 0) {
+        // 已通关, 销毁提示
+        this._arrivalPrompt.destroy();
+        this._arrivalPrompt = null;
+      }
+    },
+
+    // ============================================================
     //  主更新循环
     // ============================================================
     update: function () {
@@ -1221,6 +1709,7 @@
 
       // biome 指示
       var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
+      var biomes = window.XINJIANG_LEVEL.biomes;
       this.biomeText.setText('🏔️ ' + biome.name);
 
       if (timeLeft <= 0) {
@@ -1231,24 +1720,30 @@
       // ===== 连续坡度计算 =====
       var currentSlope = this._getCurrentSlope();
 
-      // ===== 速度公式 =====
-      // baseSpeed + slopeBoost + Δslope 加速度
+      // ===== 速度公式 (v4: 加入 manualBoost, max(0, ...) 保证不能往上滑) =====
+      // baseSpeed + slopeBoost + accelBoost + manualBoost
       var slopeBoost = currentSlope * config.slopeCoefficient;
       var accelBoost = (currentSlope - this.lastSlope) * config.accelerationCoefficient;
-      var targetSpeed = config.baseSpeed + slopeBoost + accelBoost;
+      var manualBoost = this.speedBoost || 0;     // ▼ +60 / ▲ -60 / 松开 0
+      var targetSpeed = config.baseSpeed + slopeBoost + accelBoost + manualBoost;
 
       // slow 道具: 速度 -50%
       var nowMs = Date.now();
       if (nowMs < this.slowUntil) targetSpeed *= 0.5;
 
-      this.scrollSpeed = Math.max(config.minSpeed, Math.min(config.maxSpeed, targetSpeed));
+      // v4 关键: max(0, ...) — 用户反馈"减速最多减到 0, 不能往上走"
+      this.scrollSpeed = Math.max(0, Math.min(config.maxSpeed, targetSpeed));
       this.lastSlope = currentSlope;
 
-      // ===== 滚动累加 + 视差偏移 =====
+      // ===== 滚动累加 + 视差偏移 (v6 反向: 背景向上飞) =====
+      // scrollY 还是 += (biome 进度一直推进, 永远正向)
+      // 但视差 offset 改为 -= (元素绘制 y = baseY + modOff, modOff 减小 → 元素上移)
+      // 视觉: 玩家站在 y=480 不动, 远/中/近背景飞速向上掠过 = 真正在朝下方滑过去
+      // 障碍物/奖品仍然 ob.y += scrollSpeed (从屏幕上方生成, 向下冲向玩家脚下) — 不变
       this.scrollY += this.scrollSpeed * dt;
-      this.farScrollOffset += this.scrollSpeed * dt * 0.2;
-      this.midScrollOffset += this.scrollSpeed * dt * 0.5;
-      this.nearScrollOffset += this.scrollSpeed * dt * 1.0;
+      this.farScrollOffset  -= this.scrollSpeed * dt * config.parallaxFar;   // 0.4 (反向: 背景向上)
+      this.midScrollOffset  -= this.scrollSpeed * dt * config.parallaxMid;   // 0.7 (反向)
+      this.nearScrollOffset -= this.scrollSpeed * dt * config.parallaxNear;  // 1.2 (反向)
 
       // 重绘 3 层视差
       this._redrawLayers();
@@ -1270,6 +1765,14 @@
 
       // ===== biome 切换检测 =====
       this._checkBiomeTransition();
+
+      // v4: biome 4 终点小屋位置同步 (屋从屏幕外滚到屏幕下方)
+      if (this.currentBiomeIdx === biomes.length - 1) {
+        this._updateExitHouse();
+      }
+
+      // v4: 通关前 200px "即将到家" 提示
+      this._checkHousePrompt();
 
       // ===== 生成障碍物 + 奖品 =====
       if (elapsed - (this.lastObstacleTime - this.startTime) > config.obstacleInterval) {
@@ -1365,6 +1868,16 @@
       if (this.state !== 'SLIDING') return;
       this.state = 'FAIL';
 
+      // v4: 失败时也隐藏 DOM 按钮 (避免按钮挡在失败界面上)
+      if (this._domButtons) {
+        for (var i = 0; i < this._domButtons.length; i++) {
+          var b = this._domButtons[i];
+          if (b && b.parentNode) b.parentNode.removeChild(b);
+        }
+        this._domButtons = [];
+        this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
+      }
+
       var overlay = this.add.rectangle(640, 360, 600, 300, 0xC62828, 0.95);
       this.add.text(640, 280, '❌ 滑雪失败', {
         fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
@@ -1389,6 +1902,21 @@
       if (this.state !== 'SLIDING') return;
       this.state = 'WIN';
 
+      // v4: 通关瞬间隐藏屏幕 DOM 按钮 (玩家已滑进屋, 不能再移动)
+      if (this._domButtons) {
+        for (var i = 0; i < this._domButtons.length; i++) {
+          var b = this._domButtons[i];
+          if (b && b.parentNode) b.parentNode.removeChild(b);
+        }
+        this._domButtons = [];
+        this._btnLeft = this._btnRight = this._btnUp = this._btnDown = null;
+      }
+      // 销毁通关提示
+      if (this._arrivalPrompt) {
+        this._arrivalPrompt.destroy();
+        this._arrivalPrompt = null;
+      }
+
       var elapsed = Math.ceil((Date.now() - this.startTime) / 1000);
       // 写通关状态
       try {
@@ -1399,10 +1927,35 @@
         }
       } catch (e) {}
 
+      // v4: 通关瞬间 — 玩家滑进屋门, "🏠 到家了!" 大字弹出
+      var arrivalText = this.add.text(640, 360, '🏠 到家了!', {
+        fontSize: '72px', color: '#FFE082', fontStyle: 'bold',
+        stroke: '#C62828', strokeThickness: 6,
+      }).setOrigin(0.5).setDepth(2000).setAlpha(0).setScale(0.5);
+      this.tweens.add({
+        targets: arrivalText,
+        alpha: 1,
+        scaleX: 1.1, scaleY: 1.1,
+        duration: 400,
+        ease: 'Back.easeOut',
+      });
+      window.playXinjiangSfx('voyage', 0.6);
+
+      // 0.5s 后显示完整通关界面
+      this.time.delayedCall(500, function () {
+        arrivalText.destroy();
+        self._showWinPanel(elapsed);
+      });
+    },
+
+    // v4: 通关面板 (从 _showWin 抽出, 单独延迟显示, 让"到家了"瞬间先出现)
+    _showWinPanel: function (elapsed) {
+      var self = this;
+
       var overlay = this.add.rectangle(640, 360, 1280, 720, 0x0D47A1, 0.85);
 
-      this.add.text(640, 200, '🎿 一路下滑到成都！', {
-        fontSize: '44px', color: '#FFD98A', fontStyle: 'bold',
+      this.add.text(640, 200, '🎿 一路下滑到成都小屋!', {
+        fontSize: '40px', color: '#FFD98A', fontStyle: 'bold',
         stroke: '#1B5E20', strokeThickness: 4,
       }).setOrigin(0.5);
 

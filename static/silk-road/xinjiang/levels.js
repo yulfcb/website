@@ -9,6 +9,9 @@
 //
 // v2 (2026-07-12): 砍掉 ShoppingScene, 重点打磨滑雪剧情
 // v3 (2026-07-12): biome 系统 + 连续坡度 + 3 层视差 + 5 种新疆主题奖品
+// v4 (2026-07-12): 视差加大 (0.4/0.7/1.2) + 玩家 y 移到中下 (480) +
+//                  屏幕 DOM 方向键 (←/→/▲/▼) + 手动加速/减速 +
+//                  biome 4 草原延长到 1500 + 终点成都小屋拱门
 
 window.XINJIANG_LEVEL = {
   // 调试开关
@@ -29,9 +32,16 @@ window.XINJIANG_LEVEL = {
     obstacleMinGap: 220,         // 障碍物最小横向距离
     prizeMinGap: 280,            // v3 新增: 奖品最小横向距离
 
+    // v4 新增: 手动加速/减速
+    manualBoostPress: 60,        // 按下 ▼ 时 +60, 按下 ▲ 时 -60, 松开 = 0
+    // v4 新增: 视差比例 (加大, 让"地图往上走"更明显)
+    parallaxFar: 0.4,
+    parallaxMid: 0.7,
+    parallaxNear: 1.2,
+
     startY: 80,                  // 玩家起始 y (兼容字段)
     finishY: 700,                // 通关 y (兼容字段, 不再使用)
-    playerScreenY: 240,          // v3 新增: 玩家固定屏幕 y (720/3, 屏幕 1/3)
+    playerScreenY: 480,          // v4: 玩家固定屏幕 y (中下, 离底部 240px)
     initialX: 640,               // 玩家起始 x (屏幕中央)
     playerHalfW: 22,             // 玩家 hitbox 半宽
     playerHalfH: 28,             // 玩家 hitbox 半高
@@ -51,7 +61,8 @@ window.XINJIANG_LEVEL = {
 
   // ============== v3 新增: 4 段 Biome 系统 ==============
   // 每段 biome 有自己的远景/中景/近景色 + 坡度范围 + 段长 + 主题障碍物
-  // 总长: 1200 + 1400 + 1300 + 1100 = 5000 px 滚动距离, 在 ~45s 内完成
+  // v4: biome 4 草原延长到 1500, 包含屋前小路 (600px) + 成都小屋 (900px)
+  // 总长: 1200 + 1400 + 1300 + 1500 = 5400 px 滚动距离, 在 ~45s 内完成
   biomes: [
     {
       id: 'snow_peak',
@@ -100,9 +111,9 @@ window.XINJIANG_LEVEL = {
     },
     {
       id: 'grassland',
-      name: '🌾 山脚草原',
+      name: '🌾 山脚草原 → 成都',
       slopeMin: 0.3, slopeMax: 0.6,   // 平缓收尾
-      segmentLength: 1100,
+      segmentLength: 1500,            // v4: 1100 → 1500, 多出 400 给屋前小路 + 成都小屋
       farColor: 0xFFFFFF, farColor2: 0xECEFF1,   // 雪山轮廓 (远, 白)
       midColor: 0x7CB342,                            // 草原 (绿)
       nearColor: 0x558B2F,                           // 草地
@@ -112,6 +123,10 @@ window.XINJIANG_LEVEL = {
         { id: 'bush',        emoji: '🌿',  size: 40, weight: 0.40 },
         { id: 'friendly_npc', emoji: '👨‍🌾', size: 44, weight: 0.15 },
       ],
+      // v4 新增: 屋前/小屋参数 (segmentLength 后 600 出现引导, 末尾是屋门)
+      houseStart: 600,                // biome 4 内 scrollY offset, 开始显示"屋前小路"
+      houseEnd: 1500,                 // biome 4 末尾 = 滑进屋门, 通关触发点
+      housePromptOffset: 200,         // 距 houseEnd 200px 时显示"即将到家"提示
     },
   ],
 
