@@ -1,7 +1,9 @@
 // 新疆·天山滑雪 —— 关卡 4 游戏引擎
 //
-// 流程: 哈萨克斯坦 → 进入新疆 (本场景) → 滑下雪山 → 购买补给 → 出发去成都
-//   BootScene → SlidingScene (下滑) → ShoppingScene (购买补给) → DepartScene (过场) → /level/5
+// v2 (2026-07-12) — 砍掉 ShoppingScene, 重点打磨滑雪剧情
+//
+// 流程: 哈萨克斯坦 → 进入新疆 (本场景) → 一路下滑到成都
+//   BootScene → SlidingScene (重点剧情: 15s 滑雪 + 飘雪 + 滑痕 + NPC) → DepartScene → /level/5
 //
 // 设计: 所有图形 Phaser Graphics 绘制, 不依赖外部图片
 //      复用 qatar 的 BGM/SFX 音频通道
@@ -9,7 +11,6 @@
 //
 // localStorage 写入 (通关时):
 //   silkroad_cleared_levels 追加 4
-//   silkroad_xinjiang_items: ["meat_skewer", "warmer", "cheese"...]
 
 (function () {
   'use strict';
@@ -18,7 +19,7 @@
   var CANVAS_H = 720;
 
   // ============== Debug 模式 (?debug=1) ==============
-  // 跳过 SlidingScene + 满金币/物品 + 直接进 ShoppingScene
+  // 跳过 SlidingScene 倒计时, 自动通关进 DepartScene (Hermes 验证用)
   var isDebug = /[?&]debug=1/.test(window.location.search);
 
   // ============== SFX 助手 ==============
@@ -31,21 +32,7 @@
       var p = a.play();
       if (p && typeof p.catch === 'function') p.catch(function () {});
     } catch (e) {}
-  };
-
-  // ============== Bezier 采样助手 ==============
-  function quadBezierToFrom(g, sx, sy, cpx, cpy, ex, ey, n) {
-    n = n || 16;
-    for (var i = 1; i <= n; i++) {
-      var t = i / n;
-      var u = 1 - t;
-      var px = u * u * sx + 2 * u * t * cpx + t * t * ex;
-      var py = u * u * sy + 2 * u * t * cpx + t * t * ey;
-      g.lineTo(px, py);
-    }
-  }
-
-  // ============== DepartScene (出发去成都) ==============
+  };// ============== DepartScene (出发去成都) ==============
   // 仿 kazakhstan DepartScene: RGB lerp 雪山白 → 成都暖橙色, 三段路径, DOM continue 兜底
   var DepartScene = new Phaser.Class({
     Extends: Phaser.Scene,
@@ -77,21 +64,17 @@
         cg.fillCircle(c.x, c.y, 28 * c.s);
         cg.fillCircle(c.x + 22 * c.s, c.y - 5, 22 * c.s);
         cg.fillCircle(c.x + 44 * c.s, c.y, 28 * c.s);
-      });
-
-      // —— 地面 (RGB lerp: 雪山白 0xFFFFFF → 成都暖橙 0xFDE2C5) ——
+      });// —— 地面 (RGB lerp: 雪山白 0xFFFFFF → 成都暖橙 0xFDE2C5) ——
       var ground = this.add.graphics();
       ground.setDepth(10);
       var drawGround = function (progress) {
         ground.clear();
-        // 0 = 雪山白, 1 = 成都暖橙
         var r = Math.round(0xFF + (0xFD - 0xFF) * progress);
         var g = Math.round(0xFF + (0xE2 - 0xFF) * progress);
         var b = Math.round(0xFF + (0xC5 - 0xFF) * progress);
         var groundColor = (r << 16) | (g << 8) | b;
         ground.fillStyle(groundColor, 1);
         ground.fillRect(0, 600, CANVAS_W, 200);
-        // 山丘轮廓 (灰→绿)
         var hr = Math.round(0xB0 + (0x7C - 0xB0) * progress);
         var hg = Math.round(0xBE + (0xB3 - 0xBE) * progress);
         var hb = Math.round(0xC5 + (0x42 - 0xC5) * progress);
@@ -106,9 +89,7 @@
         ground.lineTo(1280, 565); ground.lineTo(1280, 600);
         ground.closePath(); ground.fillPath();
       };
-      drawGround(0);
-
-      // —— 雪山 (从地平线升起, alpha 0→0.7) ——
+      drawGround(0);// —— 雪山 (从地平线升起, alpha 0→0.7) ——
       var snowMountains = this.add.graphics();
       snowMountains.setDepth(20);
       snowMountains.setAlpha(0);
@@ -127,9 +108,7 @@
         snowMountains.fillTriangle(600, baseY, 820, baseY + 10 + peakOffset, 1040, baseY);
         snowMountains.fillTriangle(900, baseY + 20, 1120, baseY + 30 + peakOffset, 1340, baseY + 20);
       };
-      drawMountains(0);
-
-      // —— 滑雪角色 (跟随三段路径) ——
+      drawMountains(0);// —— 滑雪角色 (跟随三段路径) ——
       var riderContainer = this.add.container(200, 600);
       riderContainer.setDepth(100);
 
@@ -153,9 +132,7 @@
         fontSize: '22px', color: '#4A2E1A', fontStyle: 'bold',
         backgroundColor: 'rgba(255, 217, 138, 0.85)',
         padding: { x: 16, y: 8 },
-      }).setOrigin(0.5);
-
-      // —— 三阶段动画 + RGB lerp (setInterval 16ms 60fps) ——
+      }).setOrigin(0.5);// —— 三阶段动画 + RGB lerp (setInterval 16ms 60fps) ——
       // 阶段 1 (0-2s): 上升 (200, 600) → (200, 300)
       // 阶段 2 (2-5s): 横飞 (200, 300) → (1100, 300)
       // 阶段 3 (5-7s): 下降 (1100, 300) → (1200, 600)
@@ -173,9 +150,7 @@
         var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         var elapsed = now - startTime;
         var totalDur = phase1Dur + phase2Dur + phase3Dur;
-        if (elapsed > totalDur + 500) elapsed = totalDur;
-
-        var curX, curY, bgProg, riseProg;
+        if (elapsed > totalDur + 500) elapsed = totalDur;var curX, curY, bgProg, riseProg;
         if (elapsed < phase1Dur) {
           var t1 = elapsed / phase1Dur;
           var e1 = 1 - Math.pow(1 - t1, 2);
@@ -201,9 +176,7 @@
         riderContainer.setPosition(curX, curY);
         drawGround(bgProg);
         if (riseProg > 0) snowMountains.setAlpha(0.7);
-        drawMountains(riseProg);
-
-        if (elapsed >= totalDur) {
+        drawMountains(riseProg);if (elapsed >= totalDur) {
           self._departDone = true;
           clearInterval(self._departTick);
           self._departTick = null;
@@ -225,9 +198,7 @@
 
       // —— 键盘空格/回车 ——
       this.input.keyboard.once('keydown-SPACE', function () { self._goNextLevel(); });
-      this.input.keyboard.once('keydown-ENTER', function () { self._goNextLevel(); });
-
-      // —— Scene shutdown 清理 ——
+      this.input.keyboard.once('keydown-ENTER', function () { self._goNextLevel(); });// —— Scene shutdown 清理 ——
       this.events.once('shutdown', function () {
         if (self._departTick) { clearInterval(self._departTick); self._departTick = null; }
         if (self._continueResizeHandler) {
@@ -255,8 +226,7 @@
         fontSize: '28px',
         color: '#FFFFFF',
         fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(1001);
-      var continueZone = this.add.zone(btnX, btnY, 200, 60)
+      }).setOrigin(0.5).setDepth(1001);var continueZone = this.add.zone(btnX, btnY, 200, 60)
         .setInteractive({ useHandCursor: true })
         .setDepth(1002);
       continueZone.on('pointerdown', function () { self._goNextLevel(); });
@@ -280,9 +250,7 @@
         'font-family:-apple-system,BlinkMacSystemFont,sans-serif',
       ].join(';');
       this._continueDomBtn.textContent = '继续';
-      document.body.appendChild(this._continueDomBtn);
-
-      var positionBtn = function () {
+      document.body.appendChild(this._continueDomBtn);var positionBtn = function () {
         var canvas = self.game.canvas;
         if (!canvas) return;
         var rect = canvas.getBoundingClientRect();
@@ -314,9 +282,7 @@
       try { window.location.href = '/games/silk-road/level/5'; }
       catch (e) { window.location.reload(); }
     },
-  });
-
-  // ============== BootScene ==============
+  });// ============== BootScene ==============
   var BootScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function BootScene() { Phaser.Scene.call(this, { key: 'BootScene' }); },
@@ -324,10 +290,13 @@
       var self = this;
       this.cameras.main.setBackgroundColor('#B3E5FC');
 
-      // URL ?debug=1 → 跳过 SlidingScene, 直接 ShoppingScene (满金币/物品)
+      // URL ?debug=1 → 自动通关 (跳过 SlidingScene 倒计时, 直接进 DepartScene)
       if (isDebug) {
-        console.log('[xj] BootScene debug=1 detected, skipping to ShoppingScene');
-        this.time.delayedCall(100, function () { self.scene.start('ShoppingScene'); }, [], this);
+        console.log('[xj] BootScene debug=1 detected, auto-completing SlidingScene');
+        this.add.text(640, 360, '新疆·天山滑雪\n[debug 跳过]', {
+          fontSize: '22px', color: '#1565C0', fontStyle: 'bold', align: 'center',
+        }).setOrigin(0.5);
+        this.time.delayedCall(300, function () { self.scene.start('DepartScene'); }, [], this);
         return;
       }
 
@@ -351,16 +320,16 @@
         try { self.scene.start('SlidingScene'); }
         catch (e) { console.error('[xj] scene.start threw:', e); }
       }, [], this);
+      // 兜底 setTimeout (Phaser clock 在 headless 可能慢)
       setTimeout(function () {
         try {
           if (self.scene.isActive()) self.scene.start('SlidingScene');
         } catch (e) { console.error('[xj] fallback scene.start threw:', e); }
       }, 1500);
     }
-  });
-
-  // ============== SlidingScene (下滑场景) ==============
+  });// ============== SlidingScene (下滑场景 — 重点剧情) ==============
   // 玩家自动从屏幕顶部向下滑行, 按 ← → 键左右移动, 避开松树/岩石, 15 秒内到屏幕底部 = 通关
+  // v2 新增: 开场山巅远眺 + 飘雪粒子 + 滑痕轨迹 + 友好 NPC
   var SlidingScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function SlidingScene() { Phaser.Scene.call(this, { key: 'SlidingScene' }); },
@@ -383,10 +352,15 @@
       this.obstacles = [];
       this.lastObstacleTime = Date.now();
 
+      // 滑痕轨迹数组 (v2 新增)
+      this.trails = [];
+      this.lastTrailTime = Date.now();
+
       // 背景绘制
       this._drawBackground();
 
-      // 玩家容器
+      // v2: 开场山巅远眺 (0.8s fade in + fade out)
+      this._playIntro();// 玩家容器
       this.playerContainer = this.add.container(this.playerX, this.playerY);
       this.playerContainer.setDepth(50);
       this._drawPlayer();
@@ -415,7 +389,8 @@
         fontSize: '16px', color: '#0D47A1', fontStyle: 'bold',
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         padding: { x: 12, y: 6 },
-      }).setOrigin(0.5).setDepth(100);
+      }).setOrigin(0.5).setDepth(100);// v2: 飘雪粒子系统 (Phaser Graphics particles)
+      this._initSnowParticles();
 
       // 更新循环
       this.time.addEvent({
@@ -426,8 +401,156 @@
       });
     },
 
-    _drawBackground: function () {
+    // ===== v2: 开场山巅远眺 =====
+    _playIntro: function () {
       var self = this;
+      var introDur = window.XINJIANG_LEVEL.sliding.introDuration;
+
+      // 远景雪山轮廓 (临时)
+      var farMtn = this.add.graphics();
+      farMtn.setDepth(60);
+      farMtn.fillStyle(0xFFFFFF, 0.6);
+      farMtn.fillTriangle(0, 280, 200, 80, 400, 280);
+      farMtn.fillTriangle(300, 280, 600, 60, 900, 280);
+      farMtn.fillTriangle(800, 280, 1100, 100, 1280, 280);
+      farMtn.fillStyle(0xB0BEC5, 0.3);
+      farMtn.fillTriangle(0, 280, 200, 180, 400, 280);
+      farMtn.fillTriangle(300, 280, 600, 160, 900, 280);
+      farMtn.fillTriangle(800, 280, 1100, 200, 1280, 280);
+
+      // 标题文字
+      var titleText = this.add.text(640, 360, '🏔️ 新疆·天山', {
+        fontSize: '52px', color: '#0D47A1', fontStyle: 'bold',
+        stroke: '#FFFFFF', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(150).setAlpha(0);
+
+      var subtitleText = this.add.text(640, 420, '从山巅一路滑向成都', {
+        fontSize: '20px', color: '#1565C0', fontStyle: 'italic',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        padding: { x: 14, y: 6 },
+      }).setOrigin(0.5).setDepth(150).setAlpha(0);// Fade in (0 → 0.6s)
+      this.tweens.add({
+        targets: [farMtn, titleText, subtitleText],
+        alpha: { 0: 1 },
+        duration: introDur / 2,
+        onComplete: function () {
+          // Fade out (0.6 → 0.8s)
+          self.tweens.add({
+            targets: [farMtn, titleText, subtitleText],
+            alpha: 0,
+            duration: introDur / 2,
+            onComplete: function () {
+              farMtn.destroy();
+              titleText.destroy();
+              subtitleText.destroy();
+            }
+          });
+        }
+      });
+
+      // 冻结玩家输入 + 不计时间, 直到 intro 结束
+      // 用 setTimeout (wall clock) 而非 this.time.delayedCall (Phaser clock 在 headless 可能慢)
+      this._introLock = true;
+      setTimeout(function () { self._introLock = false; }, introDur);
+    },
+
+    // ===== v2: 飘雪粒子系统 =====
+    _initSnowParticles: function () {
+      var self = this;
+      this._snowParticles = [];
+      this._lastSnowSpawn = Date.now();
+
+      // 粒子容器 (Graphics, 性能好)
+      this._snowGfx = this.add.graphics();
+      this._snowGfx.setDepth(45);
+    },
+
+    _spawnSnowParticle: function () {
+      // 在屏幕顶部随机 x, 速度随玩家同步
+      var self = this;
+      var config = window.XINJIANG_LEVEL.sliding;
+      var speedFactor = Math.max(0.6, this.scrollSpeed / config.initialSpeed);
+      var p = {
+        x: Math.random() * CANVAS_W,
+        y: -10 - Math.random() * 40,
+        vy: (60 + Math.random() * 60) * speedFactor,
+        vx: (Math.random() - 0.5) * 30,
+        size: 4 + Math.random() * 6,
+        alpha: 0.5 + Math.random() * 0.4,
+        shape: Math.random() < 0.4 ? 'circle' : 'diamond',
+      };
+      this._snowParticles.push(p);
+    },_updateSnowParticles: function () {
+      if (!this._snowGfx) return;
+      var config = window.XINJIANG_LEVEL.sliding;
+
+      // 1. 生成新粒子 (终点附近变密)
+      var now = Date.now();
+      var progress = Math.min(1, this.scrollY / (config.finishY - config.startY));
+      var interval = config.snowParticleRate * (1 - progress * 0.4);  // 越往下越密
+      if (now - this._lastSnowSpawn > interval) {
+        this._spawnSnowParticle();
+        // 终点附近一次生 2 个
+        if (progress > 0.6 && Math.random() < 0.5) this._spawnSnowParticle();
+        this._lastSnowSpawn = now;
+      }
+
+      // 2. 更新位置 + 3. 绘制
+      this._snowGfx.clear();
+      for (var i = this._snowParticles.length - 1; i >= 0; i--) {
+        var p = this._snowParticles[i];
+        p.y += p.vy * 0.016;
+        p.x += p.vx * 0.016;
+        // 移除屏幕外的
+        if (p.y > CANVAS_H + 20 || p.x < -20 || p.x > CANVAS_W + 20) {
+          this._snowParticles.splice(i, 1);
+          continue;
+        }
+        this._snowGfx.fillStyle(0xFFFFFF, p.alpha);
+        if (p.shape === 'circle') {
+          this._snowGfx.fillCircle(p.x, p.y, p.size / 2);
+        } else {
+          this._snowGfx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
+      }
+    },// ===== v2: 滑痕轨迹 (玩家身后 1.5s 衰减) =====
+    _spawnTrail: function () {
+      var config = window.XINJIANG_LEVEL.sliding;
+      this.trails.push({
+        x: this.playerX,
+        y: this.playerY + 22,  // 雪板位置
+        size: 6 + Math.random() * 4,
+        bornAt: Date.now(),
+      });
+      // 限制最大数量
+      if (this.trails.length > 40) this.trails.shift();
+    },
+
+    _updateTrails: function () {
+      if (!this.trails || this.trails.length === 0) return;
+      var config = window.XINJIANG_LEVEL.sliding;
+      var now = Date.now();
+      var fadeMs = config.snowTrailFadeMs;
+
+      // 在 background 上层 (depth 20) 绘制
+      if (!this._trailGfx) {
+        this._trailGfx = this.add.graphics();
+        this._trailGfx.setDepth(20);
+      }
+      this._trailGfx.clear();
+
+      for (var i = this.trails.length - 1; i >= 0; i--) {
+        var t = this.trails[i];
+        var age = now - t.bornAt;
+        if (age > fadeMs) {
+          this.trails.splice(i, 1);
+          continue;
+        }
+        var alpha = (1 - age / fadeMs) * 0.7;
+        this._trailGfx.fillStyle(0xFFFFFF, alpha);
+        this._trailGfx.fillCircle(t.x, t.y, t.size / 2);
+      }
+    },_drawBackground: function () {
       this.bgGfx = this.add.graphics();
 
       // 顶部雪山白 (固定)
@@ -465,9 +588,7 @@
       this.bgGfx.fillStyle(0xC62828, 1);
       this.bgGfx.fillRect(CANVAS_W - 26, CANVAS_H - 60, 6, 60);
       this.bgGfx.fillTriangle(CANVAS_W - 20, CANVAS_H - 60, CANVAS_W - 60, CANVAS_H - 45, CANVAS_W - 20, CANVAS_H - 30);
-    },
-
-    _drawPlayer: function () {
+    },_drawPlayer: function () {
       this.playerContainer.removeAll(true);
 
       // 雪板 emoji
@@ -498,9 +619,7 @@
       // 距离进度
       this.progressText = this.add.text(420, 30, '📏 0m', {
         fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);
-
-      // 进度条背景
+      }).setOrigin(0.5);// 进度条背景
       var barX = 700, barY = 30, barW = 380, barH = 18;
       this.add.rectangle(barX, barY, barW, barH, 0xFFFFFF, 0.3);
       this.progressBar = this.add.rectangle(barX - barW / 2, barY, 0, barH, 0x76FF03, 1)
@@ -551,9 +670,7 @@
       };
       makeBtn('◀', -65, 0, 'left');
       makeBtn('▶', 65, 0, 'right');
-    },
-
-    // 生成障碍物 (权重随机 + 横向间距保证)
+    },// 生成障碍物 (权重随机 + 横向间距保证 + v2 NPC 类型)
     _spawnObstacle: function () {
       var config = window.XINJIANG_LEVEL;
       var obstacles = config.obstacles;
@@ -593,21 +710,26 @@
           fontSize: chosen.size + 'px',
         }).setOrigin(0.5).setDepth(40),
       };
+      // NPC 加一圈光晕
+      if (chosen.id === 'friendly_npc') {
+        ob.glow = this.add.circle(x, -80, chosen.size * 0.8, 0xFFD54F, 0.35)
+          .setDepth(39);
+      }
       this.obstacles.push(ob);
-    },
-
-    update: function () {
+    },update: function () {
       if (this.state !== 'SLIDING') return;
+      if (this._introLock) return;  // v2: 开场期间不更新
+
+      var config = window.XINJIANG_LEVEL.sliding;
 
       // 倒计时
       var elapsed = Date.now() - this.startTime;
       var timeLeft = Math.max(0, this.timeLeft - elapsed);
       this.timerText.setText('⏱️ ' + Math.ceil(timeLeft / 1000) + 's');
 
-      // 距离进度 (基于 scrollY)
+      // 距离进度
       var distance = Math.floor(this.scrollY);
       this.progressText.setText('📏 ' + distance + 'm');
-      var config = window.XINJIANG_LEVEL.sliding;
       var progress = Math.min(1, this.scrollY / (config.finishY - config.startY));
       this.progressBar.width = progress * 380;
 
@@ -616,17 +738,14 @@
         return;
       }
 
-      // 下滑加速 (越往下越快)
+      // 下滑加速
       this.scrollSpeed = Math.min(config.maxSpeed,
         config.initialSpeed + this.scrollY * 0.3);
       this.scrollY += this.scrollSpeed * 0.016;
 
-      // 玩家位置: y 跟随 scrollY (视觉上是地图在滚动, 但简单实现是 player 向下)
+      // 玩家位置
       this.playerY = config.startY + this.scrollY;
-      // 限制 y 在屏幕范围内
-      this.playerY = Math.min(this.playerY, CANVAS_H - 40);
-
-      // 左右移动
+      this.playerY = Math.min(this.playerY, CANVAS_H - 40);// 左右移动
       var dx = 0;
       if (this.keys.left) dx -= 1;
       if (this.keys.right) dx += 1;
@@ -645,20 +764,28 @@
         this.lastObstacleTime = Date.now();
       }
 
-      // 障碍物位置更新 (向下移动, 跟随滚动)
+      // v2: 滑痕采样 (每 50ms 一次)
+      if (Date.now() - this.lastTrailTime > config.snowTrailInterval) {
+        this._spawnTrail();
+        this.lastTrailTime = Date.now();
+      }
+      this._updateTrails();
+      this._updateSnowParticles();// 障碍物位置更新
       for (var i = this.obstacles.length - 1; i >= 0; i--) {
         var ob = this.obstacles[i];
         ob.y += this.scrollSpeed * 0.016;
         ob.gfx.setPosition(ob.x, ob.y);
+        if (ob.glow) ob.glow.setPosition(ob.x, ob.y);
 
         // 移除屏幕外的
         if (ob.y > CANVAS_H + 80) {
           ob.gfx.destroy();
+          if (ob.glow) ob.glow.destroy();
           this.obstacles.splice(i, 1);
           continue;
         }
 
-        // 碰撞检测 (矩形 hitbox)
+        // 碰撞检测
         var dx2 = ob.x - this.playerX;
         var dy2 = ob.y - this.playerY;
         var dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
@@ -671,12 +798,25 @@
       if (this.scrollY >= (config.finishY - config.startY)) {
         this._showWin();
       }
-    },
+    },_onCrash: function (ob) {
+      // v2: 友好 NPC 撞到 = 加时间 + toast, 不算撞墙
+      if (ob.id === 'friendly_npc') {
+        var config = window.XINJIANG_LEVEL.sliding;
+        this.timeLeft += config.npcBonusTime;
+        this.timerText.setText('⏱️ ' + Math.ceil(this.timeLeft / 1000) + 's');
+        window.playXinjiangSfx('pickup', 0.4);
+        // 移除 NPC + toast
+        ob.gfx.destroy();
+        if (ob.glow) ob.glow.destroy();
+        var idx = this.obstacles.indexOf(ob);
+        if (idx >= 0) this.obstacles.splice(idx, 1);
+        this._showToast('👨‍🌾 牧民送你一段！+1s', 0xD2691E);
+        return;
+      }
 
-    _onCrash: function (ob) {
       this.crashCount++;
       this.crashText.setText('💥 撞墙 ' + this.crashCount);
-      window.playXinjiangSfx('pickup', 0.3);  // 撞墙用 pickup 替代 (没专属 SFX)
+      window.playXinjiangSfx('pickup', 0.3);
 
       // 屏幕震动 + 减速度
       this.cameras.main.shake(150, 0.008);
@@ -684,16 +824,15 @@
 
       // 移除撞到的障碍
       ob.gfx.destroy();
-      var idx = this.obstacles.indexOf(ob);
-      if (idx >= 0) this.obstacles.splice(idx, 1);
+      if (ob.glow) ob.glow.destroy();
+      var idx2 = this.obstacles.indexOf(ob);
+      if (idx2 >= 0) this.obstacles.splice(idx2, 1);
 
       // 撞 5 次 = 失败
       if (this.crashCount >= 5) {
         this._showFail('撞太多次了！');
       }
-    },
-
-    _showFail: function (reason) {
+    },_showFail: function (reason) {
       var self = this;
       if (this.state !== 'SLIDING') return;
       this.state = 'FAIL';
@@ -714,656 +853,13 @@
       btn.on('pointerdown', function () { self.scene.restart(); });
     },
 
+    // ===== v2 增强: 通关界面 =====
     _showWin: function () {
       var self = this;
       if (this.state !== 'SLIDING') return;
       this.state = 'WIN';
 
-      var overlay = this.add.rectangle(640, 360, 600, 320, 0x2E7D32, 0.95);
-      this.add.text(640, 270, '🎿 抵达山脚！', {
-        fontSize: '36px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      this.add.text(640, 330, '撞墙 ' + this.crashCount + ' 次 · 用时 ' + Math.ceil((Date.now() - this.startTime) / 1000) + ' 秒', {
-        fontSize: '18px', color: '#FFFFFF',
-      }).setOrigin(0.5);
-
-      var btn = this.add.rectangle(640, 430, 240, 56, 0x4CAF50)
-        .setInteractive({ useHandCursor: true });
-      var btnText = this.add.text(640, 430, '购买补给', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5);
-      btn.on('pointerdown', function () {
-        try { self.scene.start('ShoppingScene'); }
-        catch (e) {
-          console.error('[xj] scene.start(ShoppingScene) threw:', e);
-          window.location.reload();
-        }
-      });
-      window.playXinjiangSfx('pickup', 0.5);
-    },
-  });
-
-  // ============== ShoppingScene (购买补给) ==============
-  var ShoppingScene = new Phaser.Class({
-    Extends: Phaser.Scene,
-    initialize: function ShoppingScene() { Phaser.Scene.call(this, { key: 'ShoppingScene' }); },
-    create: function () {
-      var self = this;
-      var config = window.XINJIANG_LEVEL;
-
-      this.cameras.main.setBackgroundColor('#E8F5E9');
-
-      // 状态
-      this.state = 'PLAYING';
-      // Debug 模式: 满金币 + 物品满库存
-      this.coins = isDebug ? 9999 : (parseInt(localStorage.getItem('silkroad_coins') || '0', 10) || 0);
-      this.items = isDebug ? this._debugItems() : this.loadItems();
-      // 从 kazakhstan 继承的物品自动加上
-      if (!isDebug) {
-        var kazItems = [];
-        try {
-          var raw = localStorage.getItem('silkroad_kazakhstan_items');
-          if (raw) kazItems = JSON.parse(raw);
-        } catch (e) { kazItems = []; }
-        for (var ki = 0; ki < kazItems.length; ki++) {
-          if (this.items.indexOf(kazItems[ki]) < 0) this.items.push(kazItems[ki]);
-        }
-      }
-
-      // 地图
-      this._drawMap();
-
-      // 玩家
-      this.playerX = config.map.playerStart.x;
-      this.playerY = config.map.playerStart.y;
-      this.playerContainer = this.add.container(this.playerX, this.playerY);
-      this.playerContainer.setDepth(30);
-      this._drawPlayer();
-
-      // 商铺
-      this.shops = [];
-      for (var i = 0; i < config.shops.length; i++) {
-        this._createShop(config.shops[i]);
-      }
-
-      // 出口
-      this._createExit();
-
-      // HUD
-      this._createHUD();
-
-      // 移动输入
-      this.keys = { up: false, down: false, left: false, right: false };
-      this._createJoystick();
-
-      var onKeyDown = function (k) { return function () { self.keys[k] = true; }; };
-      var onKeyUp = function (k) { return function () { self.keys[k] = false; }; };
-      this.input.keyboard.on('keydown-UP', onKeyDown('up'));
-      this.input.keyboard.on('keydown-DOWN', onKeyDown('down'));
-      this.input.keyboard.on('keydown-LEFT', onKeyDown('left'));
-      this.input.keyboard.on('keydown-RIGHT', onKeyDown('right'));
-      this.input.keyboard.on('keydown-W', onKeyDown('up'));
-      this.input.keyboard.on('keydown-S', onKeyDown('down'));
-      this.input.keyboard.on('keydown-A', onKeyDown('left'));
-      this.input.keyboard.on('keydown-D', onKeyDown('right'));
-      this.input.keyboard.on('keyup-UP', onKeyUp('up'));
-      this.input.keyboard.on('keydown-DOWN', onKeyDown('down'));
-      this.input.keyboard.on('keyup-LEFT', onKeyUp('left'));
-      this.input.keyboard.on('keyup-RIGHT', onKeyUp('right'));
-      this.input.keyboard.on('keyup-W', onKeyUp('up'));
-      this.input.keyboard.on('keyup-S', onKeyUp('up'));
-      this.input.keyboard.on('keyup-A', onKeyUp('left'));
-      this.input.keyboard.on('keyup-D', onKeyUp('right'));
-
-      // 提示
-      this.add.text(640, 80, '🎯 买 🍢 羊肉串 + 🔥 暖宝宝 → 去右下出口出发去成都', {
-        fontSize: '14px', color: '#1B5E20', fontStyle: 'italic',
-      }).setOrigin(0.5);
-
-      // 更新循环
-      this.time.addEvent({
-        delay: 16,
-        loop: true,
-        callback: this.update,
-        callbackScope: this
-      });
-    },
-
-    _debugItems: function () {
-      var ids = [];
-      var shops = window.XINJIANG_LEVEL.shops;
-      for (var i = 0; i < shops.length; i++) {
-        var items = shops[i].items;
-        for (var j = 0; j < items.length; j++) {
-          if (ids.indexOf(items[j].id) < 0) ids.push(items[j].id);
-        }
-      }
-      // 加上从 kazakhstan 继承的 (暖衣物 + 马奶酒)
-      if (ids.indexOf('warm_clothes') < 0) ids.push('warm_clothes');
-      if (ids.indexOf('kumis') < 0) ids.push('kumis');
-      return ids;
-    },
-
-    loadItems: function () {
-      try {
-        return JSON.parse(localStorage.getItem('silkroad_xinjiang_items') || '[]');
-      } catch (e) { return []; }
-    },
-
-    saveItems: function () {
-      try {
-        localStorage.setItem('silkroad_xinjiang_items', JSON.stringify(this.items));
-      } catch (e) {}
-    },
-
-    saveCoins: function () {
-      try {
-        localStorage.setItem('silkroad_coins', String(this.coins));
-      } catch (e) {}
-    },
-
-    _drawMap: function () {
-      var g = this.add.graphics();
-
-      // 雪山背景 (顶部)
-      g.fillStyle(0xFFFFFF, 1);
-      g.fillRect(0, 0, CANVAS_W, 200);
-      g.fillStyle(0xB0BEC5, 0.5);
-      g.fillTriangle(0, 200, 200, 50, 400, 200);
-      g.fillTriangle(300, 200, 600, 30, 900, 200);
-      g.fillTriangle(800, 200, 1100, 80, 1280, 200);
-
-      // 草原 (底部)
-      g.fillStyle(0x7CB342, 1);
-      g.fillRect(0, 200, CANVAS_W, 520);
-
-      // 草地纹理
-      g.fillStyle(0x558B2F, 0.5);
-      for (var i = 0; i < 80; i++) {
-        var x = Math.random() * CANVAS_W;
-        var y = 220 + Math.random() * 480;
-        g.fillRect(x, y, 20, 3);
-      }
-
-      // 道路 (右下出口方向)
-      g.fillStyle(0xD7CCC8, 0.5);
-      g.fillRect(900, 200, 200, 520);
-    },
-
-    _drawPlayer: function () {
-      this.playerContainer.removeAll(true);
-
-      var avatarId = null;
-      try { avatarId = localStorage.getItem('silkroad_avatar'); } catch (e) {}
-      if (!avatarId) avatarId = 'malay';
-      var avatar = window.SilkRoadCommon.buildAvatarSprite(this, avatarId);
-      avatar.setScale(0.85);
-      avatar.setPosition(0, -8);
-      this.playerContainer.add(avatar);
-
-      // 雪板 (在脚下)
-      var board = this.add.text(0, 16, '🎿', {
-        fontSize: '28px',
-      }).setOrigin(0.5);
-      this.playerContainer.add(board);
-    },
-
-    _createShop: function (shopConfig) {
-      var self = this;
-      var shop = {
-        config: shopConfig,
-        gfx: this.add.graphics(),
-        emojiText: null,
-        hitZone: this.add.zone(shopConfig.x, shopConfig.y, 160, 160)
-          .setInteractive({ useHandCursor: true }),
-      };
-
-      // 帐篷绘制
-      var g = shop.gfx;
-      var x = shopConfig.x;
-      var y = shopConfig.y;
-      // 帐篷主体 (赭红)
-      g.fillStyle(0xD84315, 1);
-      g.fillTriangle(x - 50, y + 25, x + 50, y + 25, x, y - 35);
-      g.fillStyle(0xBF360C, 1);
-      g.fillRect(x - 45, y + 25, 90, 18);
-      g.lineStyle(3, 0x8D2C0A, 1);
-      g.strokeTriangle(x - 50, y + 25, x + 50, y + 25, x, y - 35);
-      // 招牌
-      g.fillStyle(0xFFD54F, 1);
-      g.fillCircle(x, y - 28, 14);
-      g.lineStyle(1.5, 0x8D2C0A, 1);
-      g.strokeCircle(x, y - 28, 14);
-
-      // emoji 标签
-      shop.emojiText = this.add.text(x, y - 28, shopConfig.emoji, {
-        fontSize: '20px',
-      }).setOrigin(0.5).setDepth(20);
-
-      // 名字
-      var nameText = this.add.text(x, y + 56, shopConfig.name, {
-        fontSize: '12px', color: '#FFFFFF', fontStyle: 'bold',
-        backgroundColor: '#5D2C20',
-        padding: { x: 6, y: 3 },
-      }).setOrigin(0.5).setDepth(20);
-
-      // 点击
-      shop.hitZone.on('pointerdown', function () {
-        self._tryOpenShop(shopConfig);
-      });
-
-      this.shops.push(shop);
-    },
-
-    _createExit: function () {
-      var self = this;
-      var config = window.XINJIANG_LEVEL.departure;
-      var x = config.exitZone.x;
-      var y = config.exitZone.y;
-
-      // 拱门
-      this.exitGfx = this.add.graphics();
-      this.exitGfx.fillStyle(0x8D6E63, 1);
-      this.exitGfx.fillRoundedRect(x - 60, y - 30, 120, 100, 8);
-      this.exitGfx.fillStyle(0x2A1606, 1);
-      this.exitGfx.fillRect(x - 28, y + 10, 56, 60);
-      this.exitGfx.beginPath();
-      this.exitGfx.arc(x, y + 10, 28, Math.PI, 0, true);
-      this.exitGfx.fillPath();
-      this.exitGfx.fillStyle(0xC62828, 1);
-      this.exitGfx.fillRoundedRect(x - 64, y - 50, 128, 22, 6);
-
-      // 旗
-      this.exitGfx.lineStyle(2, 0x4A2E1A, 1);
-      this.exitGfx.lineBetween(x - 50, y - 50, x - 50, y - 90);
-      this.exitGfx.fillStyle(0xC62828, 1);
-      this.exitGfx.fillTriangle(x - 50, y - 90, x - 20, y - 80, x - 50, y - 70);
-
-      // 标签
-      this.exitLabel = this.add.text(x, y + 80, '🏠 → 成都', {
-        fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
-        backgroundColor: 'rgba(198, 40, 40, 0.92)',
-        padding: { x: 10, y: 5 },
-        stroke: '#2A1606', strokeThickness: 2,
-      }).setOrigin(0.5).setDepth(20);
-
-      this.exitSignText = this.add.text(x, y - 40, '成都驿站', {
-        fontSize: '13px', color: '#FFD98A', fontStyle: 'bold',
-        stroke: '#2A1606', strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(20);
-
-      // 出发按钮 (默认隐藏)
-      this.exitBtn = this.add.text(x, y, '✨ 出发去成都！', {
-        fontSize: '18px', color: '#2A1606', fontStyle: 'bold',
-        backgroundColor: '#D4AF37',
-        padding: { x: 14, y: 8 },
-        stroke: '#8B6914', strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(150).setVisible(false);
-      this.exitBtn.setInteractive({ useHandCursor: true });
-      this.exitBtn.on('pointerdown', function () { self.tryDepart(); });
-
-      // 出口 hitZone
-      var hitArea = this.add.circle(x, y, config.exitZone.radius, 0x000000, 0)
-        .setInteractive({ useHandCursor: true });
-      hitArea.on('pointerdown', function () {
-        var dx = self.playerX - x;
-        var dy = self.playerY - y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < config.exitZone.radius) {
-          self.tryDepart();
-        } else {
-          self._showToast('太远了，走近一点', 0xFF9800);
-        }
-      });
-    },
-
-    _createHUD: function () {
-      var self = this;
-      // HUD 背景
-      this.add.rectangle(640, 36, CANVAS_W, 72, 0x2A1606, 0.92);
-
-      // 1. 💰 余额 (¥)
-      this.coinText = this.add.text(180, 30, '💰 ' + this.coins + ' ¥', {
-        fontSize: '16px', color: '#D4AF37', fontStyle: 'bold',
-        stroke: '#2A1606', strokeThickness: 2,
-      }).setOrigin(0.5);
-
-      // 2. 🧳 物品 (必需检查)
-      this.luggageBtn = this.add.text(380, 30, this._luggageText(), {
-        fontSize: '14px', color: '#FFD98A', fontStyle: 'bold',
-        backgroundColor: '#4A2E1A', padding: { x: 10, y: 3 },
-      }).setOrigin(0.5);
-      this.luggageBtn.setInteractive({ useHandCursor: true });
-      this.luggageBtn.on('pointerdown', function () { self._openLuggageModal(); });
-
-      // 3. 📋 必买清单
-      this.questText = this.add.text(620, 30, this._questText(), {
-        fontSize: '13px', color: '#FFEB3B', fontStyle: 'bold',
-      }).setOrigin(0.5);
-
-      // 4. 🔊 BGM
-      var bgmMuted = (localStorage.getItem('silkroad_bgm_muted') === '1');
-      this.bgmBtn = this.add.text(1100, 30, bgmMuted ? '🔇' : '🔊', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-        backgroundColor: '#4A2E1A', padding: { x: 8, y: 2 },
-      }).setOrigin(0.5);
-      this.bgmBtn.setInteractive({ useHandCursor: true });
-      this.bgmBtn.on('pointerdown', function () { self._toggleBgm(); });
-
-      // 5. 🗺️
-      this.worldMapBtn = this.add.text(1200, 30, '🗺️', {
-        fontSize: '18px', color: '#F4ECD8',
-      }).setOrigin(0.5);
-      this.worldMapBtn.setInteractive({ useHandCursor: true });
-      this.worldMapBtn.on('pointerdown', function () {
-        window.location.href = '/games/silk-road/world-map';
-      });
-    },
-
-    _luggageText: function () {
-      var total = this.items.length;
-      return '🧳 ' + total;
-    },
-
-    _questText: function () {
-      var required = window.XINJIANG_LEVEL.departure.requiredItems;
-      var have = 0;
-      for (var i = 0; i < required.length; i++) {
-        if (this.items.indexOf(required[i]) >= 0) have++;
-      }
-      return '📋 必买 ' + have + '/' + required.length;
-    },
-
-    _toggleBgm: function () {
-      var muted = localStorage.getItem('silkroad_bgm_muted') === '1';
-      muted = !muted;
-      localStorage.setItem('silkroad_bgm_muted', muted ? '1' : '0');
-      var bgm = document.getElementById('silk-road-bgm');
-      if (bgm) bgm.muted = muted;
-      if (this.bgmBtn) this.bgmBtn.setText(muted ? '🔇' : '🔊');
-    },
-
-    _openLuggageModal: function () {
-      var self = this;
-      if (this.state === 'MODAL') return;
-      this.state = 'MODAL';
-
-      if (this.currentModal) { this.currentModal.destroy(); this.currentModal = null; }
-
-      var required = window.XINJIANG_LEVEL.departure.requiredItems;
-      var requiredSet = {};
-      for (var ri = 0; ri < required.length; ri++) requiredSet[required[ri]] = true;
-
-      var modal = this.add.container(640, 360);
-      modal.setDepth(2000);
-
-      var backdrop = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x140C06, 0.55);
-      modal.add(backdrop);
-      var card = this.add.rectangle(0, 0, 700, 460, 0x2A1606, 1)
-        .setStrokeStyle(2, 0xD4AF37, 0.7);
-      modal.add(card);
-
-      modal.add(this.add.text(0, -200, '🧳 我的行李', {
-        fontSize: '24px', color: '#D4AF37', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      modal.add(this.add.text(0, -170, '已收集 ' + this.items.length + ' 件', {
-        fontSize: '12px', color: '#C9B89A', fontStyle: 'italic',
-      }).setOrigin(0.5));
-
-      if (this.items.length === 0) {
-        modal.add(this.add.text(0, 30, '（行李箱空空如也）', {
-          fontSize: '16px', color: '#F6B5C8', fontStyle: 'italic',
-        }).setOrigin(0.5));
-      } else {
-        var rowH = 36;
-        var visible = this.items.slice(0, 12);
-        var startY = -(visible.length * rowH) / 2 + rowH / 2 - 30;
-        for (var li = 0; li < visible.length; li++) {
-          var id = visible[li];
-          var info = self._getItemInfo(id);
-          var isReq = !!requiredSet[id];
-          var ry = startY + li * rowH;
-          var rowBg = self.add.rectangle(0, ry, 620, rowH - 6,
-            isReq ? 0x5C3A1E : 0x4A2E1A, 0.9)
-            .setStrokeStyle(2, isReq ? 0xFFEB3B : 0x6B4423, isReq ? 0.8 : 0.4);
-          modal.add(rowBg);
-          var prefix = isReq ? '⭐ ' : '· ';
-          modal.add(self.add.text(-280, ry, info.emoji, { fontSize: '20px' }).setOrigin(0.5));
-          modal.add(self.add.text(-250, ry, prefix + info.name, {
-            fontSize: '14px',
-            color: isReq ? '#FFEB3B' : '#F4ECD8',
-            fontStyle: 'bold',
-          }).setOrigin(0, 0.5));
-        }
-      }
-
-      var closeBg = self.add.rectangle(0, 195, 200, 50, 0x6B4423, 1)
-        .setStrokeStyle(2, 0xFFD98A, 0.7);
-      modal.add(closeBg);
-      modal.add(self.add.text(0, 195, '关闭', {
-        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      var closeZone = self.add.zone(0, 195, 200, 50).setInteractive({ useHandCursor: true });
-      closeZone.on('pointerdown', function () {
-        modal.destroy();
-        if (self.currentModal === modal) self.currentModal = null;
-        self.state = 'PLAYING';
-      });
-      modal.add(closeZone);
-
-      this.currentModal = modal;
-    },
-
-    _getItemInfo: function (id) {
-      var shops = window.XINJIANG_LEVEL.shops;
-      for (var i = 0; i < shops.length; i++) {
-        var items = shops[i].items;
-        for (var j = 0; j < items.length; j++) {
-          if (items[j].id === id) return { name: items[j].name, emoji: items[j].emoji };
-        }
-      }
-      // kazakhstan 继承物
-      if (id === 'warm_clothes') return { name: '保暖衣物', emoji: '🧥' };
-      if (id === 'kumis') return { name: '马奶酒', emoji: '🥛' };
-      return { name: String(id), emoji: '📦' };
-    },
-
-    _createJoystick: function () {
-      var self = this;
-      this.joystickContainer = this.add.container(140, CANVAS_H - 100);
-      this.joystickContainer.setAlpha(0.72);
-      this.joystickContainer.setScale(0.7);
-      this.joystickContainer.setDepth(500);
-
-      var dpadBg = this.add.graphics();
-      dpadBg.fillStyle(0x2A1606, 0.55);
-      dpadBg.fillCircle(0, 0, 100);
-      this.joystickContainer.add(dpadBg);
-
-      var makeDpadBtn = function (txt, dx, dy, key) {
-        var bg = self.add.circle(dx, dy, 36, 0x2A1606, 0.85)
-          .setStrokeStyle(2, 0xFFD98A, 0.7);
-        var arrow = self.add.text(dx, dy, txt, {
-          fontSize: '28px', color: '#FFD98A', fontStyle: 'bold',
-        }).setOrigin(0.5);
-        var zone = self.add.zone(dx, dy, 76, 76).setInteractive({ useHandCursor: true });
-        var press = function () {
-          self.keys[key] = true;
-          bg.setFillStyle(0xFFD98A, 0.95);
-          arrow.setColor('#2A190E');
-          window.playXinjiangSfx('click', 0.3);
-        };
-        var release = function () {
-          self.keys[key] = false;
-          bg.setFillStyle(0x2A1606, 0.85);
-          arrow.setColor('#FFD98A');
-        };
-        zone.on('pointerdown', press);
-        zone.on('pointerup', release);
-        zone.on('pointerout', release);
-        self.joystickContainer.add([bg, arrow, zone]);
-      };
-      makeDpadBtn('▲', 0, -65, 'up');
-      makeDpadBtn('▼', 0, 65, 'down');
-      makeDpadBtn('◀', -65, 0, 'left');
-      makeDpadBtn('▶', 65, 0, 'right');
-    },
-
-    _tryOpenShop: function (shopConfig) {
-      if (this.state !== 'PLAYING') return;
-      var dx = this.playerX - shopConfig.x;
-      var dy = this.playerY - shopConfig.y;
-      if (Math.sqrt(dx * dx + dy * dy) >= 90) {
-        this._showToast('太远了，走近一点', 0xFF9800);
-        return;
-      }
-      this._openShopModal(shopConfig);
-    },
-
-    _openShopModal: function (shopConfig) {
-      var self = this;
-      this.state = 'MODAL';
-
-      if (this.currentModal) { this.currentModal.destroy(); this.currentModal = null; }
-
-      var modal = this.add.container(640, 360);
-      modal.setDepth(2000);
-
-      var bg = this.add.rectangle(0, 0, 700, 480, 0x5D2C20, 0.95);
-      modal.add(bg);
-
-      modal.add(this.add.text(0, -200, shopConfig.emoji + ' ' + shopConfig.name, {
-        fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5));
-
-      modal.add(this.add.text(0, -160, '💰 当前余额: ' + this.coins + ' ¥', {
-        fontSize: '16px', color: '#FFEB3B', fontStyle: 'bold',
-      }).setOrigin(0.5));
-
-      var itemY = -90;
-      for (var i = 0; i < shopConfig.items.length; i++) {
-        var item = shopConfig.items[i];
-        var card = this.add.rectangle(0, itemY, 600, 80, 0x3E1F0E, 0.9);
-        modal.add(card);
-
-        modal.add(this.add.text(-250, itemY - 12, item.emoji + ' ' + item.name, {
-          fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold',
-        }).setOrigin(0, 0.5));
-
-        modal.add(this.add.text(-250, itemY + 14, item.desc + (item.required ? '  (必需)' : ''), {
-          fontSize: '13px', color: item.required ? '#FFEB3B' : '#FFCCBC',
-        }).setOrigin(0, 0.5));
-
-        modal.add(this.add.text(150, itemY, item.price + ' ¥', {
-          fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
-        }).setOrigin(0, 0.5));
-
-        var owned = this.items.indexOf(item.id) >= 0;
-        var btnBg = this.add.rectangle(240, itemY, 90, 36, owned ? 0x6B4423 : 0x4CAF50);
-        modal.add(btnBg);
-
-        modal.add(this.add.text(240, itemY, owned ? '已买' : '购买', {
-          fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold',
-        }).setOrigin(0.5));
-
-        if (!owned) {
-          (function (itemId, price) {
-            btnBg.setInteractive({ useHandCursor: true });
-            btnBg.on('pointerdown', function () {
-              self._buyItem(itemId, price);
-            });
-          })(item.id, item.price);
-        }
-
-        itemY += 100;
-      }
-
-      var closeBg = this.add.rectangle(0, 195, 200, 50, 0xE53935)
-        .setInteractive({ useHandCursor: true });
-      modal.add(closeBg);
-      modal.add(this.add.text(0, 195, '关闭', {
-        fontSize: '18px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5));
-      closeBg.on('pointerdown', function () {
-        modal.destroy();
-        self.currentModal = null;
-        self.state = 'PLAYING';
-      });
-
-      this.currentModal = modal;
-    },
-
-    _buyItem: function (itemId, price) {
-      if (this.coins < price) {
-        this._showToast('钱不够！', 0xFF5722);
-        return;
-      }
-      if (this.items.indexOf(itemId) >= 0) {
-        this._showToast('已经有了', 0xFF9800);
-        return;
-      }
-      this.coins -= price;
-      this.items.push(itemId);
-      this.saveItems();
-      this.saveCoins();
-
-      window.playXinjiangSfx('pickup', 0.5);
-      this._showToast('✅ 购买成功', 0x4CAF50);
-
-      this._updateHUD();
-
-      if (this.currentModal) {
-        this.currentModal.destroy();
-        this.currentModal = null;
-      }
-      this.state = 'PLAYING';
-    },
-
-    _updateHUD: function () {
-      if (this.coinText) this.coinText.setText('💰 ' + this.coins + ' ¥');
-      if (this.luggageBtn) this.luggageBtn.setText(this._luggageText());
-      if (this.questText) this.questText.setText(this._questText());
-    },
-
-    _updateExitButton: function () {
-      if (!this.exitBtn) return;
-      if (this.state !== 'PLAYING') {
-        this.exitBtn.setVisible(false);
-        return;
-      }
-      var config = window.XINJIANG_LEVEL.departure;
-      var dx = this.playerX - config.exitZone.x;
-      var dy = this.playerY - config.exitZone.y;
-      var dist = Math.sqrt(dx * dx + dy * dy);
-      var inRange = dist < config.exitZone.radius;
-      var required = config.requiredItems;
-      var hasAll = true;
-      for (var i = 0; i < required.length; i++) {
-        if (this.items.indexOf(required[i]) < 0) { hasAll = false; break; }
-      }
-      var ready = inRange && hasAll;
-      this.exitBtn.setVisible(ready);
-    },
-
-    tryDepart: function () {
-      var required = window.XINJIANG_LEVEL.departure.requiredItems;
-      var missing = [];
-      for (var i = 0; i < required.length; i++) {
-        if (this.items.indexOf(required[i]) < 0) missing.push(required[i]);
-      }
-      if (missing.length > 0) {
-        this._showToast('还差 ' + missing.length + ' 件必需品！', 0xFF5722);
-        return;
-      }
-
-      this.state = 'DEPARTING';
-      // 隐藏 HUD
-      if (this.playerContainer) this.playerContainer.setVisible(false);
-      if (this.joystickContainer) this.joystickContainer.setVisible(false);
-      if (this.exitBtn) this.exitBtn.setVisible(false);
-      if (this.exitLabel) this.exitLabel.setVisible(false);
-      if (this.exitSignText) this.exitSignText.setVisible(false);
-
+      var elapsed = Math.ceil((Date.now() - this.startTime) / 1000);
       // 写通关状态
       try {
         var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
@@ -1371,58 +867,83 @@
           cleared.push(4);
           localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
         }
-      } catch (e) {}
+      } catch (e) {}// 半透明遮罩
+      var overlay = this.add.rectangle(640, 360, 1280, 720, 0x0D47A1, 0.85);
 
-      this.scene.start('DepartScene');
+      // 大字主标题
+      this.add.text(640, 220, '🎿 一路下滑到成都！', {
+        fontSize: '44px', color: '#FFD98A', fontStyle: 'bold',
+        stroke: '#1B5E20', strokeThickness: 4,
+      }).setOrigin(0.5);
+
+      // 副标题: 撞墙 + 用时
+      this.add.text(640, 290, '撞墙 ' + this.crashCount + ' 次 · 用时 ' + elapsed + ' 秒', {
+        fontSize: '22px', color: '#FFFFFF',
+      }).setOrigin(0.5);
+
+      // 副副标题: 家人
+      this.add.text(640, 340, '👨‍👩‍👧 家人已在成都等你', {
+        fontSize: '20px', color: '#FFE9B0', fontStyle: 'italic',
+      }).setOrigin(0.5);
+
+      // 金黄色出发按钮
+      var btnW = 280, btnH = 70;
+      var btnX = 640, btnY = 450;
+      var btnGlow = this.add.rectangle(btnX, btnY, btnW + 12, btnH + 12, 0xFFE082, 0.6)
+        .setDepth(998);
+      var btnBg = this.add.rectangle(btnX, btnY, btnW, btnH, 0xD4AF37, 1)
+        .setStrokeStyle(4, 0x8B6914, 1)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(999);
+      var btnText = this.add.text(btnX, btnY, '✨ 出发去成都', {
+        fontSize: '26px', color: '#2A1606', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(1000);// 按钮发光 + 缩放动画
+      this.tweens.add({
+        targets: btnGlow,
+        alpha: { 0.3: 0.8 },
+        scaleX: { 1: 1.06 },
+        scaleY: { 1: 1.06 },
+        duration: 800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      var goDepart = function () {
+        try { self.scene.start('DepartScene'); }
+        catch (e) {
+          console.error('[xj] scene.start(DepartScene) threw:', e);
+          window.location.reload();
+        }
+      };
+      btnBg.on('pointerdown', goDepart);
+      btnBg.on('pointerover', function () { btnBg.setFillStyle(0xFFD54F, 1); });
+      btnBg.on('pointerout', function () { btnBg.setFillStyle(0xD4AF37, 1); });
+
+      // 键盘回车/空格
+      this.input.keyboard.once('keydown-SPACE', goDepart);
+      this.input.keyboard.once('keydown-ENTER', goDepart);
+
+      window.playXinjiangSfx('voyage', 0.5);
     },
 
+    // Toast 提示 (NPC 加时间用)
     _showToast: function (msg, color) {
-      var toast = this.add.text(640, 120, msg, {
+      var toast = this.add.text(640, 130, msg, {
         fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
-        backgroundColor: Phaser.Display.Color.IntegerToColor(color).rgba,
+        backgroundColor: '#' + color.toString(16).padStart(6, '0'),
         padding: { x: 18, y: 10 },
       }).setOrigin(0.5).setDepth(1000);
 
       this.tweens.add({
         targets: toast,
         alpha: 0,
-        y: 80,
+        y: 90,
         duration: 1500,
         onComplete: function () { toast.destroy(); }
       });
     },
-
-    update: function () {
-      if (this.state !== 'PLAYING') return;
-
-      var speed = window.XINJIANG_LEVEL.movement.walkSpeed;
-      var dx = 0, dy = 0;
-      if (this.keys.left) dx -= 1;
-      if (this.keys.right) dx += 1;
-      if (this.keys.up) dy -= 1;
-      if (this.keys.down) dy += 1;
-
-      if (dx !== 0 || dy !== 0) {
-        var len = Math.sqrt(dx * dx + dy * dy);
-        dx /= len;
-        dy /= len;
-
-        this.playerX += dx * speed * 0.016;
-        this.playerY += dy * speed * 0.016;
-        this.playerX = Phaser.Math.Clamp(this.playerX, 50, CANVAS_W - 50);
-        this.playerY = Phaser.Math.Clamp(this.playerY, 100, CANVAS_H - 50);
-
-        this.playerContainer.setPosition(this.playerX, this.playerY);
-
-        if (dx < 0) this.playerContainer.setScale(-1, 1);
-        else if (dx > 0) this.playerContainer.setScale(1, 1);
-      }
-
-      this._updateExitButton();
-    },
-  });
-
-  // ============== 游戏初始化 ==============
+  });// ============== 游戏初始化 ==============
   var config = {
     type: Phaser.AUTO,
     width: CANVAS_W,
@@ -1435,7 +956,7 @@
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH
     },
-    scene: [BootScene, SlidingScene, ShoppingScene, DepartScene]
+    scene: [BootScene, SlidingScene, DepartScene]
   };
 
   var game = new Phaser.Game(config);
