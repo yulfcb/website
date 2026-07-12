@@ -1178,7 +1178,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
     // ============================================================
     //  玩家 (单板 + 角色)
     //  v9: 用 emoji 🏂 (snowboarder = 人+板一体) 替代 v8 Graphics 自绘
-    //      跨关统一 (跟 levels.js:71 / progress.js:15 一致)
+    //      跨关统一 (跟 levels.js LEVEL_META 一致)
     //      avatar 跟 🏂 自然叠合, 看起来角色踩在单板上
     // ============================================================
     _drawPlayer: function () {

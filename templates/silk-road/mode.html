@@ -33,8 +33,7 @@
   </style>
 </head>
 <body>
-  {# M4: mode 页顶部加进度条 #}
-  <div id="silk-progress-bar-host"></div>
+  {# v13: 删掉顶部关卡进度条 (关 0/1 图标 banner 一起删) #}
 
   <div class="silk-wrap">
     <h1 class="silk-h1">🌊 回家之路</h1>
@@ -72,7 +71,7 @@
     <p style="margin-top:8px"><a href="/games" style="color:#a8d8c0">← 返回游戏中心</a></p>
   </div>
 
-  {# v12: 恢复昵称同步到 localStorage, 关卡/终页会读它 #}
+  {# v13: 保留昵称同步 (不再依赖 progress.js) #}
   <script>
     (function () {
       var input = document.getElementById('nickname');
@@ -86,6 +85,5 @@
       });
     })();
   </script>
-  <script src="{{ url_for('static', filename='silk-road/progress.js') }}"></script>
 </body>
 </html>
