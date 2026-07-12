@@ -182,4 +182,25 @@
 - **Pixi.js**（关 2-4 旧引擎，可能需替换）
 - **纯 DOM**（伊朗关当前实现）
 - **Flask 后端**：session / reward / secret API
+
+---
+
+## 更新日志
+
+### v25.4 (2026-07-13) — 彩蛋密码 modal 全屏兼容
+- **Bug #4 修复**：手机进入全屏后, 触发 `_showPasswordPrompt` 时强制 `scale.stopFullscreen()`, 延迟 180ms 再显示 modal
+- 避免 iOS Safari 软键盘弹起时 input 飘出可视区
+- 涉及文件：`xinjiang/game.js`
+
+### v25.3 (2026-07-13) — 通关奖励通知提前发送
+- **Bug #3 修复**：通关飞书通知从「用户点击继续按钮」提前到「通关 modal 显示时」, 减少漏发
+- 加 `_xxxRewardClaimed` 幂等 flag, 避免按钮 click handler 重复发
+- 涉及文件：`turkey/game.js`, `kazakhstan/game.js`, `xinjiang/game.js`
+- 彩蛋奖励（¥520, 密码正确后）保持原触发时机不变
+
+### v25.2 (2026-07-12) — 信件内容显示修复
+- **Bug #2 修复**：CJK 长字符串手动换行 + 卡片尺寸 1000x640 + 字号 13
+
+### v25.1 (2026-07-12) — 彩蛋 handler 自销毁修复
+- **Bug #1 修复**：先调 `_showPasswordPrompt`, 再销毁按钮 — 避免 handler 内部销毁 btnBg 自身中断执行
 - **BGM**：全局 `<audio id="silk-road-bgm">`，各关控制播放
