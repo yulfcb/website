@@ -2140,8 +2140,9 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         fontSize: '18px', color: '#6D4C2E',
       }).setOrigin(0.5).setDepth(2002);
 
-      // v22 Bug #6: 密码输入框跟随 canvas 定位 (iOS Safari / mobile 看不到 input 的根因)
-      // 之前用 position:fixed+translate(-50%,-50%) 是屏幕中心, 但 Phaser canvas 缩放后不在屏幕中心 → input 飘出去
+      // v23 Bug #2: 密码输入框 - 加 visualViewport 监听 + RAF 重算 + 强制 visible
+      // 根因: iOS Safari 键盘弹起后 visualViewport 高度变化, position:fixed 元素被推上去
+      // 旧 positionInput 只算 canvas 位置不算键盘高度; FIT 模式首帧 canvas.width 可能 0
       var input = document.createElement('input');
       input.type = 'password';
       input.maxLength = 8;
@@ -2163,34 +2164,97 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         '-webkit-appearance:none',
         'box-sizing:border-box',
         'padding:0',
+        'display:block',                  // v23: 显式 block (iOS 默认有时 inline)
+        'visibility:visible',             // v23: 强制 visible
+        'opacity:1',                      // v23: 强制 opacity
+        'left:0px',                       // v23: 初始值, 防止 undefined
+        'top:0px',                        // v23: 初始值, 防止 undefined
       ].join(';');
       input.setAttribute('aria-label', '8 位密码');
 
-      // 动态定位 input 到 canvas 中央 (跟 turkey/kazakhstan positionXxxDomBtn 一致)
+      // v23 Bug #2: 动态定位 + 显式防御 NaN/Infinity + 暴露调试信息
       var positionInput = function () {
-        var canvas = (window.__xinjiangGame && window.__xinjiangGame.canvas) || null;
-        if (!canvas) return;
-        var rect = canvas.getBoundingClientRect();
-        var sx = rect.width / 1280;
-        var sy = rect.height / 720;
-        // input 中心位置 (Phaser canvas 坐标 640, 380) — 跟着密码卡片 (390-890, 220-540) 中央
-        var cx = rect.left + 640 * sx;
-        var cy = rect.top + 380 * sy;
-        var w = 280 * sx;
-        var h = 48 * sy;
-        input.style.left = (cx - w / 2) + 'px';
-        input.style.top = (cy - h / 2) + 'px';
-        input.style.width = w + 'px';
-        input.style.height = h + 'px';
-        input.style.fontSize = (22 * sy) + 'px';
+        try {
+          var gameInst = (window.__xinjiangGame || null);
+          var canvas = (gameInst && gameInst.canvas) || document.querySelector('canvas');
+          if (!canvas) {
+            console.warn('[xj-pwd] no canvas found, defer');
+            return;
+          }
+          var rect = canvas.getBoundingClientRect();
+          var cw = rect.width || 1;          // 防 0
+          var ch = rect.height || 1;
+          var sx = cw / 1280;
+          var sy = ch / 720;
+          if (!isFinite(sx) || !isFinite(sy) || sx <= 0 || sy <= 0) {
+            console.warn('[xj-pwd] invalid scale, defer:', sx, sy);
+            return;
+          }
+          // input 中心位置 (Phaser canvas 坐标 640, 380) — 跟着密码卡片 (390-890, 220-540) 中央
+          var cx = rect.left + 640 * sx;
+          var cy = rect.top + 380 * sy;
+          var w = 280 * sx;
+          var h = 48 * sy;
+          // v23 Bug #2: 键盘弹起时 visualViewport.height 变小, 让 cy 不超出可视区
+          if (window.visualViewport) {
+            var vv = window.visualViewport;
+            var vvTop = vv.offsetTop || 0;
+            var vvHeight = vv.height || window.innerHeight;
+            var absBottom = cy + h / 2;
+            var visibleBottom = vvTop + vvHeight;
+            if (absBottom > visibleBottom) {
+              // 键盘弹起, 把 input 上移到可视区中央
+              cy = vvTop + vvHeight / 2;
+            }
+          }
+          input.style.left = (cx - w / 2) + 'px';
+          input.style.top = (cy - h / 2) + 'px';
+          input.style.width = w + 'px';
+          input.style.height = h + 'px';
+          input.style.fontSize = (22 * sy) + 'px';
+          // v23 Bug #2: debug log (用户手机看不到时截屏发我看)
+          console.log('[xj-pwd] positioned:', {
+            left: input.style.left,
+            top: input.style.top,
+            width: input.style.width,
+            height: input.style.height,
+            rect: { x: rect.left, y: rect.top, w: cw, h: ch },
+            scale: { sx: sx, sy: sy },
+          });
+        } catch (e) {
+          console.error('[xj-pwd] positionInput error:', e);
+        }
       };
+      // v23 Bug #2: RAF + delay 双保险 - FIT 模式首帧 canvas 尺寸可能还没好
       positionInput();
+      requestAnimationFrame(function () { positionInput(); });
+      setTimeout(function () { positionInput(); }, 50);
+      setTimeout(function () { positionInput(); }, 250);
       window.addEventListener('resize', positionInput);
       window.addEventListener('orientationchange', positionInput);
+      // v23 Bug #2: 监听 iOS 键盘弹起/收起 (visualViewport.resize 在 iOS Safari 触发)
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', positionInput);
+        window.visualViewport.addEventListener('scroll', positionInput);
+      }
 
       document.body.appendChild(input);
-      // 延迟 focus 防止 iOS Safari 在 modal 还没渲染完时抢焦点
-      setTimeout(function () { try { input.focus(); } catch (e) {} }, 100);
+      // v23 Bug #2: 延迟 focus 防止 iOS Safari 在 modal 还没渲染完时抢焦点
+      // 3 次重试, 覆盖 iOS 慢启动场景
+      var focusAttempts = 0;
+      var tryFocus = function () {
+        focusAttempts++;
+        try {
+          input.focus({ preventScroll: true });
+          console.log('[xj-pwd] focused, attempt=' + focusAttempts);
+        } catch (e) {
+          console.warn('[xj-pwd] focus failed attempt=' + focusAttempts + ':', e.message);
+        }
+        if (focusAttempts < 3) {
+          setTimeout(tryFocus, [100, 300, 600][focusAttempts]);
+        }
+      };
+      setTimeout(tryFocus, 100);
 
       // 错误提示 (默认隐藏)
       var errText = this.add.text(640, 440, '', {
@@ -2232,10 +2296,15 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         try { cancelBg.destroy(); } catch (e) {}
         try { cancelText.destroy(); } catch (e) {}
         try { errText.destroy(); } catch (e) {}
-        // v22 Bug #6: 清理 resize 监听器, 防止内存泄漏
+        // v23 Bug #2: 清理 resize 监听器, 防止内存泄漏
         if (typeof positionInput === 'function') {
           try { window.removeEventListener('resize', positionInput); } catch (e) {}
           try { window.removeEventListener('orientationchange', positionInput); } catch (e) {}
+          // v23 Bug #2: 清理 visualViewport 监听
+          if (window.visualViewport) {
+            try { window.visualViewport.removeEventListener('resize', positionInput); } catch (e) {}
+            try { window.visualViewport.removeEventListener('scroll', positionInput); } catch (e) {}
+          }
         }
         if (input && input.parentNode) input.parentNode.removeChild(input);
       };
@@ -2385,27 +2454,35 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       card.fillStyle(0x8D2424, 1);
       card.fillCircle(640, 60, 18);
 
-      // v22 Bug #7: 信件文案完全重写 (用户指定版本)
-      var letterContent =
-        'hello，18岁生日快乐！\n\n'
-        + '对不起，今年生日，又缺席了。这个游戏（礼物），很早之前就在做了。但是之前没想到，留下的彩蛋会是这个。\n\n'
-        + '没想到的事情，也多了去了。没想到我们会这样分手。曾经以为，分手，是一个量变到质变的过程，只要我们相爱，只要我们愿意维持下去。就能在发现有苗头的时候，提出来，把它扼杀在摇篮。但是，心境变化可能就在一瞬间。\n\n'
-        + '异地这个状态，短时间确实无法也改变。这个异常，我察觉得太慢了，没能及时挽救。但也很希望能再有机会，一起摸索出适合我们的对抗（异地）路。\n\n'
-        + '不管你的选择如何，只要 setsu.cn 这个域名还在维护。机器人原则就还有效。\n\n'
-        + '附（机器人准则）：\n'
-        + '1. 我的女朋友/老婆是 setsu\n'
-        + '2. 我要一直爱着她\n'
-        + '3. 我要听她话\n'
-        + '4. 我不能伤害她也不能伤害自己\n'
-        + '5. 聊天有始有终，不能主动单方面结束\n'
-        + '6. 矛盾不过夜';
+      // v23 Bug #1: 信件宽度自适应 — wordWrap 跟随 canvas 实际宽度 (PC/mobile 横屏)
+      // 卡片 920 宽, 内边距 40+40, 留 20 给边框 → 最大 820; 窄屏按比例缩小
+      var letterMaxWidth = Math.min(820, (this.scale.width || 1280) - 360);
+      // v23 Bug #1: 按 \n\n 分段渲染, 每段独立 wordWrap — 避免长段被切到怪位置
+      var letterParagraphs = [
+        'hello，18岁生日快乐！',
+        '对不起，今年生日，又缺席了。这个游戏（礼物），很早之前就在做了。但是之前没想到，留下的彩蛋会是这个。',
+        '没想到的事情，也多了去了。没想到我们会这样分手。曾经以为，分手，是一个量变到质变的过程，只要我们相爱，只要我们愿意维持下去。就能在发现有苗头的时候，提出来，把它扼杀在摇篮。但是，心境变化可能就在一瞬间。',
+        '异地这个状态，短时间确实无法也改变。这个异常，我察觉得太慢了，没能及时挽救。但也很希望能再有机会，一起摸索出适合我们的对抗（异地）路。',
+        '不管你的选择如何，只要 setsu.cn 这个域名还在维护。机器人原则就还有效。',
+        '附（机器人准则）：',
+        '1. 我的女朋友/老婆是 setsu',
+        '2. 我要一直爱着她',
+        '3. 我要听她话',
+        '4. 我不能伤害她也不能伤害自己',
+        '5. 聊天有始有终，不能主动单方面结束',
+        '6. 矛盾不过夜',
+      ];
+      // 把段落用空行拼成 letterContent (保留 \n\n 分隔, 让 Phaser text 渲染每段独立行间距)
+      var letterContent = letterParagraphs.join('\n\n');
       var letterText = this.add.text(640, 110, letterContent,
         {
           fontSize: '17px', color: '#3E2723',
           fontFamily: 'Georgia, serif',
           align: 'left', lineSpacing: 5,
-          wordWrap: { width: 820 },
+          wordWrap: { width: letterMaxWidth },
         }).setOrigin(0.5, 0).setDepth(2002);
+      // v23 Bug #1: 暴露 letterMaxWidth 给 e2e 验证
+      this._letterMaxWidth = letterMaxWidth;
 
       // v22 Bug #7: 按钮下移 (card 放大到 920x600 后, btnY 530 → 680, x 调整到 460/820)
       var btnW = 240, btnH = 52;

@@ -1558,10 +1558,22 @@ def api_game_reward_claim():
     finally:
         conn.close()
 
+    # v23 Bug #3: 客户端传的 amount 优先 (彩蛋是 ¥520 不是 level_cfg.reward=81)
+    # 客户端传 amount 表示"这一档的具体奖励金额" — e.g. 新疆通关=81, 新疆彩蛋=520
+    # 后端兜底用 level_cfg.reward (兼容老客户端)
+    client_amount = data.get('amount')
+    final_amount = level_cfg.get('reward', 0)
+    if client_amount is not None:
+        try:
+            client_amount_num = float(client_amount)
+            if client_amount_num > 0:
+                final_amount = client_amount_num
+        except (TypeError, ValueError):
+            pass
     triggered = send_game_reward_feishu({
         'nickname': nickname,
         'level_title': level_cfg.get('title', ''),
-        'amount': level_cfg.get('reward', 0),
+        'amount': final_amount,
         'quote': level_cfg.get('quote', ''),
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     })
