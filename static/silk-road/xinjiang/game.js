@@ -2113,211 +2113,229 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       window.playXinjiangSfx('voyage', 0.4);
     },
 
-    // 密码输入 modal
+    // 密码输入 modal — v24 完全照搬 qatar M15 Bug A: 纯 HTML <div> modal
+    // 旧实现 (v22/v23): Phaser 卡片 + 浮动 DOM input + position:fixed 跟随 canvas
+    //   → iOS Safari 键盘弹起 visualViewport 变化, input 飘出可视区; canvas 缩放比例计算不稳
+    // 新实现: 整个 modal 是 HTML <div>, flex 居中, input 嵌在 card 内
+    //   → 不依赖 canvas 位置, viewport 坐标; iOS 键盘弹起浏览器自动调整
     _showPasswordPrompt: function () {
       var self = this;
+      try { window.playXinjiangSfx('button', 0.4); } catch (e) {}
 
-      // v19 Bug #2: 删掉 dim 全黑层, 让小木屋画面保持可见 (之前 0.65 透明度黑层遮住房间, 用户感觉 "跳转")
-      // 暗背景
-      // var dim = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.65)
-      //   .setDepth(2000);
+      // 隐藏 dpad (跟 qatar showReviveModal 一致)
+      if (this.joystickContainer) this.joystickContainer.setVisible(false);
+      if (this.actionContainer) this.actionContainer.setVisible(false);
 
-      // 卡片背景 (米色)
-      var card = this.add.graphics();
-      card.setDepth(2001);
-      card.fillStyle(0xFAF0E6, 1);
-      card.fillRoundedRect(390, 220, 500, 320, 16);
-      card.lineStyle(3, 0x8D6E63, 1);
-      card.strokeRoundedRect(390, 220, 500, 320, 16);
+      // 创建/复用 HTML modal
+      var modal = this._getOrCreatePwdModal();
+
+      // 显示 + 自动聚焦
+      modal.style.display = 'flex';
+      // 50ms 后聚焦 (qatar pattern, 等 modal 显示完)
+      this.time.delayedCall(50, function () {
+        var input = modal.querySelector('.xj-pwd-input');
+        if (input) {
+          input.value = '';
+          input.focus({ preventScroll: true });
+        }
+      });
+
+      // 暴露 scene 引用 (按钮 click handler 用)
+      modal._scene = this;
+      modal._self = self;
+      // v24: 显示标记 (e2e 用)
+      this._pwdModalVisible = true;
+    },
+
+    // v24 Bug #2f: 关闭密码 modal 后恢复 dpad (skill section 2b: show/close state pair)
+    _hidePasswordPrompt: function () {
+      var modal = document.getElementById('xj-pwd-modal');
+      if (modal) modal.style.display = 'none';
+      // 恢复 dpad 显示 (跟 _showPasswordPrompt 隐藏的对称)
+      if (this.joystickContainer) this.joystickContainer.setVisible(true);
+      if (this.actionContainer) this.actionContainer.setVisible(true);
+      this._pwdModalVisible = false;
+    },
+
+    // v24: HTML modal 工厂 (qatar getOrCreateReviveModal 模式)
+    _getOrCreatePwdModal: function () {
+      var root = document.getElementById('xj-pwd-modal');
+      if (root) return root;
+
+      // 全屏 fixed 容器 + flex 居中
+      root = document.createElement('div');
+      root.id = 'xj-pwd-modal';
+      root.style.cssText = [
+        'position:fixed', 'inset:0',
+        'display:none',
+        'z-index:99999',
+        'align-items:center', 'justify-content:center',
+        'font-family:inherit',
+      ].join(';');
+
+      // 半透明 backdrop
+      var backdrop = document.createElement('div');
+      backdrop.className = 'xj-pwd-backdrop';
+      backdrop.style.cssText = [
+        'position:absolute', 'inset:0',
+        'background:rgba(20,12,6,0.45)',
+      ].join(';');
+      backdrop.addEventListener('click', function () {
+        // 点 backdrop = 取消 (跟 qatar 一致)
+        var modal = document.getElementById('xj-pwd-modal');
+        if (modal) modal.style.display = 'none';
+      });
+      root.appendChild(backdrop);
+
+      // modal card
+      var card = document.createElement('div');
+      card.className = 'xj-pwd-card';
+      card.style.cssText = [
+        'position:relative',
+        'max-width:480px', 'width:min(480px, calc(100vw - 32px))',
+        'padding:24px',
+        'border-radius:12px',
+        'background:#FAF0E6',
+        'border:3px solid #8D6E63',
+        'box-shadow:0 10px 40px rgba(0,0,0,0.6)',
+        'color:#5D4037',
+      ].join(';');
 
       // 标题
-      var title = this.add.text(640, 260, '🔐 输入密码', {
-        fontSize: '32px', color: '#5D4037', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(2002);
+      var h3 = document.createElement('h3');
+      h3.textContent = '🔐 输入密码';
+      h3.style.cssText = [
+        'margin:0 0 8px 0',
+        'font-size:24px', 'font-weight:bold',
+        'color:#5D4037', 'text-align:center',
+      ].join(';');
+      card.appendChild(h3);
 
       // 提示
-      var hint = this.add.text(640, 320, '提示：8 位数纪念日', {
-        fontSize: '18px', color: '#6D4C2E',
-      }).setOrigin(0.5).setDepth(2002);
+      var hint = document.createElement('div');
+      hint.className = 'xj-pwd-hint';
+      hint.textContent = '提示：8 位数纪念日';
+      hint.style.cssText = [
+        'margin:0 0 16px 0',
+        'font-size:14px', 'color:#6D4C2E', 'text-align:center',
+      ].join(';');
+      card.appendChild(hint);
 
-      // v23 Bug #2: 密码输入框 - 加 visualViewport 监听 + RAF 重算 + 强制 visible
-      // 根因: iOS Safari 键盘弹起后 visualViewport 高度变化, position:fixed 元素被推上去
-      // 旧 positionInput 只算 canvas 位置不算键盘高度; FIT 模式首帧 canvas.width 可能 0
+      // 错误提示 (默认隐藏)
+      var err = document.createElement('div');
+      err.className = 'xj-pwd-err';
+      err.textContent = '';
+      err.style.cssText = [
+        'margin:0 0 8px 0',
+        'font-size:14px', 'color:#C62828', 'font-weight:bold',
+        'text-align:center', 'min-height:18px',
+        'display:none',
+      ].join(';');
+      card.appendChild(err);
+
+      // input — 嵌在 card 内, 不依赖 canvas 位置
       var input = document.createElement('input');
       input.type = 'password';
       input.maxLength = 8;
-      input.inputMode = 'numeric';      // iOS 弹数字键盘
+      input.inputMode = 'numeric';
       input.pattern = '[0-9]*';
       input.autocomplete = 'off';
       input.placeholder = '8 位数字';
+      input.className = 'xj-pwd-input';
+      input.setAttribute('aria-label', '8 位密码');
       input.style.cssText = [
-        'position:fixed',
-        'width:280px', 'height:48px',
-        'font-size:22px', 'text-align:center',
+        'display:block',
+        'width:100%', 'box-sizing:border-box',
+        'height:56px',
+        'padding:8px 12px',
         'border:3px solid #8D6E63',
         'border-radius:10px',
         'background:#FFFFFF',
+        'color:#3E2723',
+        'font-size:24px', 'text-align:center',
         'font-family:monospace',
-        'letter-spacing:6px',
-        'z-index:2147483646',
+        'letter-spacing:8px',
         'outline:none',
         '-webkit-appearance:none',
-        'box-sizing:border-box',
-        'padding:0',
-        'display:block',                  // v23: 显式 block (iOS 默认有时 inline)
-        'visibility:visible',             // v23: 强制 visible
-        'opacity:1',                      // v23: 强制 opacity
-        'left:0px',                       // v23: 初始值, 防止 undefined
-        'top:0px',                        // v23: 初始值, 防止 undefined
+        'margin-bottom:16px',
       ].join(';');
-      input.setAttribute('aria-label', '8 位密码');
+      card.appendChild(input);
 
-      // v23 Bug #2: 动态定位 + 显式防御 NaN/Infinity + 暴露调试信息
-      var positionInput = function () {
-        try {
-          var gameInst = (window.__xinjiangGame || null);
-          var canvas = (gameInst && gameInst.canvas) || document.querySelector('canvas');
-          if (!canvas) {
-            console.warn('[xj-pwd] no canvas found, defer');
-            return;
-          }
-          var rect = canvas.getBoundingClientRect();
-          var cw = rect.width || 1;          // 防 0
-          var ch = rect.height || 1;
-          var sx = cw / 1280;
-          var sy = ch / 720;
-          if (!isFinite(sx) || !isFinite(sy) || sx <= 0 || sy <= 0) {
-            console.warn('[xj-pwd] invalid scale, defer:', sx, sy);
-            return;
-          }
-          // input 中心位置 (Phaser canvas 坐标 640, 380) — 跟着密码卡片 (390-890, 220-540) 中央
-          var cx = rect.left + 640 * sx;
-          var cy = rect.top + 380 * sy;
-          var w = 280 * sx;
-          var h = 48 * sy;
-          // v23 Bug #2: 键盘弹起时 visualViewport.height 变小, 让 cy 不超出可视区
-          if (window.visualViewport) {
-            var vv = window.visualViewport;
-            var vvTop = vv.offsetTop || 0;
-            var vvHeight = vv.height || window.innerHeight;
-            var absBottom = cy + h / 2;
-            var visibleBottom = vvTop + vvHeight;
-            if (absBottom > visibleBottom) {
-              // 键盘弹起, 把 input 上移到可视区中央
-              cy = vvTop + vvHeight / 2;
-            }
-          }
-          input.style.left = (cx - w / 2) + 'px';
-          input.style.top = (cy - h / 2) + 'px';
-          input.style.width = w + 'px';
-          input.style.height = h + 'px';
-          input.style.fontSize = (22 * sy) + 'px';
-          // v23 Bug #2: debug log (用户手机看不到时截屏发我看)
-          console.log('[xj-pwd] positioned:', {
-            left: input.style.left,
-            top: input.style.top,
-            width: input.style.width,
-            height: input.style.height,
-            rect: { x: rect.left, y: rect.top, w: cw, h: ch },
-            scale: { sx: sx, sy: sy },
-          });
-        } catch (e) {
-          console.error('[xj-pwd] positionInput error:', e);
-        }
-      };
-      // v23 Bug #2: RAF + delay 双保险 - FIT 模式首帧 canvas 尺寸可能还没好
-      positionInput();
-      requestAnimationFrame(function () { positionInput(); });
-      setTimeout(function () { positionInput(); }, 50);
-      setTimeout(function () { positionInput(); }, 250);
-      window.addEventListener('resize', positionInput);
-      window.addEventListener('orientationchange', positionInput);
-      // v23 Bug #2: 监听 iOS 键盘弹起/收起 (visualViewport.resize 在 iOS Safari 触发)
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', positionInput);
-        window.visualViewport.addEventListener('scroll', positionInput);
-      }
+      // 按钮行
+      var btnRow = document.createElement('div');
+      btnRow.style.cssText = [
+        'display:flex', 'gap:12px', 'justify-content:center',
+      ].join(';');
 
-      document.body.appendChild(input);
-      // v23 Bug #2: 延迟 focus 防止 iOS Safari 在 modal 还没渲染完时抢焦点
-      // 3 次重试, 覆盖 iOS 慢启动场景
-      var focusAttempts = 0;
-      var tryFocus = function () {
-        focusAttempts++;
-        try {
-          input.focus({ preventScroll: true });
-          console.log('[xj-pwd] focused, attempt=' + focusAttempts);
-        } catch (e) {
-          console.warn('[xj-pwd] focus failed attempt=' + focusAttempts + ':', e.message);
-        }
-        if (focusAttempts < 3) {
-          setTimeout(tryFocus, [100, 300, 600][focusAttempts]);
-        }
-      };
-      setTimeout(tryFocus, 100);
+      // 确认按钮 (绿色)
+      var submitBtn = document.createElement('button');
+      submitBtn.type = 'button';
+      submitBtn.className = 'xj-pwd-submit';
+      submitBtn.textContent = '确认';
+      submitBtn.style.cssText = [
+        'flex:1', 'max-width:200px',
+        'height:48px',
+        'border:2px solid #1B5E20', 'border-radius:8px',
+        'background:#2E7D32', 'color:#FFFFFF',
+        'font-size:18px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(submitBtn);
 
-      // 错误提示 (默认隐藏)
-      var errText = this.add.text(640, 440, '', {
-        fontSize: '16px', color: '#C62828', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(2002);
+      // 取消按钮 (灰色)
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'xj-pwd-cancel';
+      cancelBtn.textContent = '取消';
+      cancelBtn.style.cssText = [
+        'flex:1', 'max-width:200px',
+        'height:48px',
+        'border:2px solid #424242', 'border-radius:8px',
+        'background:#757575', 'color:#FFFFFF',
+        'font-size:18px', 'font-weight:bold',
+        'cursor:pointer',
+      ].join(';');
+      btnRow.appendChild(cancelBtn);
 
-      // "确认"按钮
-      var submitW = 140, submitH = 48;
-      var submitX = 640, submitY = 480;
-      var submitBg = this.add.rectangle(submitX, submitY, submitW, submitH, 0x2E7D32, 1)
-        .setStrokeStyle(3, 0x1B5E20, 1)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(2002);
-      var submitText = this.add.text(submitX, submitY, '确认', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(2003);
+      card.appendChild(btnRow);
+      root.appendChild(card);
+      document.body.appendChild(root);
 
-      // "取消"按钮
-      var cancelX = 470, cancelY = 480;
-      var cancelBg = this.add.rectangle(cancelX, cancelY, submitW, submitH, 0x757575, 1)
-        .setStrokeStyle(3, 0x424242, 1)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(2002);
-      var cancelText = this.add.text(cancelX, cancelY, '取消', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(2003);
-
+      // 关闭函数 — v24 Bug #2f: 委托给 scene._hidePasswordPrompt 恢复 dpad
       var closeModal = function () {
-        // v20 Bug #4 修复: dim 在 v19 中被注释掉了 (line 2066), closeModal 还在用 dim.destroy() → ReferenceError
-        // 改成 typeof 防御 + 直接销毁可视元素 (card/title/hint/submitBg/submitText/cancelBg/cancelText/errText/input)
-        if (typeof dim !== 'undefined' && dim && typeof dim.destroy === 'function') {
-          try { dim.destroy(); } catch (e) {}
+        var scene = root._scene;
+        if (scene && typeof scene._hidePasswordPrompt === 'function') {
+          scene._hidePasswordPrompt();
+        } else {
+          // 兜底 (scene 引用未设置时)
+          var modal = document.getElementById('xj-pwd-modal');
+          if (modal) modal.style.display = 'none';
         }
-        try { card.destroy(); } catch (e) {}
-        try { title.destroy(); } catch (e) {}
-        try { hint.destroy(); } catch (e) {}
-        try { submitBg.destroy(); } catch (e) {}
-        try { submitText.destroy(); } catch (e) {}
-        try { cancelBg.destroy(); } catch (e) {}
-        try { cancelText.destroy(); } catch (e) {}
-        try { errText.destroy(); } catch (e) {}
-        // v23 Bug #2: 清理 resize 监听器, 防止内存泄漏
-        if (typeof positionInput === 'function') {
-          try { window.removeEventListener('resize', positionInput); } catch (e) {}
-          try { window.removeEventListener('orientationchange', positionInput); } catch (e) {}
-          // v23 Bug #2: 清理 visualViewport 监听
-          if (window.visualViewport) {
-            try { window.visualViewport.removeEventListener('resize', positionInput); } catch (e) {}
-            try { window.visualViewport.removeEventListener('scroll', positionInput); } catch (e) {}
-          }
-        }
-        if (input && input.parentNode) input.parentNode.removeChild(input);
       };
 
+      // 错误显示函数
+      var showErr = function (msg) {
+        if (!msg) {
+          err.style.display = 'none';
+          err.textContent = '';
+        } else {
+          err.style.display = 'block';
+          err.textContent = msg;
+        }
+      };
+
+      // 提交逻辑
       var doSubmit = function () {
         var pwd = input.value;
         if (pwd === '20230205') {
-          window.playXinjiangSfx('voyage', 0.6);
-          closeModal();
+          try { window.playXinjiangSfx('voyage', 0.6); } catch (e) {}
+          // v24: 从 root (factory 局部) 取 scene, 而不是不存在的 modal 变量
+          var scene = root._scene;
           // webhook: 密码正确
-          self._notifyEasterEgg('password_correct', '8 位密码输入正确');
-          // v22 Bug #5: 彩蛋飞书通知 (level=4 因为彩蛋仍属关 4 流程, amount=520)
-          // 先发 webhook, 然后弹「¥520 奖励到账」modal, 用户点确认后再显示信件
+          if (scene && typeof scene._notifyEasterEgg === 'function') {
+            scene._notifyEasterEgg('password_correct', '8 位密码输入正确');
+          }
+          // v22/v24: 彩蛋飞书通知 (level=4 amount=520)
           try {
             fetch('/api/game/reward/claim', {
               method: 'POST',
@@ -2330,27 +2348,44 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
               }),
             }).catch(function() {});
           } catch (e) {}
-          // v22 Bug #5: 先弹「¥520 奖励到账」modal
-          self._showReward(520, function () {
-            // 用户点确认后再显示信件
-            self._showLetter();
-          });
+          closeModal();
+          // 显示奖励 modal + 信件
+          if (scene && typeof scene._showReward === 'function') {
+            scene._showReward(520, function () {
+              scene._showLetter();
+            });
+          }
         } else {
-          window.playXinjiangSfx('button', 0.5);
-          errText.setText('❌ 密码错误，请重试 (提示：8 位数纪念日)');
+          try { window.playXinjiangSfx('button', 0.5); } catch (e) {}
+          showErr('❌ 密码错误，请重试 (提示：8 位数纪念日)');
           input.value = '';
-          input.focus();
+          input.focus({ preventScroll: true });
         }
       };
 
-      submitBg.on('pointerdown', function () { try { window.playXinjiangSfx('button', 0.4); } catch (e) {} doSubmit(); });
-      cancelBg.on('pointerdown', function () {
-        window.playXinjiangSfx('click', 0.3);
+      // 按钮 click handler
+      submitBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { window.playXinjiangSfx('button', 0.4); } catch (err) {}
+        doSubmit();
+      });
+      cancelBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { window.playXinjiangSfx('click', 0.3); } catch (err) {}
         closeModal();
       });
+
+      // Enter 提交
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') doSubmit();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          doSubmit();
+        }
       });
+
+      return root;
     },
 
     // v22 Bug #5: 奖励到账 modal (密码成功后, 显示信件之前)
