@@ -2819,13 +2819,30 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
   var game = new Phaser.Game(config);
   if (typeof window !== 'undefined') window.__xinjiangGame = game;
 
-  // 全屏按钮
+  // v25.6: 全屏按钮 (DOM API 替 Phaser scale, 兼容 iOS Safari)
   var fsBtn = document.getElementById('xinjiang-fullscreen');
   if (fsBtn) {
-    fsBtn.addEventListener('click', function () {
-      if (game.scale.isFullscreen) game.scale.stopFullscreen();
-      else game.scale.startFullscreen();
-    });
+    var toggleXjFs = function () {
+      try {
+        var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        if (!isFs) {
+          var el = document.documentElement;
+          var req = el.requestFullscreen || el.webkitRequestFullscreen;
+          if (req) {
+            var p = req.call(el);
+            if (p && typeof p.catch === 'function') p.catch(function () {});
+          }
+        } else {
+          var exit = document.exitFullscreen || document.webkitExitFullscreen;
+          if (exit) {
+            var p2 = exit.call(document);
+            if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+          }
+        }
+      } catch (e) {}
+    };
+    fsBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleXjFs(); });
+    fsBtn.addEventListener('pointerup', function (e) { e.preventDefault(); e.stopPropagation(); toggleXjFs(); });
   }
 
   // 竖屏提示

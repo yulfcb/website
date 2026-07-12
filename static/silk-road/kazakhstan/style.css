@@ -40,6 +40,9 @@ html, body {
   cursor: pointer;
   z-index: 1000;
   transition: all 0.2s;
+  /* v25.6: 禁掉 iOS Safari 300ms double-tap delay */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #kazakhstan-fullscreen:hover {

@@ -53,6 +53,45 @@
 
   <script>
     (function () {
+      // v25.6: 全屏按钮 (DOM 兜底, 跟 qatar/iran 一致)
+      var fsBtn = document.getElementById('turkey-fullscreen');
+      var fsIcon = fsBtn ? fsBtn.querySelector('.qtr-fs-icon') : null;
+      var fsLabel = fsBtn ? fsBtn.querySelector('.qtr-fs-label') : null;
+      var updateFs = function () {
+        var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        if (fsIcon) fsIcon.textContent = isFs ? '✕' : '⛶';
+        if (fsLabel) fsLabel.textContent = isFs ? '退出' : '全屏';
+      };
+      var toggleFs = function () {
+        try {
+          var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+          if (!isFs) {
+            var el = document.documentElement;
+            var req = el.requestFullscreen || el.webkitRequestFullscreen;
+            if (req) {
+              var p = req.call(el);
+              if (p && typeof p.catch === 'function') p.catch(function () {});
+            }
+          } else {
+            var exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exit) {
+              var p2 = exit.call(document);
+              if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+            }
+          }
+        } catch (e) {}
+      };
+      if (fsBtn) {
+        fsBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleFs(); });
+        // iOS Safari 兜底: pointerup 也触发
+        fsBtn.addEventListener('pointerup', function (e) {
+          e.preventDefault(); e.stopPropagation(); toggleFs();
+        });
+      }
+      document.addEventListener('fullscreenchange', updateFs);
+      document.addEventListener('webkitfullscreenchange', updateFs);
+      updateFs();
+
       // 竖屏提示逻辑 (跟 qatar 一致)
       function checkOrientation() {
         var lock = document.getElementById('orientation-lock');

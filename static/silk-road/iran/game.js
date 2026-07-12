@@ -2278,25 +2278,30 @@
         if (fsIcon) fsIcon.textContent = isFs ? '✕' : '⛶';
         if (fsLabel) fsLabel.textContent = isFs ? '退出' : '全屏';
       };
-      if (fsBtn) {
-        fsBtn.addEventListener('click', function () {
+var toggleFs = function () {
+        try {
           var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-          try {
-            if (!isFs) {
-              var el = document.documentElement;
-              var req = el.requestFullscreen || el.webkitRequestFullscreen;
-              if (req) {
-                var p = req.call(el);
-                if (p && typeof p.catch === 'function') p.catch(function () {});
-              }
-            } else {
-              var exit = document.exitFullscreen || document.webkitExitFullscreen;
-              if (exit) {
-                var p2 = exit.call(document);
-                if (p2 && typeof p.catch === 'function') p2.catch(function () {});
-              }
+          if (!isFs) {
+            var el = document.documentElement;
+            var req = el.requestFullscreen || el.webkitRequestFullscreen;
+            if (req) {
+              var p = req.call(el);
+              if (p && typeof p.catch === 'function') p.catch(function () {});
             }
-          } catch (e) {}
+          } else {
+            var exit = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exit) {
+              var p2 = exit.call(document);
+              if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+            }
+          }
+        } catch (e) {}
+      };
+      if (fsBtn) {
+        fsBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleFs(); });
+        // v25.6: iOS Safari 兜底 pointerup
+        fsBtn.addEventListener('pointerup', function (e) {
+          e.preventDefault(); e.stopPropagation(); toggleFs();
         });
       }
       document.addEventListener('fullscreenchange', update);
