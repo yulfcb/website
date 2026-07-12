@@ -1,13 +1,37 @@
 // 新疆·天山滑雪 —— 关卡 4 游戏引擎
 //
-// v2 (2026-07-12) — 砍掉 ShoppingScene, 重点打磨滑雪剧情
+// v3 (2026-07-12) — biome 系统重构 + 5 种新疆主题奖品 + 45s 沉浸时长
 //
 // 流程: 哈萨克斯坦 → 进入新疆 (本场景) → 一路下滑到成都
-//   BootScene → SlidingScene (重点剧情: 15s 滑雪 + 飘雪 + 滑痕 + NPC) → DepartScene → /level/5
+//   BootScene → SlidingScene (4 段 biome + 5 种奖品) → DepartScene → /level/5
 //
 // 设计: 所有图形 Phaser Graphics 绘制, 不依赖外部图片
 //      复用 qatar 的 BGM/SFX 音频通道
 //      移动端兼容 (pointerdown/up + 虚拟方向键)
+//
+// biome 系统 (4 段, 共 ~5000 px 滚动):
+//   1. 🏔️ 雪山顶  (缓坡 0.3→0.5,  1200 px)
+//   2. 🌲 针叶林  (中坡 0.5→1.0,  1400 px)
+//   3. ❄️ 冰川    (陡坡 1.0→1.5,  1300 px)
+//   4. 🌾 山脚草原 (平缓 0.3→0.6, 1100 px)
+//
+// 5 种奖品:
+//   🍇 葡萄干  +10 分
+//   🍈 哈密瓜  +2s 时间
+//   🍢 羊肉串  5s shield (撞墙免疫)
+//   ❄️ 雪莲    5s magnet (奖品吸附)
+//   🫓 馕饼    3s slow  (速度 -50%)
+//
+// 速度公式:
+//   baseSpeed = 80 (用户反馈"不能跑太快")
+//   slopeBoost = currentSlope × 60   (缓坡 ~24, 陡坡 ~90)
+//   accelBoost = Δslope × 30         (坡度变化惯性)
+//   scrollSpeed = clamp(baseSpeed + slopeBoost + accelBoost, 40, 280)
+//
+// 视差 (3 层):
+//   far   × 0.2  (远景雪山/林海)
+//   mid   × 0.5  (中景山脊/树线)
+//   near  × 1.0  (近景地面纹理 + 障碍物/奖品)
 //
 // localStorage 写入 (通关时):
 //   silkroad_cleared_levels 追加 4
@@ -327,16 +351,19 @@
         } catch (e) { console.error('[xj] fallback scene.start threw:', e); }
       }, 1500);
     }
-  });// ============== SlidingScene (下滑场景 — 重点剧情) ==============
-  // 玩家自动从屏幕顶部向下滑行, 按 ← → 键左右移动, 避开松树/岩石, 15 秒内到屏幕底部 = 通关
-  // v2 新增: 开场山巅远眺 + 飘雪粒子 + 滑痕轨迹 + 友好 NPC
+  });// ============== SlidingScene (v3 — biome 系统 + 5 种奖品) ==============
+  // 玩家固定屏幕 1/3 (y=240), 4 段 biome 顺坡度加速下滑, 5 种新疆主题奖品,
+  // 3 层视差背景 (远景/中景/近景), 45s 沉浸通关
   var SlidingScene = new Phaser.Class({
     Extends: Phaser.Scene,
     initialize: function SlidingScene() { Phaser.Scene.call(this, { key: 'SlidingScene' }); },
     create: function () {
       var self = this;
       var config = window.XINJIANG_LEVEL.sliding;
+      var biomes = window.XINJIANG_LEVEL.biomes;
+      var prizes = window.XINJIANG_LEVEL.prizes;
 
+      // ===== 状态初始化 =====
       this.cameras.main.setBackgroundColor('#B3E5FC');
       this.state = 'SLIDING';  // SLIDING | WIN | FAIL
       this.startTime = Date.now();
@@ -344,35 +371,78 @@
 
       // 玩家
       this.playerX = config.initialX;
-      this.playerY = config.startY;
-      this.scrollY = 0;  // 滚动距离 (模拟下滑)
-      this.scrollSpeed = config.initialSpeed;
+      this.playerY = config.playerScreenY;  // 固定屏幕 1/3
+      this.scrollY = 0;                      // 累计滚动距离 (biome 进度)
+      this.scrollSpeed = config.baseSpeed;
+      this.lastSlope = 0;
 
-      // 障碍物数组
+      // Biome 状态
+      this.currentBiomeIdx = 0;
+      this.transitioningBiome = false;       // biome 切换淡入淡出中
+      this.transitionStart = 0;
+
+      // 数组
       this.obstacles = [];
-      this.lastObstacleTime = Date.now();
-
-      // 滑痕轨迹数组 (v2 新增)
+      this.prizes = [];
       this.trails = [];
+      this.lastObstacleTime = Date.now();
+      this.lastPrizeTime = Date.now();
       this.lastTrailTime = Date.now();
 
-      // 背景绘制
-      this._drawBackground();
+      // 视差滚动偏移
+      this.farScrollOffset = 0;
+      this.midScrollOffset = 0;
+      this.nearScrollOffset = 0;
 
-      // v2: 开场山巅远眺 (0.8s fade in + fade out)
-      this._playIntro();// 玩家容器
+      // 道具计数 / 分数
+      this.score = 0;
+      this.prizeCount = {};                 // { grape: 3, melon: 1, ... }
+      prizes.forEach(function (p) { self.prizeCount[p.id] = 0; });
+
+      // 道具效果 (timestamp 到期)
+      this.shieldUntil = 0;
+      this.magnetUntil = 0;
+      this.slowUntil = 0;
+
+      // 撞墙次数
+      this.crashCount = 0;
+      this.maxCrashes = config.maxCrashes;
+
+      // ===== 3 层视差 Graphics =====
+      // 远景 (depth 5) - 雪山/林海/冰山轮廓 (慢速 0.2×)
+      this.farLayer = this.add.graphics();
+      this.farLayer.setDepth(5);
+      // 中景 (depth 10) - 山脊/树线/冰裂缝 (中速 0.5×)
+      this.midLayer = this.add.graphics();
+      this.midLayer.setDepth(10);
+      // 近景背景 (depth 15) - 地面纹理/雪线/草地 (全速 1.0×)
+      this.nearBgLayer = this.add.graphics();
+      this.nearBgLayer.setDepth(15);
+      // 起点旗 / 终点旗 (固定装饰, 不滚动)
+      this._drawStaticMarkers();
+
+      // 第一段 biome 背景
+      this._redrawLayers();
+
+      // ===== 飘雪粒子 (depth 25) =====
+      this._initSnowParticles();
+
+      // ===== 开场山巅远眺 =====
+      this._playIntro();
+
+      // ===== 玩家容器 (depth 50) =====
       this.playerContainer = this.add.container(this.playerX, this.playerY);
       this.playerContainer.setDepth(50);
       this._drawPlayer();
 
-      // UI
+      // ===== UI (HUD 顶栏) =====
       this._createUI();
 
-      // 虚拟方向键
+      // ===== 虚拟方向键 (depth 500) =====
       this.keys = { left: false, right: false };
       this._createJoystick();
 
-      // 键盘监听
+      // ===== 键盘监听 =====
       var onKeyDown = function (k) { return function () { self.keys[k] = true; }; };
       var onKeyUp = function (k) { return function () { self.keys[k] = false; }; };
       this.input.keyboard.on('keydown-LEFT', onKeyDown('left'));
@@ -384,15 +454,15 @@
       this.input.keyboard.on('keyup-A', onKeyUp('left'));
       this.input.keyboard.on('keyup-D', onKeyUp('right'));
 
-      // 提示
-      this.add.text(640, 80, '🎯 用 ← → 键躲开松树岩石, 15 秒内滑到山脚!', {
+      // ===== 提示 =====
+      this.add.text(640, 80, '🎯 用 ← → 键躲开障碍, 吃奖品获加成, 45 秒内到达山脚!', {
         fontSize: '16px', color: '#0D47A1', fontStyle: 'bold',
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         padding: { x: 12, y: 6 },
-      }).setOrigin(0.5).setDepth(100);// v2: 飘雪粒子系统 (Phaser Graphics particles)
-      this._initSnowParticles();
+      }).setOrigin(0.5).setDepth(100);
 
-      // 更新循环
+      // ===== 更新循环 =====
+      this._lastUpdateTime = Date.now();
       this.time.addEvent({
         delay: 16,
         loop: true,
@@ -401,12 +471,381 @@
       });
     },
 
-    // ===== v2: 开场山巅远眺 =====
+    // ============================================================
+    //  视差背景层 (3 层, 每帧重绘 + biome 切换时重绘)
+    // ============================================================
+
+    // 固定装饰 (起点旗 / 终点旗 / 雪线) - 不滚动
+    _drawStaticMarkers: function () {
+      var markerGfx = this.add.graphics();
+      markerGfx.setDepth(12);
+
+      // 起点旗 (左上, y=60)
+      markerGfx.fillStyle(0x1565C0, 1);
+      markerGfx.fillRect(20, 60, 6, 60);
+      markerGfx.fillTriangle(26, 60, 60, 75, 26, 90);
+
+      // 终点旗 (右下, y=680)
+      markerGfx.fillStyle(0xC62828, 1);
+      markerGfx.fillRect(CANVAS_W - 26, CANVAS_H - 60, 6, 60);
+      markerGfx.fillTriangle(CANVAS_W - 20, CANVAS_H - 60, CANVAS_W - 60, CANVAS_H - 45, CANVAS_W - 20, CANVAS_H - 30);
+
+      // 山脚草原的水平线 (玩家脚下的"地面参考线")
+      markerGfx.lineStyle(1, 0xFFFFFF, 0.4);
+      markerGfx.lineBetween(0, this.playerY + 40, CANVAS_W, this.playerY + 40);
+    },
+
+    // 重绘 3 层 (biome 切换或每帧滚动后)
+    _redrawLayers: function () {
+      var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
+      // 暂时禁用层更新以避免闪烁
+      this._drawFarLayer(this.farLayer, biome, this.farScrollOffset);
+      this._drawMidLayer(this.midLayer, biome, this.midScrollOffset);
+      this._drawNearBgLayer(this.nearBgLayer, biome, this.nearScrollOffset);
+    },
+
+    // 远景层 (depth 5) - 视差 0.2×
+    // 4 种 biome 不同形状: 雪山轮廓 / 森林剪影 / 冰山轮廓 / 远山轮廓
+    _drawFarLayer: function (g, biome, offset) {
+      g.clear();
+      var LAYER_H = 720;
+      var modOff = ((offset % LAYER_H) + LAYER_H) % LAYER_H;
+
+      // 根据 biome id 选形状
+      var shapes = [];
+      if (biome.id === 'snow_peak') {
+        // 远景雪山轮廓 (3 座, 浅灰蓝)
+        shapes = [
+          { kind: 'triangle', x: 200,  baseY: -40, w: 380, h: 180, color: biome.farColor, alpha: 0.7 },
+          { kind: 'triangle', x: 640,  baseY: -60, w: 480, h: 220, color: biome.farColor, alpha: 0.7 },
+          { kind: 'triangle', x: 1080, baseY: -30, w: 420, h: 190, color: biome.farColor, alpha: 0.7 },
+          { kind: 'triangle', x: 400,  baseY:  60, w: 320, h: 140, color: biome.farColor2, alpha: 0.5 },
+          { kind: 'triangle', x: 900,  baseY:  80, w: 360, h: 160, color: biome.farColor2, alpha: 0.5 },
+        ];
+      } else if (biome.id === 'pine_forest') {
+        // 远景森林 (深绿三角 + 圆形树冠)
+        shapes = [
+          { kind: 'triangle', x: 150,  baseY: -40, w: 200, h: 160, color: biome.farColor, alpha: 0.85 },
+          { kind: 'triangle', x: 350,  baseY: -50, w: 220, h: 170, color: biome.farColor, alpha: 0.85 },
+          { kind: 'triangle', x: 560,  baseY: -30, w: 200, h: 150, color: biome.farColor2, alpha: 0.9 },
+          { kind: 'triangle', x: 780,  baseY: -40, w: 240, h: 170, color: biome.farColor, alpha: 0.85 },
+          { kind: 'triangle', x: 1000, baseY: -20, w: 200, h: 150, color: biome.farColor2, alpha: 0.9 },
+          { kind: 'triangle', x: 1200, baseY: -40, w: 220, h: 170, color: biome.farColor, alpha: 0.85 },
+        ];
+      } else if (biome.id === 'glacier') {
+        // 远景冰山 (浅蓝, 半透明, 棱角)
+        shapes = [
+          { kind: 'triangle', x: 220,  baseY: -50, w: 360, h: 180, color: biome.farColor, alpha: 0.75 },
+          { kind: 'triangle', x: 700,  baseY: -40, w: 420, h: 200, color: biome.farColor, alpha: 0.75 },
+          { kind: 'triangle', x: 1100, baseY: -60, w: 380, h: 190, color: biome.farColor2, alpha: 0.65 },
+          { kind: 'triangle', x: 450,  baseY:  50, w: 280, h: 130, color: biome.farColor2, alpha: 0.55 },
+        ];
+      } else if (biome.id === 'grassland') {
+        // 远景雪山 + 草原起伏
+        shapes = [
+          { kind: 'triangle', x: 200,  baseY: -40, w: 400, h: 160, color: biome.farColor, alpha: 0.55 },
+          { kind: 'triangle', x: 700,  baseY: -60, w: 460, h: 180, color: biome.farColor, alpha: 0.55 },
+          { kind: 'triangle', x: 1100, baseY: -30, w: 380, h: 150, color: biome.farColor2, alpha: 0.45 },
+        ];
+      }
+
+      // 绘制 (双份: 主 + 偏移 LAYER_H 上方, 处理 wrap)
+      for (var i = 0; i < shapes.length; i++) {
+        var s = shapes[i];
+        for (var k = 0; k < 2; k++) {
+          var y = s.baseY + modOff - k * LAYER_H;
+          if (y < -300 || y > LAYER_H + 100) continue;
+          g.fillStyle(s.color, s.alpha);
+          if (s.kind === 'triangle') {
+            g.fillTriangle(s.x - s.w / 2, y + s.h, s.x, y, s.x + s.w / 2, y + s.h);
+          }
+        }
+      }
+    },
+
+    // 中景层 (depth 10) - 视差 0.5×
+    _drawMidLayer: function (g, biome, offset) {
+      g.clear();
+      var LAYER_H = 720;
+      var modOff = ((offset % LAYER_H) + LAYER_H) % LAYER_H;
+      var shapes = [];
+      if (biome.id === 'snow_peak') {
+        // 中景山脊 (灰色)
+        shapes = [
+          { kind: 'triangle', x: 100,  baseY: 180, w: 240, h: 100, color: biome.midColor, alpha: 0.6 },
+          { kind: 'triangle', x: 400,  baseY: 200, w: 280, h: 120, color: biome.midColor, alpha: 0.6 },
+          { kind: 'triangle', x: 750,  baseY: 190, w: 260, h: 110, color: biome.midColor, alpha: 0.6 },
+          { kind: 'triangle', x: 1100, baseY: 210, w: 300, h: 130, color: biome.midColor, alpha: 0.6 },
+        ];
+      } else if (biome.id === 'pine_forest') {
+        // 中景松树 (深绿)
+        shapes = [
+          { kind: 'triangle', x: 80,   baseY: 200, w: 100, h: 130, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 260,  baseY: 220, w: 110, h: 140, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 460,  baseY: 200, w: 100, h: 130, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 660,  baseY: 220, w: 110, h: 140, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 860,  baseY: 200, w: 100, h: 130, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 1060, baseY: 220, w: 110, h: 140, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 1240, baseY: 200, w: 100, h: 130, color: biome.midColor, alpha: 0.85 },
+        ];
+      } else if (biome.id === 'glacier') {
+        // 中景冰裂缝 (深蓝条)
+        shapes = [
+          { kind: 'rect', x: 200,  baseY: 220, w: 6,   h: 80, color: biome.midColor, alpha: 0.7 },
+          { kind: 'rect', x: 500,  baseY: 230, w: 8,   h: 60, color: biome.midColor, alpha: 0.7 },
+          { kind: 'rect', x: 850,  baseY: 220, w: 6,   h: 80, color: biome.midColor, alpha: 0.7 },
+          { kind: 'rect', x: 1150, baseY: 230, w: 8,   h: 70, color: biome.midColor, alpha: 0.7 },
+          { kind: 'triangle', x: 350,  baseY: 180, w: 200, h: 100, color: biome.farColor2, alpha: 0.4 },
+          { kind: 'triangle', x: 950,  baseY: 200, w: 220, h: 110, color: biome.farColor2, alpha: 0.4 },
+        ];
+      } else if (biome.id === 'grassland') {
+        // 中景草原 (绿色小山丘)
+        shapes = [
+          { kind: 'triangle', x: 150,  baseY: 220, w: 280, h: 80, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 500,  baseY: 230, w: 300, h: 90, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 900,  baseY: 220, w: 280, h: 80, color: biome.midColor, alpha: 0.85 },
+          { kind: 'triangle', x: 1200, baseY: 230, w: 280, h: 90, color: biome.midColor, alpha: 0.85 },
+        ];
+      }
+      for (var i = 0; i < shapes.length; i++) {
+        var s = shapes[i];
+        for (var k = 0; k < 2; k++) {
+          var y = s.baseY + modOff - k * LAYER_H;
+          if (y < -200 || y > LAYER_H + 100) continue;
+          g.fillStyle(s.color, s.alpha);
+          if (s.kind === 'triangle') {
+            g.fillTriangle(s.x - s.w / 2, y + s.h, s.x, y, s.x + s.w / 2, y + s.h);
+          } else if (s.kind === 'rect') {
+            g.fillRect(s.x - s.w / 2, y, s.w, s.h);
+          }
+        }
+      }
+    },
+
+    // 近景背景 (depth 15) - 视差 1.0× (全速)
+    _drawNearBgLayer: function (g, biome, offset) {
+      g.clear();
+      var LAYER_H = 720;
+      var modOff = ((offset % LAYER_H) + LAYER_H) % LAYER_H;
+
+      // 地面基础色 (玩家脚下到屏幕底)
+      g.fillStyle(biome.nearColor, 0.8);
+      g.fillRect(0, this.playerY + 40, CANVAS_W, CANVAS_H - (this.playerY + 40));
+
+      // biome 主题的近景纹理
+      var stripes = [];
+      if (biome.id === 'snow_peak') {
+        // 雪地纹理: 横向白条
+        for (var i = 0; i < 8; i++) {
+          stripes.push({ y: 320 + i * 50, h: 4, color: 0xFFFFFF, alpha: 0.5 });
+        }
+      } else if (biome.id === 'pine_forest') {
+        // 雪地 + 棕色松针
+        for (var j = 0; j < 6; j++) {
+          stripes.push({ y: 320 + j * 60, h: 3, color: 0xFFFFFF, alpha: 0.4 });
+          stripes.push({ y: 340 + j * 60, h: 2, color: 0x6D4C2A, alpha: 0.5 });
+        }
+      } else if (biome.id === 'glacier') {
+        // 冰面裂纹 (浅蓝细条)
+        for (var m = 0; m < 10; m++) {
+          stripes.push({ y: 300 + m * 45, h: 2, color: biome.midColor, alpha: 0.55 });
+        }
+      } else if (biome.id === 'grassland') {
+        // 草地竖条 (深绿)
+        for (var n = 0; n < 30; n++) {
+          stripes.push({ y: 320 + n * 14, h: 8, color: 0x33691E, alpha: 0.45, kind: 'vertical' });
+        }
+      }
+      for (var p = 0; p < stripes.length; p++) {
+        var s = stripes[p];
+        var y = s.y + modOff;
+        while (y > LAYER_H + 10) y -= LAYER_H;
+        while (y < -20) y += LAYER_H;
+        g.fillStyle(s.color, s.alpha);
+        if (s.kind === 'vertical') {
+          for (var gx = 0; gx < CANVAS_W; gx += 40 + (p % 3) * 5) {
+            g.fillRect(gx, y, 3, s.h);
+          }
+        } else {
+          g.fillRect(0, y, CANVAS_W, s.h);
+        }
+      }
+    },
+
+    // ============================================================
+    //  Biome 系统 + 连续坡度
+    // ============================================================
+
+    // 获取当前 biome 在 scrollY 处的索引
+    _getBiomeInfo: function () {
+      var biomes = window.XINJIANG_LEVEL.biomes;
+      var accum = 0;
+      for (var i = 0; i < biomes.length; i++) {
+        if (this.scrollY < accum + biomes[i].segmentLength) {
+          return {
+            idx: i,
+            progress: (this.scrollY - accum) / biomes[i].segmentLength,
+            scrollInBiome: this.scrollY - accum,
+            biome: biomes[i],
+          };
+        }
+        accum += biomes[i].segmentLength;
+      }
+      var last = biomes.length - 1;
+      return { idx: last, progress: 1, scrollInBiome: biomes[last].segmentLength, biome: biomes[last] };
+    },
+
+    // 当前 biome 的坡度 (在 [slopeMin, slopeMax] 间线性插值)
+    _getCurrentSlope: function () {
+      var info = this._getBiomeInfo();
+      var b = info.biome;
+      return b.slopeMin + (b.slopeMax - b.slopeMin) * info.progress;
+    },
+
+    // 总滚动距离 (通关条件)
+    _getTotalScrollLength: function () {
+      var biomes = window.XINJIANG_LEVEL.biomes;
+      var total = 0;
+      for (var i = 0; i < biomes.length; i++) total += biomes[i].segmentLength;
+      return total;
+    },
+
+    // biome 切换检测 + 淡入淡出
+    _checkBiomeTransition: function () {
+      var info = this._getBiomeInfo();
+      if (info.idx !== this.currentBiomeIdx) {
+        // biome 切换!
+        this.currentBiomeIdx = info.idx;
+        this._onBiomeEnter(info.biome);
+      }
+    },
+
+    _onBiomeEnter: function (biome) {
+      var self = this;
+      // 0.5s 淡入淡出遮罩
+      var fadeDur = window.XINJIANG_LEVEL.sliding.biomeTransitionDuration;
+      this.transitioningBiome = true;
+      var overlay = this.add.rectangle(640, 360, CANVAS_W, CANVAS_H, 0xFFFFFF, 0)
+        .setDepth(800);
+      this.tweens.add({
+        targets: overlay,
+        alpha: { 0: 0.7 },
+        duration: fadeDur / 2,
+        yoyo: true,
+        onComplete: function () {
+          overlay.destroy();
+          self.transitioningBiome = false;
+        }
+      });
+      // 重绘 3 层 (新 biome 形状)
+      this._redrawLayers();
+      // 顶部 toast 提示
+      this._showToast('🏔️ 进入 ' + biome.name, 0x1565C0);
+      window.playXinjiangSfx('exchange', 0.3);
+    },
+
+    // ============================================================
+    //  飘雪粒子 (v2 保留, 在 biome 1/2/3 都生成, biome 4 不生成)
+    // ============================================================
+    _initSnowParticles: function () {
+      this._snowParticles = [];
+      this._lastSnowSpawn = Date.now();
+      this._snowGfx = this.add.graphics();
+      this._snowGfx.setDepth(25);
+    },
+
+    _spawnSnowParticle: function () {
+      var config = window.XINJIANG_LEVEL.sliding;
+      var speedFactor = Math.max(0.6, this.scrollSpeed / config.baseSpeed);
+      var p = {
+        x: Math.random() * CANVAS_W,
+        y: -10 - Math.random() * 40,
+        vy: (60 + Math.random() * 60) * speedFactor,
+        vx: (Math.random() - 0.5) * 30,
+        size: 4 + Math.random() * 6,
+        alpha: 0.5 + Math.random() * 0.4,
+        shape: Math.random() < 0.4 ? 'circle' : 'diamond',
+      };
+      this._snowParticles.push(p);
+    },
+
+    _updateSnowParticles: function () {
+      if (!this._snowGfx) return;
+      var now = Date.now();
+      var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
+
+      // biome 4 草原没有雪
+      var snowEnabled = biome.id !== 'grassland';
+
+      // 1. 生成新粒子
+      if (snowEnabled) {
+        var interval = window.XINJIANG_LEVEL.sliding.snowParticleRate;
+        if (now - this._lastSnowSpawn > interval) {
+          this._spawnSnowParticle();
+          this._lastSnowSpawn = now;
+        }
+      }
+
+      // 2. 更新位置 + 3. 绘制
+      this._snowGfx.clear();
+      for (var i = this._snowParticles.length - 1; i >= 0; i--) {
+        var p = this._snowParticles[i];
+        p.y += p.vy * 0.016;
+        p.x += p.vx * 0.016;
+        if (p.y > CANVAS_H + 20 || p.x < -20 || p.x > CANVAS_W + 20) {
+          this._snowParticles.splice(i, 1);
+          continue;
+        }
+        // 草原 biome 雪花变透明
+        var a = snowEnabled ? p.alpha : p.alpha * 0.2;
+        this._snowGfx.fillStyle(0xFFFFFF, a);
+        if (p.shape === 'circle') {
+          this._snowGfx.fillCircle(p.x, p.y, p.size / 2);
+        } else {
+          this._snowGfx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
+      }
+    },
+
+    // ============================================================
+    //  滑痕轨迹 (v2 保留)
+    // ============================================================
+    _spawnTrail: function () {
+      var config = window.XINJIANG_LEVEL.sliding;
+      this.trails.push({
+        x: this.playerX,
+        y: this.playerY + 22,
+        size: 6 + Math.random() * 4,
+        bornAt: Date.now(),
+      });
+      if (this.trails.length > 40) this.trails.shift();
+    },
+
+    _updateTrails: function () {
+      if (!this.trails || this.trails.length === 0) return;
+      var fadeMs = window.XINJIANG_LEVEL.sliding.snowTrailFadeMs;
+      var now = Date.now();
+      if (!this._trailGfx) {
+        this._trailGfx = this.add.graphics();
+        this._trailGfx.setDepth(30);
+      }
+      this._trailGfx.clear();
+      for (var i = this.trails.length - 1; i >= 0; i--) {
+        var t = this.trails[i];
+        var age = now - t.bornAt;
+        if (age > fadeMs) { this.trails.splice(i, 1); continue; }
+        var alpha = (1 - age / fadeMs) * 0.7;
+        this._trailGfx.fillStyle(0xFFFFFF, alpha);
+        this._trailGfx.fillCircle(t.x, t.y, t.size / 2);
+      }
+    },
+
+    // ============================================================
+    //  开场山巅远眺 (v2 保留)
+    // ============================================================
     _playIntro: function () {
       var self = this;
       var introDur = window.XINJIANG_LEVEL.sliding.introDuration;
-
-      // 远景雪山轮廓 (临时)
       var farMtn = this.add.graphics();
       farMtn.setDepth(60);
       farMtn.fillStyle(0xFFFFFF, 0.6);
@@ -417,24 +856,20 @@
       farMtn.fillTriangle(0, 280, 200, 180, 400, 280);
       farMtn.fillTriangle(300, 280, 600, 160, 900, 280);
       farMtn.fillTriangle(800, 280, 1100, 200, 1280, 280);
-
-      // 标题文字
       var titleText = this.add.text(640, 360, '🏔️ 新疆·天山', {
         fontSize: '52px', color: '#0D47A1', fontStyle: 'bold',
         stroke: '#FFFFFF', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(150).setAlpha(0);
-
       var subtitleText = this.add.text(640, 420, '从山巅一路滑向成都', {
         fontSize: '20px', color: '#1565C0', fontStyle: 'italic',
         backgroundColor: 'rgba(255, 255, 255, 0.85)',
         padding: { x: 14, y: 6 },
-      }).setOrigin(0.5).setDepth(150).setAlpha(0);// Fade in (0 → 0.6s)
+      }).setOrigin(0.5).setDepth(150).setAlpha(0);
       this.tweens.add({
         targets: [farMtn, titleText, subtitleText],
         alpha: { 0: 1 },
         duration: introDur / 2,
         onComplete: function () {
-          // Fade out (0.6 → 0.8s)
           self.tweens.add({
             targets: [farMtn, titleText, subtitleText],
             alpha: 0,
@@ -447,157 +882,17 @@
           });
         }
       });
-
-      // 冻结玩家输入 + 不计时间, 直到 intro 结束
-      // 用 setTimeout (wall clock) 而非 this.time.delayedCall (Phaser clock 在 headless 可能慢)
       this._introLock = true;
       setTimeout(function () { self._introLock = false; }, introDur);
     },
 
-    // ===== v2: 飘雪粒子系统 =====
-    _initSnowParticles: function () {
-      var self = this;
-      this._snowParticles = [];
-      this._lastSnowSpawn = Date.now();
-
-      // 粒子容器 (Graphics, 性能好)
-      this._snowGfx = this.add.graphics();
-      this._snowGfx.setDepth(45);
-    },
-
-    _spawnSnowParticle: function () {
-      // 在屏幕顶部随机 x, 速度随玩家同步
-      var self = this;
-      var config = window.XINJIANG_LEVEL.sliding;
-      var speedFactor = Math.max(0.6, this.scrollSpeed / config.initialSpeed);
-      var p = {
-        x: Math.random() * CANVAS_W,
-        y: -10 - Math.random() * 40,
-        vy: (60 + Math.random() * 60) * speedFactor,
-        vx: (Math.random() - 0.5) * 30,
-        size: 4 + Math.random() * 6,
-        alpha: 0.5 + Math.random() * 0.4,
-        shape: Math.random() < 0.4 ? 'circle' : 'diamond',
-      };
-      this._snowParticles.push(p);
-    },_updateSnowParticles: function () {
-      if (!this._snowGfx) return;
-      var config = window.XINJIANG_LEVEL.sliding;
-
-      // 1. 生成新粒子 (终点附近变密)
-      var now = Date.now();
-      var progress = Math.min(1, this.scrollY / (config.finishY - config.startY));
-      var interval = config.snowParticleRate * (1 - progress * 0.4);  // 越往下越密
-      if (now - this._lastSnowSpawn > interval) {
-        this._spawnSnowParticle();
-        // 终点附近一次生 2 个
-        if (progress > 0.6 && Math.random() < 0.5) this._spawnSnowParticle();
-        this._lastSnowSpawn = now;
-      }
-
-      // 2. 更新位置 + 3. 绘制
-      this._snowGfx.clear();
-      for (var i = this._snowParticles.length - 1; i >= 0; i--) {
-        var p = this._snowParticles[i];
-        p.y += p.vy * 0.016;
-        p.x += p.vx * 0.016;
-        // 移除屏幕外的
-        if (p.y > CANVAS_H + 20 || p.x < -20 || p.x > CANVAS_W + 20) {
-          this._snowParticles.splice(i, 1);
-          continue;
-        }
-        this._snowGfx.fillStyle(0xFFFFFF, p.alpha);
-        if (p.shape === 'circle') {
-          this._snowGfx.fillCircle(p.x, p.y, p.size / 2);
-        } else {
-          this._snowGfx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-        }
-      }
-    },// ===== v2: 滑痕轨迹 (玩家身后 1.5s 衰减) =====
-    _spawnTrail: function () {
-      var config = window.XINJIANG_LEVEL.sliding;
-      this.trails.push({
-        x: this.playerX,
-        y: this.playerY + 22,  // 雪板位置
-        size: 6 + Math.random() * 4,
-        bornAt: Date.now(),
-      });
-      // 限制最大数量
-      if (this.trails.length > 40) this.trails.shift();
-    },
-
-    _updateTrails: function () {
-      if (!this.trails || this.trails.length === 0) return;
-      var config = window.XINJIANG_LEVEL.sliding;
-      var now = Date.now();
-      var fadeMs = config.snowTrailFadeMs;
-
-      // 在 background 上层 (depth 20) 绘制
-      if (!this._trailGfx) {
-        this._trailGfx = this.add.graphics();
-        this._trailGfx.setDepth(20);
-      }
-      this._trailGfx.clear();
-
-      for (var i = this.trails.length - 1; i >= 0; i--) {
-        var t = this.trails[i];
-        var age = now - t.bornAt;
-        if (age > fadeMs) {
-          this.trails.splice(i, 1);
-          continue;
-        }
-        var alpha = (1 - age / fadeMs) * 0.7;
-        this._trailGfx.fillStyle(0xFFFFFF, alpha);
-        this._trailGfx.fillCircle(t.x, t.y, t.size / 2);
-      }
-    },_drawBackground: function () {
-      this.bgGfx = this.add.graphics();
-
-      // 顶部雪山白 (固定)
-      this.bgGfx.fillStyle(0xFFFFFF, 1);
-      this.bgGfx.fillRect(0, 0, CANVAS_W, 280);
-
-      // 雪山轮廓 (起伏)
-      this.bgGfx.fillStyle(0xB0BEC5, 0.4);
-      this.bgGfx.fillTriangle(0, 280, 200, 80, 400, 280);
-      this.bgGfx.fillTriangle(300, 280, 600, 60, 900, 280);
-      this.bgGfx.fillTriangle(800, 280, 1100, 100, 1280, 280);
-
-      // 草原绿 (固定底部)
-      this.bgGfx.fillStyle(0x7CB342, 1);
-      this.bgGfx.fillRect(0, 280, CANVAS_W, 440);
-
-      // 草地纹理
-      this.bgGfx.fillStyle(0x558B2F, 0.5);
-      for (var i = 0; i < 60; i++) {
-        var x = Math.random() * CANVAS_W;
-        var y = 320 + Math.random() * 380;
-        this.bgGfx.fillRect(x, y, 20, 3);
-      }
-
-      // 雪线分隔
-      this.bgGfx.lineStyle(2, 0x90CAF9, 0.6);
-      this.bgGfx.lineBetween(0, 280, CANVAS_W, 280);
-
-      // 起点旗
-      this.bgGfx.fillStyle(0x1565C0, 1);
-      this.bgGfx.fillRect(20, 60, 6, 60);
-      this.bgGfx.fillTriangle(26, 60, 60, 75, 26, 90);
-
-      // 终点旗 (底部)
-      this.bgGfx.fillStyle(0xC62828, 1);
-      this.bgGfx.fillRect(CANVAS_W - 26, CANVAS_H - 60, 6, 60);
-      this.bgGfx.fillTriangle(CANVAS_W - 20, CANVAS_H - 60, CANVAS_W - 60, CANVAS_H - 45, CANVAS_W - 20, CANVAS_H - 30);
-    },_drawPlayer: function () {
+    // ============================================================
+    //  玩家 (雪板 + 角色)
+    // ============================================================
+    _drawPlayer: function () {
       this.playerContainer.removeAll(true);
-
-      // 雪板 emoji
-      var board = this.add.text(0, 18, '🎿', {
-        fontSize: '44px',
-      }).setOrigin(0.5);
+      var board = this.add.text(0, 18, '🎿', { fontSize: '44px' }).setOrigin(0.5);
       this.playerContainer.add(board);
-
-      // 角色 (在雪板上方)
       var avatarId = null;
       try { avatarId = localStorage.getItem('silkroad_avatar'); } catch (e) {}
       if (!avatarId) avatarId = 'malay';
@@ -605,46 +900,92 @@
       avatar.setScale(0.7);
       avatar.setPosition(0, -10);
       this.playerContainer.add(avatar);
+
+      // 道具效果指示器 (玩家头顶)
+      this._effectIndicator = this.add.text(0, -42, '', {
+        fontSize: '20px',
+      }).setOrigin(0.5);
+      this.playerContainer.add(this._effectIndicator);
     },
 
+    _updateEffectIndicator: function () {
+      if (!this._effectIndicator) return;
+      var now = Date.now();
+      var txt = '';
+      if (now < this.shieldUntil) txt += '🛡️';
+      if (now < this.magnetUntil) txt += '🧲';
+      if (now < this.slowUntil) txt += '🐢';
+      this._effectIndicator.setText(txt);
+    },
+
+    // ============================================================
+    //  HUD UI (顶栏 + 奖品计数 + 总分)
+    // ============================================================
     _createUI: function () {
       // 顶部 HUD 背景
       this.add.rectangle(640, 30, CANVAS_W, 60, 0x0D47A1, 0.85);
 
-      // 倒计时
-      this.timerText = this.add.text(180, 30, '⏱️ 15s', {
-        fontSize: '22px', color: '#FFFFFF', fontStyle: 'bold',
+      // 倒计时 (左上)
+      this.timerText = this.add.text(90, 30, '⏱️ 45s', {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5);
 
-      // 距离进度
-      this.progressText = this.add.text(420, 30, '📏 0m', {
-        fontSize: '18px', color: '#FFD98A', fontStyle: 'bold',
-      }).setOrigin(0.5);// 进度条背景
-      var barX = 700, barY = 30, barW = 380, barH = 18;
+      // 距离进度 (左中)
+      this.progressText = this.add.text(220, 30, '📏 0m', {
+        fontSize: '16px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      // 进度条
+      var barX = 480, barY = 30, barW = 320, barH = 16;
       this.add.rectangle(barX, barY, barW, barH, 0xFFFFFF, 0.3);
       this.progressBar = this.add.rectangle(barX - barW / 2, barY, 0, barH, 0x76FF03, 1)
         .setOrigin(0, 0.5);
 
-      // 撞墙次数
-      this.crashText = this.add.text(1100, 30, '💥 撞墙 0', {
-        fontSize: '16px', color: '#FFEB3B', fontStyle: 'bold',
+      // biome 指示 (中右)
+      this.biomeText = this.add.text(700, 30, '', {
+        fontSize: '14px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5);
-      this.crashCount = 0;
+
+      // 撞墙次数 (右上)
+      this.crashText = this.add.text(890, 30, '💥 0', {
+        fontSize: '14px', color: '#FFEB3B', fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      // 总分 (最右)
+      this.scoreText = this.add.text(1180, 30, '⭐ 0', {
+        fontSize: '20px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+
+      // 奖品计数行 (顶部 HUD 下, 第二行) — 5 个奖品 × 220 gap, 居中分布
+      var prizes = window.XINJIANG_LEVEL.prizes;
+      this._prizeTexts = {};
+      var prizeGap = 200;
+      var prizeStartX = (CANVAS_W - (prizes.length - 1) * prizeGap) / 2;
+      var sceneRef = this;
+      prizes.forEach(function (p, i) {
+        var tx = prizeStartX + i * prizeGap;
+        var txt = sceneRef.add.text(tx, 70, p.emoji + ' ' + p.name + ' 0', {
+          fontSize: '13px', color: '#FFFFFF', fontStyle: 'bold',
+          backgroundColor: '#' + p.color.toString(16).padStart(6, '0'),
+          padding: { x: 8, y: 3 },
+        }).setOrigin(0.5);
+        sceneRef._prizeTexts[p.id] = txt;
+      });
     },
 
+    // ============================================================
+    //  虚拟方向键 (左/右)
+    // ============================================================
     _createJoystick: function () {
       var self = this;
       this.joystickContainer = this.add.container(140, CANVAS_H - 100);
       this.joystickContainer.setAlpha(0.72);
       this.joystickContainer.setScale(0.7);
       this.joystickContainer.setDepth(500);
-
-      // 圆盘背景
       var dpadBg = this.add.graphics();
       dpadBg.fillStyle(0x0D47A1, 0.5);
       dpadBg.fillCircle(0, 0, 100);
       this.joystickContainer.add(dpadBg);
-
       var makeBtn = function (txt, dx, dy, key) {
         var bg = self.add.circle(dx, dy, 36, 0x0D47A1, 0.85)
           .setStrokeStyle(2, 0xB3E5FC, 0.7);
@@ -670,36 +1011,41 @@
       };
       makeBtn('◀', -65, 0, 'left');
       makeBtn('▶', 65, 0, 'right');
-    },// 生成障碍物 (权重随机 + 横向间距保证 + v2 NPC 类型)
-    _spawnObstacle: function () {
-      var config = window.XINJIANG_LEVEL;
-      var obstacles = config.obstacles;
+    },
 
-      // 权重随机
+    // ============================================================
+    //  障碍物 / 奖品生成 (权重随机 + 横向间距保证 + 当前 biome 限定)
+    // ============================================================
+    _weightedPick: function (items) {
       var totalW = 0;
-      for (var i = 0; i < obstacles.length; i++) totalW += obstacles[i].weight;
+      for (var i = 0; i < items.length; i++) totalW += items[i].weight;
       var r = Math.random() * totalW;
-      var chosen = obstacles[0];
-      for (var j = 0; j < obstacles.length; j++) {
-        r -= obstacles[j].weight;
-        if (r <= 0) { chosen = obstacles[j]; break; }
+      for (var j = 0; j < items.length; j++) {
+        r -= items[j].weight;
+        if (r <= 0) return items[j];
       }
+      return items[items.length - 1];
+    },
 
-      // 横向位置 (避免重叠)
-      var x;
-      var tries = 0;
-      do {
-        x = 80 + Math.random() * (CANVAS_W - 160);
-        tries++;
+    _pickFreeX: function (existing, minGap, tries) {
+      tries = tries || 8;
+      for (var t = 0; t < tries; t++) {
+        var x = 80 + Math.random() * (CANVAS_W - 160);
         var ok = true;
-        for (var k = 0; k < this.obstacles.length; k++) {
-          var o = this.obstacles[k];
-          if (Math.abs(o.x - x) < config.sliding.obstacleMinGap) { ok = false; break; }
+        for (var k = 0; k < existing.length; k++) {
+          if (Math.abs(existing[k].x - x) < minGap) { ok = false; break; }
         }
-        if (ok) break;
-      } while (tries < 8);
+        if (ok) return x;
+      }
+      // fallback: 在允许范围内取随机
+      return 80 + Math.random() * (CANVAS_W - 160);
+    },
 
-      // 障碍物初始 y = 屏幕顶部上方 80
+    _spawnObstacle: function () {
+      var config = window.XINJIANG_LEVEL.sliding;
+      var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
+      var chosen = this._weightedPick(biome.obstacles);
+      var x = this._pickFreeX(this.obstacles, config.obstacleMinGap);
       var ob = {
         id: chosen.id,
         emoji: chosen.emoji,
@@ -710,102 +1056,51 @@
           fontSize: chosen.size + 'px',
         }).setOrigin(0.5).setDepth(40),
       };
-      // NPC 加一圈光晕
       if (chosen.id === 'friendly_npc') {
         ob.glow = this.add.circle(x, -80, chosen.size * 0.8, 0xFFD54F, 0.35)
           .setDepth(39);
       }
       this.obstacles.push(ob);
-    },update: function () {
-      if (this.state !== 'SLIDING') return;
-      if (this._introLock) return;  // v2: 开场期间不更新
+    },
 
+    _spawnPrize: function () {
       var config = window.XINJIANG_LEVEL.sliding;
+      var prizes = window.XINJIANG_LEVEL.prizes;
+      var chosen = this._weightedPick(prizes);
+      // 奖品跟障碍物 + 已存在奖品 都不重叠
+      var occupied = this.obstacles.concat(this.prizes);
+      var x = this._pickFreeX(occupied, config.prizeMinGap);
+      var p = {
+        id: chosen.id,
+        emoji: chosen.emoji,
+        name: chosen.name,
+        color: chosen.color,
+        effect: chosen.effect,
+        value: chosen.value,
+        duration: chosen.duration,
+        size: 38,
+        x: x,
+        y: -80,
+        gfx: this.add.text(x, -80, chosen.emoji, {
+          fontSize: '42px',
+        }).setOrigin(0.5).setDepth(41),
+        glow: this.add.circle(x, -80, 30, chosen.color, 0.35).setDepth(40),
+      };
+      this.prizes.push(p);
+    },
 
-      // 倒计时
-      var elapsed = Date.now() - this.startTime;
-      var timeLeft = Math.max(0, this.timeLeft - elapsed);
-      this.timerText.setText('⏱️ ' + Math.ceil(timeLeft / 1000) + 's');
+    // ============================================================
+    //  撞墙 / 撞奖品 / 撞 NPC
+    // ============================================================
+    _onCrash: function (ob) {
+      var config = window.XINJIANG_LEVEL.sliding;
+      var now = Date.now();
 
-      // 距离进度
-      var distance = Math.floor(this.scrollY);
-      this.progressText.setText('📏 ' + distance + 'm');
-      var progress = Math.min(1, this.scrollY / (config.finishY - config.startY));
-      this.progressBar.width = progress * 380;
-
-      if (timeLeft <= 0) {
-        this._showFail('时间到！');
-        return;
-      }
-
-      // 下滑加速
-      this.scrollSpeed = Math.min(config.maxSpeed,
-        config.initialSpeed + this.scrollY * 0.3);
-      this.scrollY += this.scrollSpeed * 0.016;
-
-      // 玩家位置
-      this.playerY = config.startY + this.scrollY;
-      this.playerY = Math.min(this.playerY, CANVAS_H - 40);// 左右移动
-      var dx = 0;
-      if (this.keys.left) dx -= 1;
-      if (this.keys.right) dx += 1;
-      this.playerX += dx * config.moveSpeed * 0.016;
-      this.playerX = Phaser.Math.Clamp(this.playerX, 40, CANVAS_W - 40);
-
-      this.playerContainer.setPosition(this.playerX, this.playerY);
-
-      // 翻转
-      if (dx < 0) this.playerContainer.setScale(-1, 1);
-      else if (dx > 0) this.playerContainer.setScale(1, 1);
-
-      // 生成障碍物
-      if (elapsed - (this.lastObstacleTime - this.startTime) > config.obstacleInterval) {
-        this._spawnObstacle();
-        this.lastObstacleTime = Date.now();
-      }
-
-      // v2: 滑痕采样 (每 50ms 一次)
-      if (Date.now() - this.lastTrailTime > config.snowTrailInterval) {
-        this._spawnTrail();
-        this.lastTrailTime = Date.now();
-      }
-      this._updateTrails();
-      this._updateSnowParticles();// 障碍物位置更新
-      for (var i = this.obstacles.length - 1; i >= 0; i--) {
-        var ob = this.obstacles[i];
-        ob.y += this.scrollSpeed * 0.016;
-        ob.gfx.setPosition(ob.x, ob.y);
-        if (ob.glow) ob.glow.setPosition(ob.x, ob.y);
-
-        // 移除屏幕外的
-        if (ob.y > CANVAS_H + 80) {
-          ob.gfx.destroy();
-          if (ob.glow) ob.glow.destroy();
-          this.obstacles.splice(i, 1);
-          continue;
-        }
-
-        // 碰撞检测
-        var dx2 = ob.x - this.playerX;
-        var dy2 = ob.y - this.playerY;
-        var dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-        if (dist < (ob.size / 2 + 24)) {
-          this._onCrash(ob);
-        }
-      }
-
-      // 通关: scrollY 超过 finishY - startY
-      if (this.scrollY >= (config.finishY - config.startY)) {
-        this._showWin();
-      }
-    },_onCrash: function (ob) {
-      // v2: 友好 NPC 撞到 = 加时间 + toast, 不算撞墙
+      // 友好 NPC: 加时间 + toast
       if (ob.id === 'friendly_npc') {
-        var config = window.XINJIANG_LEVEL.sliding;
         this.timeLeft += config.npcBonusTime;
         this.timerText.setText('⏱️ ' + Math.ceil(this.timeLeft / 1000) + 's');
         window.playXinjiangSfx('pickup', 0.4);
-        // 移除 NPC + toast
         ob.gfx.destroy();
         if (ob.glow) ob.glow.destroy();
         var idx = this.obstacles.indexOf(ob);
@@ -814,13 +1109,19 @@
         return;
       }
 
+      // 普通障碍物
       this.crashCount++;
-      this.crashText.setText('💥 撞墙 ' + this.crashCount);
+      this.crashText.setText('💥 ' + this.crashCount);
       window.playXinjiangSfx('pickup', 0.3);
 
-      // 屏幕震动 + 减速度
-      this.cameras.main.shake(150, 0.008);
-      this.scrollSpeed = Math.max(80, this.scrollSpeed - 50);
+      // shield 期间免疫 (无 -50 速度, 无屏幕震动)
+      if (now < this.shieldUntil) {
+        this._showToast('🛡️ 无敌！', 0xD84315);
+      } else {
+        // 屏幕震动 + 减速度 (用户反馈: 200ms, 0.012 intensity)
+        this.cameras.main.shake(200, 0.012);
+        this.scrollSpeed = Math.max(config.minSpeed, this.scrollSpeed - 50);
+      }
 
       // 移除撞到的障碍
       ob.gfx.destroy();
@@ -828,11 +1129,238 @@
       var idx2 = this.obstacles.indexOf(ob);
       if (idx2 >= 0) this.obstacles.splice(idx2, 1);
 
-      // 撞 5 次 = 失败
-      if (this.crashCount >= 5) {
+      if (this.crashCount >= this.maxCrashes) {
         this._showFail('撞太多次了！');
       }
-    },_showFail: function (reason) {
+    },
+
+    _onPickupPrize: function (p) {
+      var now = Date.now();
+      var name = p.name;
+      var cfg = window.XINJIANG_LEVEL.prizes.find(function (x) { return x.id === p.id; });
+      // 计分 + 计数
+      this.prizeCount[p.id] = (this.prizeCount[p.id] || 0) + 1;
+      if (this._prizeTexts[p.id]) {
+        this._prizeTexts[p.id].setText(p.emoji + ' ' + name + ' ' + this.prizeCount[p.id]);
+      }
+
+      var toastMsg = '', toastColor = p.color;
+      switch (p.effect) {
+        case 'score':
+          this.score += cfg.value;
+          toastMsg = p.emoji + ' ' + name + ' +' + cfg.value + ' 分！';
+          break;
+        case 'time':
+          this.timeLeft += cfg.value;
+          this.timerText.setText('⏱️ ' + Math.ceil(this.timeLeft / 1000) + 's');
+          toastMsg = p.emoji + ' ' + name + ' +' + (cfg.value / 1000) + ' 秒！';
+          break;
+        case 'shield':
+          this.shieldUntil = Math.max(this.shieldUntil, now + cfg.duration);
+          toastMsg = '🍢 羊肉串！' + (cfg.duration / 1000) + '秒无敌！';
+          break;
+        case 'magnet':
+          this.magnetUntil = Math.max(this.magnetUntil, now + cfg.duration);
+          toastMsg = '❄️ 雪莲！' + (cfg.duration / 1000) + '秒吸附！';
+          break;
+        case 'slow':
+          this.slowUntil = Math.max(this.slowUntil, now + cfg.duration);
+          toastMsg = '🫓 馕饼！' + (cfg.duration / 1000) + '秒减速！';
+          break;
+      }
+      this._showToast(toastMsg, toastColor);
+      window.playXinjiangSfx('pickup', 0.5);
+
+      // 移除奖品
+      p.gfx.destroy();
+      if (p.glow) p.glow.destroy();
+      var idx = this.prizes.indexOf(p);
+      if (idx >= 0) this.prizes.splice(idx, 1);
+    },
+
+    // ============================================================
+    //  Toast 提示
+    // ============================================================
+    _showToast: function (msg, color) {
+      var toast = this.add.text(640, 130, msg, {
+        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
+        backgroundColor: '#' + color.toString(16).padStart(6, '0'),
+        padding: { x: 18, y: 10 },
+      }).setOrigin(0.5).setDepth(1000);
+      this.tweens.add({
+        targets: toast,
+        alpha: 0,
+        y: 90,
+        duration: 1500,
+        onComplete: function () { toast.destroy(); }
+      });
+    },
+
+    // ============================================================
+    //  主更新循环
+    // ============================================================
+    update: function () {
+      if (this.state !== 'SLIDING') return;
+      if (this._introLock) return;
+
+      var config = window.XINJIANG_LEVEL.sliding;
+      var now = Date.now();
+      var dt = 0.016;  // ~60fps
+
+      // ===== 倒计时 =====
+      var elapsed = now - this.startTime;
+      var timeLeft = Math.max(0, this.timeLeft - elapsed);
+      this.timerText.setText('⏱️ ' + Math.ceil(timeLeft / 1000) + 's');
+
+      // 距离进度 (用 scrollY 算总距离)
+      var totalScroll = this._getTotalScrollLength();
+      var distance = Math.floor(this.scrollY);
+      this.progressText.setText('📏 ' + distance + 'm');
+      var progress = Math.min(1, this.scrollY / totalScroll);
+      this.progressBar.width = progress * 320;
+
+      // biome 指示
+      var biome = window.XINJIANG_LEVEL.biomes[this.currentBiomeIdx];
+      this.biomeText.setText('🏔️ ' + biome.name);
+
+      if (timeLeft <= 0) {
+        this._showFail('时间到！');
+        return;
+      }
+
+      // ===== 连续坡度计算 =====
+      var currentSlope = this._getCurrentSlope();
+
+      // ===== 速度公式 =====
+      // baseSpeed + slopeBoost + Δslope 加速度
+      var slopeBoost = currentSlope * config.slopeCoefficient;
+      var accelBoost = (currentSlope - this.lastSlope) * config.accelerationCoefficient;
+      var targetSpeed = config.baseSpeed + slopeBoost + accelBoost;
+
+      // slow 道具: 速度 -50%
+      var nowMs = Date.now();
+      if (nowMs < this.slowUntil) targetSpeed *= 0.5;
+
+      this.scrollSpeed = Math.max(config.minSpeed, Math.min(config.maxSpeed, targetSpeed));
+      this.lastSlope = currentSlope;
+
+      // ===== 滚动累加 + 视差偏移 =====
+      this.scrollY += this.scrollSpeed * dt;
+      this.farScrollOffset += this.scrollSpeed * dt * 0.2;
+      this.midScrollOffset += this.scrollSpeed * dt * 0.5;
+      this.nearScrollOffset += this.scrollSpeed * dt * 1.0;
+
+      // 重绘 3 层视差
+      this._redrawLayers();
+
+      // ===== 左右移动 =====
+      var dx = 0;
+      if (this.keys.left) dx -= 1;
+      if (this.keys.right) dx += 1;
+      this.playerX += dx * config.moveSpeed * dt;
+      this.playerX = Phaser.Math.Clamp(this.playerX, 40, CANVAS_W - 40);
+
+      // 玩家固定屏幕 y
+      this.playerContainer.setPosition(this.playerX, this.playerY);
+      if (dx < 0) this.playerContainer.setScale(-1, 1);
+      else if (dx > 0) this.playerContainer.setScale(1, 1);
+
+      // 道具效果指示
+      this._updateEffectIndicator();
+
+      // ===== biome 切换检测 =====
+      this._checkBiomeTransition();
+
+      // ===== 生成障碍物 + 奖品 =====
+      if (elapsed - (this.lastObstacleTime - this.startTime) > config.obstacleInterval) {
+        this._spawnObstacle();
+        this.lastObstacleTime = Date.now();
+      }
+      if (elapsed - (this.lastPrizeTime - this.startTime) > config.prizeInterval) {
+        this._spawnPrize();
+        this.lastPrizeTime = Date.now();
+      }
+
+      // ===== 滑痕采样 =====
+      if (Date.now() - this.lastTrailTime > config.snowTrailInterval) {
+        this._spawnTrail();
+        this.lastTrailTime = Date.now();
+      }
+      this._updateTrails();
+      this._updateSnowParticles();
+
+      // ===== 障碍物位置 + 碰撞 =====
+      for (var i = this.obstacles.length - 1; i >= 0; i--) {
+        var ob = this.obstacles[i];
+        ob.y += this.scrollSpeed * dt;
+        ob.gfx.setPosition(ob.x, ob.y);
+        if (ob.glow) ob.glow.setPosition(ob.x, ob.y);
+
+        if (ob.y > CANVAS_H + 80) {
+          ob.gfx.destroy();
+          if (ob.glow) ob.glow.destroy();
+          this.obstacles.splice(i, 1);
+          continue;
+        }
+
+        var dx2 = ob.x - this.playerX;
+        var dy2 = ob.y - this.playerY;
+        var dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        if (dist < (ob.size / 2 + 24)) {
+          this._onCrash(ob);
+        }
+      }
+
+      // ===== 奖品位置 + 碰撞 (magnet 时被吸附) =====
+      for (var j = this.prizes.length - 1; j >= 0; j--) {
+        var p = this.prizes[j];
+        var magnetActive = Date.now() < this.magnetUntil;
+
+        if (magnetActive) {
+          // 奖品飞向玩家
+          var mdx = this.playerX - p.x;
+          var mdy = this.playerY - p.y;
+          var mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+          if (mdist > 4) {
+            p.x += (mdx / mdist) * 400 * dt;
+            p.y += (mdy / mdist) * 400 * dt;
+          }
+        } else {
+          p.y += this.scrollSpeed * dt;
+        }
+        p.gfx.setPosition(p.x, p.y);
+        if (p.glow) {
+          p.glow.setPosition(p.x, p.y);
+          // 脉动呼吸
+          var pulse = 1 + 0.2 * Math.sin(now / 200);
+          p.glow.setScale(pulse);
+        }
+
+        if (p.y > CANVAS_H + 80) {
+          p.gfx.destroy();
+          if (p.glow) p.glow.destroy();
+          this.prizes.splice(j, 1);
+          continue;
+        }
+
+        var pdx = p.x - this.playerX;
+        var pdy = p.y - this.playerY;
+        var pdist = Math.sqrt(pdx * pdx + pdy * pdy);
+        if (pdist < (p.size / 2 + 24)) {
+          this._onPickupPrize(p);
+        }
+      }
+
+      // ===== 通关: scrollY 达到总长 =====
+      if (this.scrollY >= totalScroll) {
+        this._showWin();
+      }
+    },
+
+    // ============================================================
+    //  失败 / 通关界面
+    // ============================================================
+    _showFail: function (reason) {
       var self = this;
       if (this.state !== 'SLIDING') return;
       this.state = 'FAIL';
@@ -844,16 +1372,18 @@
       this.add.text(640, 340, reason, {
         fontSize: '20px', color: '#FFFFFF',
       }).setOrigin(0.5);
+      this.add.text(640, 380, '得分: ' + this.score, {
+        fontSize: '18px', color: '#FFD98A',
+      }).setOrigin(0.5);
 
-      var btn = this.add.rectangle(640, 420, 200, 50, 0xE53935)
+      var btn = this.add.rectangle(640, 440, 200, 50, 0xE53935)
         .setInteractive({ useHandCursor: true });
-      this.add.text(640, 420, '再试一次', {
+      this.add.text(640, 440, '再试一次', {
         fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5);
       btn.on('pointerdown', function () { self.scene.restart(); });
     },
 
-    // ===== v2 增强: 通关界面 =====
     _showWin: function () {
       var self = this;
       if (this.state !== 'SLIDING') return;
@@ -867,22 +1397,31 @@
           cleared.push(4);
           localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
         }
-      } catch (e) {}// 半透明遮罩
+      } catch (e) {}
+
       var overlay = this.add.rectangle(640, 360, 1280, 720, 0x0D47A1, 0.85);
 
-      // 大字主标题
-      this.add.text(640, 220, '🎿 一路下滑到成都！', {
+      this.add.text(640, 200, '🎿 一路下滑到成都！', {
         fontSize: '44px', color: '#FFD98A', fontStyle: 'bold',
         stroke: '#1B5E20', strokeThickness: 4,
       }).setOrigin(0.5);
 
-      // 副标题: 撞墙 + 用时
-      this.add.text(640, 290, '撞墙 ' + this.crashCount + ' 次 · 用时 ' + elapsed + ' 秒', {
-        fontSize: '22px', color: '#FFFFFF',
+      // 战利品统计
+      var statY = 270;
+      this.add.text(640, statY, '撞墙 ' + this.crashCount + ' 次 · 用时 ' + elapsed + ' 秒 · 得分 ' + this.score, {
+        fontSize: '20px', color: '#FFFFFF',
       }).setOrigin(0.5);
 
-      // 副副标题: 家人
-      this.add.text(640, 340, '👨‍👩‍👧 家人已在成都等你', {
+      // 奖品明细
+      var prizes = window.XINJIANG_LEVEL.prizes;
+      var summary = prizes.map(function (p) {
+        return p.emoji + '×' + (self.prizeCount[p.id] || 0);
+      }).join('  ');
+      this.add.text(640, statY + 36, summary, {
+        fontSize: '22px', color: '#FFE9B0',
+      }).setOrigin(0.5);
+
+      this.add.text(640, statY + 80, '👨‍👩‍👧 家人已在成都等你', {
         fontSize: '20px', color: '#FFE9B0', fontStyle: 'italic',
       }).setOrigin(0.5);
 
@@ -897,7 +1436,7 @@
         .setDepth(999);
       var btnText = this.add.text(btnX, btnY, '✨ 出发去成都', {
         fontSize: '26px', color: '#2A1606', fontStyle: 'bold',
-      }).setOrigin(0.5).setDepth(1000);// 按钮发光 + 缩放动画
+      }).setOrigin(0.5).setDepth(1000);
       this.tweens.add({
         targets: btnGlow,
         alpha: { 0.3: 0.8 },
@@ -920,28 +1459,10 @@
       btnBg.on('pointerover', function () { btnBg.setFillStyle(0xFFD54F, 1); });
       btnBg.on('pointerout', function () { btnBg.setFillStyle(0xD4AF37, 1); });
 
-      // 键盘回车/空格
       this.input.keyboard.once('keydown-SPACE', goDepart);
       this.input.keyboard.once('keydown-ENTER', goDepart);
 
       window.playXinjiangSfx('voyage', 0.5);
-    },
-
-    // Toast 提示 (NPC 加时间用)
-    _showToast: function (msg, color) {
-      var toast = this.add.text(640, 130, msg, {
-        fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
-        backgroundColor: '#' + color.toString(16).padStart(6, '0'),
-        padding: { x: 18, y: 10 },
-      }).setOrigin(0.5).setDepth(1000);
-
-      this.tweens.add({
-        targets: toast,
-        alpha: 0,
-        y: 90,
-        duration: 1500,
-        onComplete: function () { toast.destroy(); }
-      });
     },
   });// ============== 游戏初始化 ==============
   var config = {
