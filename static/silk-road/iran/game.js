@@ -1626,14 +1626,17 @@
       btn.id = 'iran-result-next-btn';
       var txt = isDeadTier ? '🏜️ 返回地图' : '🐪 出发去土耳其';
       btn.textContent = txt;
+      // v18: DOM 按钮全透明 (背景/文字/border/padding 全无) → 只保留点击区
+      // 视觉上只看到 Phaser Zone 画的 1 个按钮, 但 iOS Safari 用户点击透明 DOM 按钮仍能触发
       btn.style.cssText = [
         'position:fixed', 'left:50%', 'top:50%',
         'transform:translate(-50%, 195px)',
         'width:280px', 'height:60px',
-        'background:' + (isDeadTier ? '#888888' : '#FFD98A'),
-        'color:' + (isDeadTier ? '#666666' : '#2A190E'),
+        'background:transparent',
+        'color:transparent',
+        'border:none',
+        'padding:0',
         'font-size:20px', 'font-weight:bold',
-        'border:2px solid #FFE9B0', 'border-radius:6px',
         'cursor:pointer', 'z-index:9999',
       ].join(';');
       btn.onclick = function () {

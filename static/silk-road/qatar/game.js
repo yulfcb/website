@@ -166,6 +166,7 @@
       var btnZone = this.add.zone(640, 680, 280, 80).setInteractive({ useHandCursor: true });
       var self = this;
       btnZone.on('pointerdown', function () {
+        try { window.playQatarSfx('button', 0.4); } catch (e) {}
         // M9.1: 把选好的 avatar 也带到 PlayScene
         self.scene.start('PlayScene', {
           sessionId: self.sessionId, nickname: self.nickname,
@@ -2368,20 +2369,20 @@ ResultScene.prototype._createVoyageDomBtn = function (txt, isDeadTier) {
   btn.id = 'qatar-voyage-dom-btn';
   btn.type = 'button';
   btn.textContent = txt;
-  var bg = isDeadTier ? '#888888' : '#FFD98A';
-  var fg = isDeadTier ? '#666666' : '#2A190E';
-  var border = isDeadTier ? '#AAAAAA' : '#FFE9B0';
+  // v18: DOM 按钮全透明 (背景/文字/border/box-shadow/padding 全无) → 只保留点击区
+  // 视觉上只看到 Phaser Zone 画的 1 个按钮, 但 iOS Safari 用户点击透明 DOM 按钮仍能触发
   btn.style.cssText = [
     'position:fixed',
     'z-index:9000',                // 高于 canvas (1), 低于 modal (99999)
-    'background:' + bg,
-    'color:' + fg,
-    'border:2px solid ' + border,
+    'background:transparent',
+    'color:transparent',
+    'border:none',
+    'padding:0',
     'border-radius:0',
     'font-family:inherit',
     'font-weight:bold',
     'cursor:pointer',
-    'box-shadow:0 4px 12px rgba(0,0,0,0.3)',
+    'box-shadow:none',
     'touch-action:manipulation',
     '-webkit-tap-highlight-color:transparent',
     'display:none',                // create 后才显示

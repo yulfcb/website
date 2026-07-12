@@ -44,7 +44,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '土耳其·热气球',
     quote: '慢一点也没关系，只要方向是你',
-    reward: 188,             // v15: 通知 reward 统一 188
+    reward: 125,             // v18: 土耳其通关奖励 ¥125
     nextUrl: '/games/silk-road/level/3',
   },
   3: {
@@ -59,7 +59,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: true,
     title: '哈萨克斯坦·草原骑马',
     quote: '策马穿过草原，只为早一点见你',
-    reward: 188,             // v15: 通知 reward 统一 188
+    reward: 205,             // v18: 哈萨克通关奖励 ¥205
     nextUrl: '/games/silk-road/level/4',
   },
   4: {
@@ -74,7 +74,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: true,
     title: '新疆·雪山滑雪',
     quote: '那片雪，是不是我们踩过的那一片',
-    reward: 188,             // v15: 通知 reward 统一 188
+    reward: 81,              // v18: 新疆通关奖励 ¥81
     nextUrl: '/games/silk-road/level/5',
   },
   5: {
@@ -89,7 +89,7 @@ window.SILK_ROAD_LEVELS = {
     can_fail: false,
     title: '成都·到家',
     quote: '回家了 / 所有的路，都是为了走向你',
-    reward: 1098.00,
+    reward: 520.00,          // v18: 成都到家 ¥520 (520=我爱你)
     nextUrl: '/games/silk-road/end',
   },
 };

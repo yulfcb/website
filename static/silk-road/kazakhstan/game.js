@@ -332,52 +332,26 @@
         padding: { x: 16, y: 8 },
       }).setOrigin(0.5);
 
-      // —— 三阶段动画 + RGB lerp (setInterval 16ms 60fps) ——
-      // 阶段 1 (0-2s): 上升 (200, 600) → (200, 300)
-      // 阶段 2 (2-5s): 横飞 (200, 300) → (1100, 300)
-      // 阶段 3 (5-7s): 下降 (1100, 300) → (1200, 600)
-      var phase1Dur = 2000;
-      var phase2Dur = 3000;
-      var phase3Dur = 2000;
+      // —— v18: 单阶段水平直走动画 (setInterval 16ms 60fps) ——
+      // 总时长 4s, curX 200→1200, curY=startY=600 全程不变
+      // 保留: 雪山升起 + bgProg 滚动 + 动画结束 _showContinueButton()
+      var totalDur = 4000;
       var startX = 200, startY = 600;
-      var peakX = 200, peakY = 300;
-      var farX = 1100, farY = 300;
-      var endX = 1200, endY = 600;
+      var endX = 1200;
       var startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
       this._departDone = false;
       this._departTick = setInterval(function () {
         if (self._departDone) return;
         var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         var elapsed = now - startTime;
-        var totalDur = phase1Dur + phase2Dur + phase3Dur;
         if (elapsed > totalDur + 500) elapsed = totalDur;
 
-        var curX, curY, bgProg, riseProg;
-        if (elapsed < phase1Dur) {
-          // 阶段 1: 上升
-          var t1 = elapsed / phase1Dur;
-          var e1 = 1 - Math.pow(1 - t1, 2);
-          curX = startX + (peakX - startX) * e1;
-          curY = startY - (startY - peakY) * e1;
-          bgProg = t1 * 0.3;
-          riseProg = Math.min(t1 * 1.5, 1);  // 雪山快速升起
-        } else if (elapsed < phase1Dur + phase2Dur) {
-          // 阶段 2: 横向飞行
-          var t2 = (elapsed - phase1Dur) / phase2Dur;
-          var e2 = 1 - Math.pow(1 - t2, 2);
-          curX = peakX + (farX - peakX) * e2;
-          curY = peakY + (farY - peakY) * e2;
-          bgProg = 0.3 + t2 * 0.5;
-          riseProg = 1;
-        } else {
-          // 阶段 3: 下降
-          var t3 = (elapsed - phase1Dur - phase2Dur) / phase3Dur;
-          var e3 = 1 - Math.pow(1 - t3, 2);
-          curX = farX + (endX - farX) * e3;
-          curY = peakY + (endY - peakY) * e3;
-          bgProg = 0.8 + t3 * 0.2;
-          riseProg = 1;
-        }
+        var t = Math.min(elapsed / totalDur, 1);
+        var e = 1 - Math.pow(1 - t, 2);  // ease-out
+        var curX = startX + (endX - startX) * e;
+        var curY = startY;
+        var bgProg = t;
+        var riseProg = Math.min(t * 1.5, 1);
         riderContainer.setPosition(curX, curY);
         drawGround(bgProg);
         if (riseProg > 0) snowMountains.setAlpha(0.8);
@@ -436,7 +410,7 @@
       var continueZone = this.add.zone(btnX, btnY, 200, 60)
         .setInteractive({ useHandCursor: true })
         .setDepth(1002);
-      continueZone.on('pointerdown', function () { self._goNextLevel(); });
+      continueZone.on('pointerdown', function () { try { window.playKazakhstanSfx('button', 0.4); } catch (e) {} self._goNextLevel(); });
       continueZone.on('pointerover', function () { continueBg.setFillStyle(0x4A9E8F, 1); });
       continueZone.on('pointerout', function () { continueBg.setFillStyle(0x5FB3A0, 0.9); });
 
@@ -1005,6 +979,7 @@
       }).setOrigin(0.5);
       
       btn.on('pointerdown', function () {
+        try { window.playKazakhstanSfx('button', 0.4); } catch (e) {}
         try { self.scene.start('PlayScene'); }
         catch (e) { console.error('[kaz] scene.start(PlayScene) threw:', e); }
         // Fallback: 如果 scene.start 静默失败, 1s 后强制回到 debug PlayScene
@@ -1042,6 +1017,7 @@
       }).setOrigin(0.5);
       
       btn.on('pointerdown', function () {
+        try { window.playKazakhstanSfx('button', 0.4); } catch (e) {}
         self.scene.restart();
       });
     },
@@ -2744,17 +2720,109 @@
       if (this.bgmBtn) this.bgmBtn.setVisible(false);
       if (this.worldMapBtn) this.worldMapBtn.setVisible(false);
 
-      // 保存通关状态 (跟旧版一样)
-      try {
-        var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
-        if (cleared.indexOf(3) < 0) {
-          cleared.push(3);
-          localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
-        }
-      } catch (e) {}
+      // v18: 通关 modal — 显示「🏇 哈萨克通关啦」「+¥205.00」「🐎 继续去新疆」按钮
+      // 跟 turkey 风格一致: container(640, 360), setDepth(2000)
+      var self = this;
+      var winContainer = this.add.container(640, 360);
+      winContainer.setDepth(2000);
 
-      // 跳到独立 DepartScene (过场动画 scene)
-      this.scene.start('DepartScene');
+      var backdrop = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7);
+      var card = this.add.rectangle(0, 0, 520, 380, 0x4A2E1A, 1).setStrokeStyle(4, 0xFFD98A);
+      var titleText = this.add.text(0, -120, '🏇 哈萨克通关啦', {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var quoteText = this.add.text(0, -70, '纵马天山，奶茶飘香', {
+        fontSize: '18px', color: '#FFE9B0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5);
+      var rewardText = this.add.text(0, 0, '+¥205.00', {
+        fontSize: '48px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var rewardLabel = this.add.text(0, 50, '通关奖励', {
+        fontSize: '16px', color: '#FFE9B0',
+      }).setOrigin(0.5);
+
+      var nextBg = this.add.rectangle(0, 140, 280, 60, 0xFFD98A, 1).setStrokeStyle(2, 0xFFE9B0);
+      var nextBtnTxt = this.add.text(0, 140, '🐎 继续去新疆', {
+        fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var nextZone = this.add.zone(0, 140, 280, 60).setInteractive({ useHandCursor: true });
+
+      winContainer.add([backdrop, card, titleText, quoteText, rewardText, rewardLabel, nextBg, nextBtnTxt, nextZone]);
+
+      var claimAndDepart = function () {
+        try { window.playKazakhstanSfx('voyage', 0.6); } catch (e) {}
+        // 通关: 写入 cleared_levels
+        try {
+          var cleared = JSON.parse(localStorage.getItem('silkroad_cleared_levels') || '[]');
+          if (cleared.indexOf(3) === -1) {
+            cleared.push(3);
+            localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
+          }
+        } catch (e) {}
+        // 清理 DOM 兜底按钮
+        var oldBtn = document.getElementById('kazakhstan-win-next-btn');
+        if (oldBtn) oldBtn.remove();
+        // 跳到 DepartScene (过场动画)
+        self.scene.start('DepartScene');
+      };
+
+      nextZone.on('pointerdown', function () {
+        if (self._kazWinClicked) return;
+        self._kazWinClicked = true;
+        try { window.playKazakhstanSfx('button', 0.4); } catch (e) {}
+        claimAndDepart();
+      });
+
+      // v18: iOS Safari DOM 兜底按钮 (透明化, 只保留点击区)
+      var oldDom = document.getElementById('kazakhstan-win-next-btn');
+      if (oldDom) oldDom.remove();
+      var domBtn = document.createElement('button');
+      domBtn.id = 'kazakhstan-win-next-btn';
+      domBtn.type = 'button';
+      domBtn.textContent = '🐎 继续去新疆';
+      domBtn.style.cssText = [
+        'position:fixed',
+        'z-index:9000',
+        'background:transparent',
+        'color:transparent',
+        'border:none',
+        'padding:0',
+        'font-family:inherit',
+        'font-weight:bold',
+        'cursor:pointer',
+        'pointer-events:auto',
+        'user-select:none',
+        '-webkit-user-select:none',
+        '-webkit-tap-highlight-color:transparent',
+      ].join(';');
+      // 位置 (canvas 1280x720, 按钮中心 640, 500) — 跟 Phaser FIT letterbox 兼容
+      var positionKazWinDomBtn = function () {
+        var canvas = (window.__kazakhstanGame && window.__kazakhstanGame.canvas) || null;
+        if (!canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        var sx = rect.width / 1280;
+        var sy = rect.height / 720;
+        var cx = rect.left + 640 * sx;
+        var cy = rect.top + 500 * sy;
+        var w = 280 * sx;
+        var h = 60 * sy;
+        domBtn.style.left = (cx - w / 2) + 'px';
+        domBtn.style.top = (cy - h / 2) + 'px';
+        domBtn.style.width = w + 'px';
+        domBtn.style.height = h + 'px';
+        domBtn.style.fontSize = (20 * sy) + 'px';
+        domBtn.style.lineHeight = h + 'px';
+      };
+      positionKazWinDomBtn();
+      window.addEventListener('resize', positionKazWinDomBtn);
+      domBtn.onclick = function () {
+        if (self._kazWinClicked) return;
+        self._kazWinClicked = true;
+        try { window.playKazakhstanSfx('button', 0.4); } catch (e) {}
+        claimAndDepart();
+      };
+      document.body.appendChild(domBtn);
     },
 
     // —— 旧版 depart() 保留为 stub (代码完整性, 防止外部误调) ——

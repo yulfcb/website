@@ -297,7 +297,7 @@
       }).setOrigin(0.5).setDepth(1001);var continueZone = this.add.zone(btnX, btnY, 200, 60)
         .setInteractive({ useHandCursor: true })
         .setDepth(1002);
-      continueZone.on('pointerdown', function () { self._goNextLevel(); });
+      continueZone.on('pointerdown', function () { try { window.playXinjiangSfx('button', 0.4); } catch (e) {} self._goNextLevel(); });
       continueZone.on('pointerover', function () { continueBg.setFillStyle(0x4A9E8F, 1); });
       continueZone.on('pointerout', function () { continueBg.setFillStyle(0x5FB3A0, 0.9); });
 
@@ -1773,7 +1773,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
       this.add.text(640, 440, '再试一次', {
         fontSize: '20px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5);
-      btn.on('pointerdown', function () { self.scene.restart(); });
+      btn.on('pointerdown', function () { try { window.playXinjiangSfx('button', 0.4); } catch (e) {} self.scene.restart(); });
     },
 
     _showWin: function () {
@@ -1797,25 +1797,99 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         }
       } catch (e) {}
 
-      // v4: 通关瞬间 — 玩家滑进屋门, "🏠 到家了!" 大字弹出
-      var arrivalText = this.add.text(640, 360, '🏠 到家了!', {
-        fontSize: '72px', color: '#FFE082', fontStyle: 'bold',
-        stroke: '#C62828', strokeThickness: 6,
-      }).setOrigin(0.5).setDepth(2000).setAlpha(0).setScale(0.5);
-      this.tweens.add({
-        targets: arrivalText,
-        alpha: 1,
-        scaleX: 1.1, scaleY: 1.1,
-        duration: 400,
-        ease: 'Back.easeOut',
-      });
-      window.playXinjiangSfx('voyage', 0.6);
+      // v18: 通关 modal — 显示「🏂 新疆通关啦」「+¥81.00」「🥚 打开彩蛋」按钮
+      // 跟 turkey 风格一致: container(640, 360), setDepth(2000)
+      var winContainer = this.add.container(640, 360);
+      winContainer.setDepth(2000);
 
-      // 0.5s 后: 触发 v10 彩蛋流程 (小木屋内背景 + 任务完成 + 打开彩蛋按钮)
-      this.time.delayedCall(500, function () {
-        arrivalText.destroy();
+      var backdrop = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7);
+      var card = this.add.rectangle(0, 0, 520, 380, 0x4A2E1A, 1).setStrokeStyle(4, 0xFFD98A);
+      var titleText = this.add.text(0, -120, '🏂 新疆通关啦', {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var quoteText = this.add.text(0, -70, '天山雪顶滑下来，故乡炊烟等你回', {
+        fontSize: '18px', color: '#FFE9B0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5);
+      var rewardText = this.add.text(0, 0, '+¥81.00', {
+        fontSize: '48px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var rewardLabel = this.add.text(0, 50, '通关奖励', {
+        fontSize: '16px', color: '#FFE9B0',
+      }).setOrigin(0.5);
+
+      var nextBg = this.add.rectangle(0, 140, 280, 60, 0xFFD98A, 1).setStrokeStyle(2, 0xFFE9B0);
+      var nextBtnTxt = this.add.text(0, 140, '🥚 打开彩蛋', {
+        fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var nextZone = this.add.zone(0, 140, 280, 60).setInteractive({ useHandCursor: true });
+
+      winContainer.add([backdrop, card, titleText, quoteText, rewardText, rewardLabel, nextBg, nextBtnTxt, nextZone]);
+
+      var openEgg = function () {
+        try { window.playXinjiangSfx('voyage', 0.6); } catch (e) {}
+        // 清理 DOM 兜底按钮
+        var oldBtn = document.getElementById('xinjiang-win-egg-btn');
+        if (oldBtn) oldBtn.remove();
         self._triggerEasterEgg();
+      };
+
+      nextZone.on('pointerdown', function () {
+        if (self._xinjiangWinClicked) return;
+        self._xinjiangWinClicked = true;
+        try { window.playXinjiangSfx('button', 0.4); } catch (e) {}
+        openEgg();
       });
+
+      // v18: iOS Safari DOM 兜底按钮 (透明化, 只保留点击区)
+      var oldDom = document.getElementById('xinjiang-win-egg-btn');
+      if (oldDom) oldDom.remove();
+      var domBtn = document.createElement('button');
+      domBtn.id = 'xinjiang-win-egg-btn';
+      domBtn.type = 'button';
+      domBtn.textContent = '🥚 打开彩蛋';
+      domBtn.style.cssText = [
+        'position:fixed',
+        'z-index:9000',
+        'background:transparent',
+        'color:transparent',
+        'border:none',
+        'padding:0',
+        'font-family:inherit',
+        'font-weight:bold',
+        'cursor:pointer',
+        'pointer-events:auto',
+        'user-select:none',
+        '-webkit-user-select:none',
+        '-webkit-tap-highlight-color:transparent',
+      ].join(';');
+      // 位置 (canvas 1280x720, 按钮中心 640, 500) — 跟 Phaser FIT letterbox 兼容
+      var positionXinWinDomBtn = function () {
+        var canvas = (window.__xinjiangGame && window.__xinjiangGame.canvas) || null;
+        if (!canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        var sx = rect.width / 1280;
+        var sy = rect.height / 720;
+        var cx = rect.left + 640 * sx;
+        var cy = rect.top + 500 * sy;
+        var w = 280 * sx;
+        var h = 60 * sy;
+        domBtn.style.left = (cx - w / 2) + 'px';
+        domBtn.style.top = (cy - h / 2) + 'px';
+        domBtn.style.width = w + 'px';
+        domBtn.style.height = h + 'px';
+        domBtn.style.fontSize = (20 * sy) + 'px';
+        domBtn.style.lineHeight = h + 'px';
+      };
+      positionXinWinDomBtn();
+      window.addEventListener('resize', positionXinWinDomBtn);
+      domBtn.onclick = function () {
+        if (self._xinjiangWinClicked) return;
+        self._xinjiangWinClicked = true;
+        try { window.playXinjiangSfx('button', 0.4); } catch (e) {}
+        openEgg();
+      };
+      document.body.appendChild(domBtn);
     },
 
     // ============================================================
@@ -2065,7 +2139,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
         }
       };
 
-      submitBg.on('pointerdown', doSubmit);
+      submitBg.on('pointerdown', function () { try { window.playXinjiangSfx('button', 0.4); } catch (e) {} doSubmit(); });
       cancelBg.on('pointerdown', function () {
         window.playXinjiangSfx('click', 0.3);
         closeModal();
@@ -2309,7 +2383,7 @@ this._exitHouseContainer = this.add.container(CANVAS_W - 200, -200);  // v10: 12
           window.location.reload();
         }
       };
-      btnBg.on('pointerdown', goDepart);
+      btnBg.on('pointerdown', function () { try { window.playXinjiangSfx('button', 0.4); } catch (e) {} goDepart(); });
       btnBg.on('pointerover', function () { btnBg.setFillStyle(0xFFD54F, 1); });
       btnBg.on('pointerout', function () { btnBg.setFillStyle(0xD4AF37, 1); });
 

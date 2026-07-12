@@ -2472,13 +2472,36 @@
       });
       this.contentLayer.add(balloonContainer);
 
-      var bg = this.add.rectangle(640, 660, 480, 76, 0xE74C3C, 1).setStrokeStyle(3, 0xC0392B);
-      var txt = this.add.text(640, 660, '🎈 乘坐热气球出发', {
-        fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold',
+      // v18: 通关 modal — 显示「🎈 土耳其通关啦」「+¥125.00」「🐪 继续去哈萨克」按钮
+      // 跟 qatar ResultScene 风格一致: container(640, 360), setDepth(2000)
+      var winContainer = this.add.container(640, 360);
+      winContainer.setDepth(2000);
+
+      var backdrop = this.add.rectangle(0, 0, CANVAS_W, CANVAS_H, 0x000000, 0.7);
+      var card = this.add.rectangle(0, 0, 520, 380, 0x4A2E1A, 1).setStrokeStyle(4, 0xFFD98A);
+      var titleText = this.add.text(0, -120, '🎈 土耳其通关啦', {
+        fontSize: '32px', color: '#FFD98A', fontStyle: 'bold',
       }).setOrigin(0.5);
-      var zone = this.add.zone(640, 660, 480, 76).setInteractive({ useHandCursor: true });
-      this.clickZones.push(zone);
-      zone.on('pointerdown', function () {
+      var quoteText = this.add.text(0, -70, '慢一点也没关系，只要方向是你', {
+        fontSize: '18px', color: '#FFE9B0', fontStyle: 'italic',
+        wordWrap: { width: 460 },
+      }).setOrigin(0.5);
+      var rewardText = this.add.text(0, 0, '+¥125.00', {
+        fontSize: '48px', color: '#FFD98A', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var rewardLabel = this.add.text(0, 50, '通关奖励', {
+        fontSize: '16px', color: '#FFE9B0',
+      }).setOrigin(0.5);
+
+      var nextBg = this.add.rectangle(0, 140, 280, 60, 0xFFD98A, 1).setStrokeStyle(2, 0xFFE9B0);
+      var nextBtnTxt = this.add.text(0, 140, '🐪 继续去哈萨克', {
+        fontSize: '20px', color: '#2A190E', fontStyle: 'bold',
+      }).setOrigin(0.5);
+      var nextZone = this.add.zone(0, 140, 280, 60).setInteractive({ useHandCursor: true });
+
+      winContainer.add([backdrop, card, titleText, quoteText, rewardText, rewardLabel, nextBg, nextBtnTxt, nextZone]);
+
+      var claimAndDepart = function () {
         window.playTurkeySfx('voyage', 0.6);
         // 通关: 写入 cleared_levels
         try {
@@ -2488,9 +2511,68 @@
             localStorage.setItem('silkroad_cleared_levels', JSON.stringify(cleared));
           }
         } catch (e) {}
+        // 清理 DOM 兜底按钮
+        var oldBtn = document.getElementById('turkey-win-next-btn');
+        if (oldBtn) oldBtn.remove();
         self.scene.start('FlightScene');
+      };
+
+      nextZone.on('pointerdown', function () {
+        if (self._turkeyWinClicked) return;
+        self._turkeyWinClicked = true;
+        window.playTurkeySfx('button', 0.4);
+        claimAndDepart();
       });
-      this.btnLayer.add([bg, txt]);
+
+      // v18: iOS Safari DOM 兜底按钮 (透明化, 只保留点击区)
+      var oldDom = document.getElementById('turkey-win-next-btn');
+      if (oldDom) oldDom.remove();
+      var domBtn = document.createElement('button');
+      domBtn.id = 'turkey-win-next-btn';
+      domBtn.type = 'button';
+      domBtn.textContent = '🐪 继续去哈萨克';
+      domBtn.style.cssText = [
+        'position:fixed',
+        'z-index:9000',
+        'background:transparent',
+        'color:transparent',
+        'border:none',
+        'padding:0',
+        'font-family:inherit',
+        'font-weight:bold',
+        'cursor:pointer',
+        'pointer-events:auto',
+        'user-select:none',
+        '-webkit-user-select:none',
+        '-webkit-tap-highlight-color:transparent',
+      ].join(';');
+      // 位置 (canvas 1280x720, 按钮中心 640, 500) — 跟 Phaser FIT letterbox 兼容
+      var positionTurkeyWinDomBtn = function () {
+        var canvas = (window.__turkeyGame && window.__turkeyGame.canvas) || null;
+        if (!canvas) return;
+        var rect = canvas.getBoundingClientRect();
+        var sx = rect.width / 1280;
+        var sy = rect.height / 720;
+        var cx = rect.left + 640 * sx;
+        var cy = rect.top + 500 * sy;
+        var w = 280 * sx;
+        var h = 60 * sy;
+        domBtn.style.left = (cx - w / 2) + 'px';
+        domBtn.style.top = (cy - h / 2) + 'px';
+        domBtn.style.width = w + 'px';
+        domBtn.style.height = h + 'px';
+        domBtn.style.fontSize = (20 * sy) + 'px';
+        domBtn.style.lineHeight = h + 'px';
+      };
+      positionTurkeyWinDomBtn();
+      window.addEventListener('resize', positionTurkeyWinDomBtn);
+      domBtn.onclick = function () {
+        if (self._turkeyWinClicked) return;
+        self._turkeyWinClicked = true;
+        window.playTurkeySfx('button', 0.4);
+        claimAndDepart();
+      };
+      document.body.appendChild(domBtn);
     },
   });
 
